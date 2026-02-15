@@ -10,7 +10,6 @@ import {
   Plus, 
   RotateCcw, 
   CheckCircle, 
-  XCircle, 
   Loader2,
   Trash2,
   Edit3,
@@ -19,7 +18,9 @@ import {
   Download,
   History,
   ShieldCheck,
-  ChevronRight
+  X,
+  Globe2,
+  Calendar
 } from 'lucide-react';
 
 const VendorManager: React.FC = () => {
@@ -31,10 +32,16 @@ const VendorManager: React.FC = () => {
   const [allVendors, setAllVendors] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
   
+  // ✅ Modal States
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<any>(null);
+  const [editForm, setEditForm] = useState({ name: '', age: '', nationality: '' });
+  const [isOtherNationality, setIsOtherNationality] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
   const userFileInputRef = useRef<HTMLInputElement>(null);
   const vendorFileInputRef = useRef<HTMLInputElement>(null);
 
-  // ✅ ระบบบันทึกประวัติการกระทำของ Admin
   const logAction = async (action: string, target: string, details: string = '') => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -91,15 +98,42 @@ const VendorManager: React.FC = () => {
     }
   };
 
-  const handleEditUser = async (user: any) => {
-    const newName = window.prompt("แก้ไขชื่อพนักงาน (Edit Personnel Name):", user.name);
-    if (!newName || newName === user.name) return;
-    const { error } = await supabase.from('users').update({ name: newName }).eq('id', user.id);
-    if (error) showToast(error.message, 'error');
-    else { 
-      showToast('แก้ไขข้อมูลสำเร็จ', 'success'); 
-      logAction('EDIT_USER', user.name, `Changed name to ${newName}`);
-      loadData(); 
+  // ✅ เปิด Modal แก้ไขพนักงาน
+  const handleEditUser = (user: any) => {
+    setEditingUser(user);
+    const nationalities = ['ไทย (Thai)', 'พม่า (Myanmar)', 'กัมพูชา (Cambodian)', 'ลาว (Lao)'];
+    const isOther = !nationalities.includes(user.nationality);
+    
+    setEditForm({
+      name: user.name || '',
+      age: user.age || '',
+      nationality: user.nationality || 'ไทย (Thai)'
+    });
+    setIsOtherNationality(isOther);
+    setIsEditModalOpen(true);
+  };
+
+  // ✅ บันทึกการแก้ไขพนักงานจาก Modal
+  const saveUserEdit = async () => {
+    if (!editingUser) return;
+    setSubmitting(true);
+    try {
+      const { error } = await supabase.from('users').update({
+        name: editForm.name,
+        age: Number(editForm.age),
+        nationality: editForm.nationality
+      }).eq('id', editingUser.id);
+
+      if (error) throw error;
+
+      showToast('อัปเดตข้อมูลพนักงานสำเร็จ', 'success');
+      logAction('EDIT_USER', editingUser.name, `Updated Profile: ${editForm.name}, ${editForm.age}, ${editForm.nationality}`);
+      setIsEditModalOpen(false);
+      loadData();
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -232,13 +266,12 @@ const VendorManager: React.FC = () => {
   );
 
   return (
-    <div className="space-y-6 text-left animate-in fade-in duration-500 pb-10">
+    <div className="space-y-6 text-left animate-in fade-in duration-500 pb-10 relative">
       
       {/* 🧭 HEADER & TAB SYSTEM */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 border-b border-slate-200 pb-6">
         <div>
           <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight uppercase leading-none">Directory</h2>
-          {/* ✅ FIXED: เปลี่ยน p เป็น div เพื่อป้องกัน Hydration Error */}
           <div className="text-slate-400 font-bold text-[9px] md:text-[10px] uppercase tracking-[0.2em] mt-2 flex items-center gap-2">
             <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
             Management Access • Secure Node
@@ -406,21 +439,117 @@ const VendorManager: React.FC = () => {
                     </tr>
                   ))
                 )}
-                {!loading && filtered.length === 0 && (
-                   <tr>
-                     <td colSpan={4} className="py-24 text-center">
-                        <div className="flex flex-col items-center opacity-20">
-                           <Search size={48} className="text-slate-300 mb-4" />
-                           <p className="font-black text-slate-400 uppercase text-xs tracking-widest italic text-center">No matching record data found in current node</p>
-                        </div>
-                     </td>
-                   </tr>
-                )}
               </tbody>
             </table>
           )}
         </div>
       </div>
+
+      {/* ================= 📝 EDIT USER MODAL ================= */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setIsEditModalOpen(false)} />
+          
+          <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl border border-slate-100 overflow-hidden relative z-10 animate-in zoom-in-95 duration-300">
+            <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase">Edit Personnel Profile</h3>
+                <p className="text-[10px] text-blue-600 font-bold uppercase tracking-widest mt-1">ID: {editingUser?.national_id}</p>
+              </div>
+              <button onClick={() => setIsEditModalOpen(false)} className="p-2 hover:bg-white rounded-xl transition-all text-slate-400 hover:text-red-500 border border-transparent hover:border-slate-100">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-8 space-y-6">
+              {/* Name Field */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
+                   Name-Surname / ชื่อ-นามสกุล
+                </label>
+                <div className="relative">
+                  <input
+                    className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-all shadow-inner"
+                    value={editForm.name}
+                    onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                {/* Age Field */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
+                    <Calendar size={12} /> Age / อายุ
+                  </label>
+                  <input
+                    type="number"
+                    className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-all shadow-inner"
+                    value={editForm.age}
+                    onChange={e => setEditForm({ ...editForm, age: e.target.value })}
+                  />
+                </div>
+
+                {/* Nationality Dropdown */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
+                    <Globe2 size={12} /> Nationality
+                  </label>
+                  <select
+                    className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-all appearance-none cursor-pointer shadow-inner"
+                    value={isOtherNationality ? 'OTHER' : editForm.nationality}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === 'OTHER') {
+                        setIsOtherNationality(true);
+                        setEditForm({ ...editForm, nationality: '' });
+                      } else {
+                        setIsOtherNationality(false);
+                        setEditForm({ ...editForm, nationality: val });
+                      }
+                    }}
+                  >
+                    <option value="ไทย (Thai)">ไทย (Thai)</option>
+                    <option value="พม่า (Myanmar)">พม่า (Myanmar)</option>
+                    <option value="กัมพูชา (Cambodian)">กัมพูชา (Cambodian)</option>
+                    <option value="ลาว (Lao)">ลาว (Lao)</option>
+                    <option value="OTHER">อื่นๆ / Other</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Other Nationality Input */}
+              {isOtherNationality && (
+                <div className="animate-in slide-in-from-top-2 duration-300">
+                  <label className="text-[9px] font-black text-blue-500 uppercase tracking-widest ml-1">Specify Other Nationality</label>
+                  <input
+                    className="w-full bg-blue-50 border-2 border-blue-100 p-4 rounded-2xl font-bold text-blue-600 outline-none focus:border-blue-500 transition-all shadow-sm"
+                    placeholder="Enter nationality..."
+                    value={editForm.nationality}
+                    onChange={e => setEditForm({ ...editForm, nationality: e.target.value })}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3">
+              <button 
+                onClick={() => setIsEditModalOpen(false)}
+                className="flex-1 py-4 bg-white text-slate-500 font-black text-[10px] uppercase tracking-[0.2em] rounded-2xl border border-slate-200 hover:bg-slate-100 transition-all active:scale-95"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={saveUserEdit}
+                disabled={submitting}
+                className="flex-1 py-4 bg-blue-600 text-white font-black text-[10px] uppercase tracking-[0.2em] rounded-2xl shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {submitting ? <Loader2 className="animate-spin" size={16} /> : 'Save Protocol'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

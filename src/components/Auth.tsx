@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../services/supabaseApi';
 import { User, Vendor } from '../types';
 import { useTranslation } from '../context/LanguageContext';
-import { UserPlus, LogIn, ChevronRight, AlertCircle, Loader2, ShieldCheck } from 'lucide-react';
+import { UserPlus, LogIn, ChevronRight, AlertCircle, Loader2, ShieldCheck, Globe2 } from 'lucide-react';
 
 interface AuthProps {
   onLogin: (user: User) => void;
@@ -20,6 +20,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [name, setName] = useState('');
   const [age, setAge] = useState('');
   const [nationality, setNationality] = useState('ไทย (Thai)');
+  const [isOtherNationality, setIsOtherNationality] = useState(false); // ✅ เพิ่ม State สำหรับสัญชาติอื่นๆ
   const [vendorId, setVendorId] = useState('');
   const [otherVendor, setOtherVendor] = useState('');
   
@@ -32,6 +33,17 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       api.getVendors().then(setVendors);
     }
   }, [mode]);
+
+  // ✅ ฟังก์ชันจัดการการเปลี่ยนสัญชาติ
+  const handleNationalityChange = (val: string) => {
+    if (val === 'OTHER') {
+      setIsOtherNationality(true);
+      setNationality(''); // ล้างค่าเพื่อให้พิมพ์ใหม่
+    } else {
+      setIsOtherNationality(false);
+      setNationality(val);
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,7 +84,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     <div className="min-h-[calc(100vh-80px)] flex items-center justify-center p-4 animate-in fade-in duration-500">
       <div className="bg-white p-6 md:p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 w-full max-w-md border border-slate-100">
         
-        {/* Toggle Switcher - Compact Style */}
+        {/* Toggle Switcher */}
         <div className="flex bg-slate-100 p-1.5 rounded-[1.2rem] mb-6">
           <button 
             onClick={() => { setMode('LOGIN'); setError(''); }}
@@ -95,15 +107,15 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           <h2 className="text-xl font-black text-slate-900 tracking-tight uppercase">
             {mode === 'LOGIN' ? 'Welcome Back' : 'Create Account'}
           </h2>
-          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1.5 flex items-center justify-center gap-1.5">
+          <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1.5 flex items-center justify-center gap-1.5">
             <ShieldCheck size={12} className="text-blue-500" /> Security Passport Verification
-          </p>
+          </div>
         </div>
 
         {/* LOGIN FORM */}
         {mode === 'LOGIN' && (
           <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 text-left">
               <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('auth.national_id')}</label>
               <input 
                 required 
@@ -122,35 +134,56 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
         {/* REGISTER FORM */}
         {mode === 'REGISTER' && (
-          <form onSubmit={handleRegister} className="space-y-3.5">
+          <form onSubmit={handleRegister} className="space-y-3.5 text-left">
             <div className="grid grid-cols-2 gap-3">
                 <div className="col-span-2 space-y-1">
                     <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('auth.national_id')}</label>
-                    <input required value={regId} onChange={e => setRegId(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-xs" placeholder="National ID Number" />
+                    <input required value={regId} onChange={e => setRegId(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-xs shadow-inner" placeholder="National ID Number" />
                 </div>
                 <div className="col-span-2 space-y-1">
                     <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('auth.full_name')}</label>
-                    <input required value={name} onChange={e => setName(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-xs" placeholder="Full Name (EN/TH)" />
+                    <input required value={name} onChange={e => setName(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-xs shadow-inner" placeholder="Full Name (EN/TH)" />
                 </div>
                 <div className="space-y-1">
                     <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Age / อายุ</label>
-                    <input required type="number" value={age} onChange={e => setAge(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-xs" placeholder="25" />
+                    <input required type="number" value={age} onChange={e => setAge(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-xs shadow-inner" placeholder="25" />
                 </div>
                 <div className="space-y-1">
                     <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Nationality / สัญชาติ</label>
-                    <select value={nationality} onChange={e => setNationality(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-xs appearance-none">
+                    <select 
+                      value={isOtherNationality ? 'OTHER' : nationality} 
+                      onChange={e => handleNationalityChange(e.target.value)} 
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-xs appearance-none cursor-pointer"
+                    >
                         <option value="ไทย (Thai)">ไทย (Thai)</option>
-                        <option value="ต่างชาติ (Foreigner)">ต่างชาติ (Foreigner)</option>
-                        <option value="กัมพูชา (Cambodian)">กัมพูชา (Cambodian)</option>
                         <option value="พม่า (Myanmar)">พม่า (Myanmar)</option>
+                        <option value="กัมพูชา (Cambodian)">กัมพูชา (Cambodian)</option>
                         <option value="ลาว (Lao)">ลาว (Lao)</option>
+                        <option value="OTHER">อื่นๆ / Other</option>
                     </select>
                 </div>
             </div>
 
+            {/* ✅ แสดงช่องกรอกสัญชาติเมื่อเลือก OTHER */}
+            {isOtherNationality && (
+              <div className="space-y-1 animate-in slide-in-from-top-2 duration-300">
+                <label className="block text-[9px] font-black text-blue-500 uppercase tracking-widest ml-1 flex items-center gap-1.5">
+                  <Globe2 size={10} /> Please Specify Nationality
+                </label>
+                <input 
+                  required 
+                  autoFocus
+                  value={nationality} 
+                  onChange={e => setNationality(e.target.value)} 
+                  className="w-full px-4 py-3 rounded-2xl border-2 border-blue-100 bg-blue-50/30 focus:bg-white focus:border-blue-500 outline-none font-bold text-xs" 
+                  placeholder="เช่น เวียดนาม (Vietnamese)" 
+                />
+              </div>
+            )}
+
             <div className="space-y-1">
               <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('auth.company')}</label>
-              <select required value={vendorId} onChange={e => setVendorId(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-xs appearance-none">
+              <select required value={vendorId} onChange={e => setVendorId(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-xs appearance-none cursor-pointer shadow-inner">
                 <option value="">-- Select Company --</option>
                 {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                 <option value="OTHER">Other (ระบุเพิ่ม)</option>
