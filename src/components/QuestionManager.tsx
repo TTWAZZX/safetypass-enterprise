@@ -7,7 +7,6 @@ const QuestionManager: React.FC = () => {
   const [questions, setQuestions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // State สำหรับ Form
   const [examType, setExamType] = useState('INDUCTION');
   const [th, setTh] = useState('');
   const [en, setEn] = useState('');
@@ -36,20 +35,34 @@ const QuestionManager: React.FC = () => {
 
   const handleSave = async () => {
     if(!th || !en) return alert("กรุณากรอกโจทย์ให้ครบถ้วน");
-    
-    const { error } = await supabase.from('questions').insert({
-        content_th: th,
-        content_en: en,
-        type: examType,
-        choices_json: choices,
-        is_active: true
-    });
 
-    if(error) alert(error.message);
-    else {
-        alert("บันทึกสำเร็จ!");
-        setTh(''); setEn('');
-        fetchQuestions(); // โหลดรายการใหม่
+    // หาข้อที่ถูก
+    const correctIndex = choices.findIndex(c => c.is_correct);
+    if (correctIndex === -1) return alert("กรุณาเลือกข้อที่ถูกต้อง");
+
+    try {
+      const { error } = await supabase.from('questions').insert({
+          content_th: th,
+          content_en: en,
+          type: examType,
+          choices_json: choices,
+          correct_choice_index: correctIndex, // ✅ ส่ง Index ไปบันทึก
+          is_active: true
+      });
+  
+      if(error) throw error;
+      
+      alert("บันทึกข้อสอบสำเร็จ!");
+      setTh(''); setEn('');
+      setChoices([
+        { text_th: '', text_en: '', is_correct: true },
+        { text_th: '', text_en: '', is_correct: false },
+        { text_th: '', text_en: '', is_correct: false },
+        { text_th: '', text_en: '', is_correct: false },
+      ]);
+      fetchQuestions();
+    } catch (err: any) {
+      alert("เกิดข้อผิดพลาด: " + err.message);
     }
   };
 
@@ -65,7 +78,8 @@ const QuestionManager: React.FC = () => {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
-      {/* 🟢 ส่วนที่ 1: ฟอร์มเพิ่มข้อสอบ */}
+      
+      {/* 🟢 ส่วนที่ 1: ฟอร์มเพิ่มข้อสอบ (Clean White) */}
       <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
         <h3 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-2">
             <Plus className="w-6 h-6 text-blue-600" /> เพิ่มข้อสอบใหม่
@@ -74,8 +88,18 @@ const QuestionManager: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <div className="space-y-4">
                 <label className="text-xs font-bold uppercase text-slate-500 tracking-wider">เนื้อหาข้อสอบ (ไทย/อังกฤษ)</label>
-                <input placeholder="โจทย์ภาษาไทย" value={th} onChange={e=>setTh(e.target.value)} className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" />
-                <input placeholder="Question in English" value={en} onChange={e=>setEn(e.target.value)} className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" />
+                <input 
+                  placeholder="โจทย์ภาษาไทย" 
+                  value={th} 
+                  onChange={e=>setTh(e.target.value)} 
+                  className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 bg-white" 
+                />
+                <input 
+                  placeholder="Question in English" 
+                  value={en} 
+                  onChange={e=>setEn(e.target.value)} 
+                  className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 bg-white" 
+                />
                 
                 <div className="pt-2">
                     <label className="text-xs font-bold uppercase text-slate-500 tracking-wider">ประเภทการสอบ</label>
@@ -105,20 +129,29 @@ const QuestionManager: React.FC = () => {
                             name="correct_choice" 
                             checked={c.is_correct} 
                             onChange={() => {
-                                const newC = [...choices];
-                                newC.forEach(x => x.is_correct = false);
+                                const newC = choices.map(ch => ({ ...ch, is_correct: false }));
                                 newC[idx].is_correct = true;
                                 setChoices(newC);
                             }}
-                            className="w-5 h-5 text-blue-600 border-slate-300 focus:ring-blue-500"
+                            className="w-5 h-5 text-blue-600 border-slate-300 focus:ring-blue-500 cursor-pointer"
                         />
                         <div className="flex-1 flex flex-col gap-1">
-                            <input placeholder={`ตัวเลือกที่ ${idx+1} (TH)`} value={c.text_th} onChange={e => {
-                                const newC = [...choices]; newC[idx].text_th = e.target.value; setChoices(newC);
-                            }} className="w-full p-2 border border-slate-200 rounded-lg text-sm focus:border-blue-300 outline-none" />
-                            <input placeholder={`Choice ${idx+1} (EN)`} value={c.text_en} onChange={e => {
-                                const newC = [...choices]; newC[idx].text_en = e.target.value; setChoices(newC);
-                            }} className="w-full p-2 border border-slate-200 rounded-lg text-sm focus:border-blue-300 outline-none" />
+                            <input 
+                              placeholder={`ตัวเลือกที่ ${idx+1} (TH)`} 
+                              value={c.text_th} 
+                              onChange={e => {
+                                  const newC = [...choices]; newC[idx].text_th = e.target.value; setChoices(newC);
+                              }} 
+                              className="w-full p-2 border border-slate-200 rounded-lg text-sm focus:border-blue-300 outline-none text-slate-900 bg-white" 
+                            />
+                            <input 
+                              placeholder={`Choice ${idx+1} (EN)`} 
+                              value={c.text_en} 
+                              onChange={e => {
+                                  const newC = [...choices]; newC[idx].text_en = e.target.value; setChoices(newC);
+                              }} 
+                              className="w-full p-2 border border-slate-200 rounded-lg text-sm focus:border-blue-300 outline-none text-slate-900 bg-white" 
+                            />
                         </div>
                     </div>
                 ))}
@@ -130,7 +163,7 @@ const QuestionManager: React.FC = () => {
         </button>
       </div>
 
-      {/* 🔵 ส่วนที่ 2: รายการข้อสอบที่มีอยู่ */}
+      {/* 🔵 ส่วนที่ 2: รายการข้อสอบ (Clean White) */}
       <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
         <h3 className="text-xl font-black text-slate-900 mb-6">รายการข้อสอบทั้งหมด ({questions.length})</h3>
         
@@ -142,7 +175,7 @@ const QuestionManager: React.FC = () => {
         ) : (
             <div className="grid grid-cols-1 gap-4">
                 {questions.map((q) => (
-                    <div key={q.id} className="p-5 border border-slate-100 rounded-2xl hover:bg-slate-50 transition-all flex justify-between items-start group">
+                    <div key={q.id} className="p-5 border border-slate-100 rounded-2xl hover:bg-slate-50 transition-all flex justify-between items-start group bg-white">
                         <div className="space-y-2">
                             <div className="flex items-center gap-2">
                                 <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${q.type === 'INDUCTION' ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'}`}>
@@ -155,8 +188,12 @@ const QuestionManager: React.FC = () => {
                             
                             <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-3">
                                 {q.choices_json.map((c: any, i: number) => (
-                                    <div key={i} className={`text-xs ${c.is_correct ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>
-                                        • {c.text_th} {c.is_correct && '✓'}
+                                    <div key={i} className={`text-xs ${
+                                      (q.correct_choice_index === i || c.is_correct) 
+                                        ? 'text-emerald-600 font-bold' 
+                                        : 'text-slate-400'
+                                    }`}>
+                                        • {c.text_th} {(q.correct_choice_index === i || c.is_correct) && '✓'}
                                     </div>
                                 ))}
                             </div>

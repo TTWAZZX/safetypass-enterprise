@@ -5,55 +5,32 @@ import Auth from './components/Auth';
 import UserPanel from './components/UserPanel';
 import AdminPanel from './components/AdminPanel';
 import LanguageSwitcher from './components/LanguageSwitcher';
-import { Shield, Loader2, Moon, Sun } from 'lucide-react';
+import { Shield, Loader2 } from 'lucide-react';
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './components/ToastProvider';
-
 
 const AppContent: React.FC = () => {
   const { t } = useTranslation();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
     try {
+      // ✅ บังคับลบ Class Dark ทิ้งทันทีที่โหลด App
+      document.documentElement.classList.remove('dark');
+      localStorage.removeItem('safety_pass_theme');
+
       const savedUser = localStorage.getItem('safety_pass_current_user');
       if (savedUser) {
         setCurrentUser(JSON.parse(savedUser));
       }
-
-      // ✅ บังคับเริ่มต้นเป็น LIGHT MODE เสมอ
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem('safety_pass_theme', 'light');
-      setDarkMode(false);
-
     } catch (err) {
       console.error('Init error:', err);
     } finally {
       setLoading(false);
     }
   }, []);
-
-  useEffect(() => {
-    const fallback = setTimeout(() => {
-      setLoading(false);
-    }, 3000);
-
-    return () => clearTimeout(fallback);
-  }, []);
-
-  const toggleTheme = () => {
-    if (darkMode) {
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem('safety_pass_theme', 'light');
-    } else {
-      document.documentElement.classList.add('dark');
-      localStorage.setItem('safety_pass_theme', 'dark');
-    }
-    setDarkMode(!darkMode);
-  };
 
   const handleLogin = (user: User) => {
     setCurrentUser(user);
@@ -67,17 +44,18 @@ const AppContent: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900">
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-900 transition-colors duration-300">
+    // ✅ ลบ transition-colors และ dark:... ออก
+    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans">
       
-      {/* Header */}
-      <header className="bg-slate-900 dark:bg-slate-950 text-white p-4 shadow-md sticky top-0 z-50 transition-colors">
+      {/* Header (สีเข้มถาวร เพื่อความสวยงาม) */}
+      <header className="bg-slate-900 text-white p-4 shadow-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           
           <div className="flex items-center gap-3">
@@ -95,19 +73,6 @@ const AppContent: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-6">
-
-            {/* 🌙 Dark Mode Toggle */}
-            <button
-              onClick={toggleTheme}
-              className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition"
-            >
-              {darkMode ? (
-                <Sun className="w-5 h-5 text-yellow-400" />
-              ) : (
-                <Moon className="w-5 h-5 text-white" />
-              )}
-            </button>
-
             <LanguageSwitcher />
 
             {currentUser && (
@@ -149,9 +114,9 @@ const AppContent: React.FC = () => {
       </main>
 
       {/* Footer */}
-      <footer className="bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 py-6 mt-12 transition-colors">
+      <footer className="bg-white border-t border-slate-200 py-6 mt-12">
         <div className="max-w-7xl mx-auto px-4 text-center">
-          <p className="text-slate-400 dark:text-slate-500 text-[10px] font-bold uppercase tracking-widest">
+          <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">
             © 2024 Corporate Contractor Safety Passport System
             <br />
             Internal Use Only • Enterprise UX Architecture

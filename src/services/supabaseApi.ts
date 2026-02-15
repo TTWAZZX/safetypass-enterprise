@@ -1,56 +1,85 @@
+// src/services/supabaseApi.ts
 import { supabase } from './supabaseClient'
 import { User, Vendor, ExamType, Question, WorkPermitSession } from '../types'
 
 export const api = {
 
   /* =====================================================
-     1. AUTH
+     1. AUTH (แก้ไขโดเมนเป็น .com เพื่อให้ผ่าน Validation)
   ===================================================== */
 
   login: async (nationalId: string): Promise<User> => {
-    const { data, error } = await supabase
+    // ✅ แก้จาก @safetypass.local เป็น @safetypass.com
+    const email = `${nationalId}@safetypass.com`
+    const password = nationalId 
+
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    })
+
+    if (authError) throw new Error('เข้าสู่ระบบไม่สำเร็จ: ' + authError.message)
+
+    const { data: userData, error: userError } = await supabase
       .from('users')
-      .select('*')
-      .eq('national_id', nationalId)
+      .select('*, vendors(*)')
+      .eq('id', authData.user?.id)
       .single()
 
-    if (error || !data) throw new Error('ไม่พบผู้ใช้งาน')
-    return data as User
+    if (userError || !userData) throw new Error('ไม่พบข้อมูลผู้ใช้งานในระบบ')
+    
+    return {
+      ...userData,
+      vendor_id: userData.vendor_id 
+    } as unknown as User
   },
 
   register: async (
     nationalId: string,
     name: string,
     vendorId: string,
+    age: number,
+    nationality: string,
     otherVendorName?: string
   ): Promise<User> => {
 
     let finalVendorId = vendorId
-
     if (otherVendorName) {
       const { data: newVendor, error: vError } = await supabase
-        .from('vendors')
-        .insert({ name: otherVendorName, status: 'PENDING' })
-        .select()
-        .single()
-
-      if (vError) throw new Error('สร้างบริษัทไม่สำเร็จ')
+        .from('vendors').insert({ name: otherVendorName, status: 'PENDING' }).select().single()
+      if (vError) throw new Error('สร้างบริษัทไม่สำเร็จ: ' + vError.message)
       finalVendorId = newVendor.id
     }
 
-    const { data, error } = await supabase
+    const email = `${nationalId}@safetypass.com`
+    const password = nationalId 
+
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { national_id: nationalId, name: name } }
+    })
+
+    if (authError) throw new Error(authError.message)
+    if (!authData.user) throw new Error('Auth Error')
+
+    // ✅ Insert ข้อมูลใหม่ครบทุกช่อง
+    const { data: newUser, error: dbError } = await supabase
       .from('users')
       .insert({
+        id: authData.user.id,
         national_id: nationalId,
         name,
+        age,            // เพิ่ม
+        nationality,    // เพิ่ม
         vendor_id: finalVendorId,
         role: 'USER'
       })
-      .select()
+      .select('*, vendors(*)')
       .single()
 
-    if (error) throw new Error('ลงทะเบียนไม่สำเร็จ')
-    return data as User
+    if (dbError) throw new Error('บันทึก Profile ไม่สำเร็จ')
+    return newUser as unknown as User
   },
 
   /* =====================================================
@@ -92,6 +121,16 @@ export const api = {
      3. SETTINGS (PASSING SCORE)
   ===================================================== */
 
+  getSystemSettings: async () => {
+    // เพิ่มฟังก์ชันนี้เพื่อให้ SettingsManager เรียกใช้ได้
+    const { data } = await supabase.from('system_config').select('*');
+    const config: Record<string, string> = {};
+    data?.forEach((item: any) => {
+      config[item.key] = item.value;
+    });
+    return config;
+  },
+
   getPassingScore: async (key: string) => {
     const { data } = await supabase
       .from('system_config')
@@ -102,6 +141,14 @@ export const api = {
     return Number(data?.value || 0)
   },
 
+  updateSystemSetting: async (key: string, value: number) => {
+    // ใช้ upsert เพื่อกัน error กรณีไม่มี key
+    await supabase
+      .from('system_config')
+      .upsert({ key, value: value.toString() })
+  },
+  
+  // คงไว้เพื่อความเข้ากันได้
   updatePassingScore: async (key: string, value: number) => {
     await supabase
       .from('system_config')
@@ -116,7 +163,7 @@ export const api = {
   getQuestions: async (type: ExamType): Promise<Question[]> => {
     const { data } = await supabase
       .from('questions')
-      .select('*')
+      .select('id, content_th, content_en, choices_json, type') // ⚠️ เลือกไม่ดึงเฉลยมาแสดง
       .eq('type', type)
       .eq('is_active', true)
 
@@ -132,7 +179,7 @@ export const api = {
   getAllQuestions: async (): Promise<Question[]> => {
     const { data } = await supabase
       .from('questions')
-      .select('*')
+      .select('*') // Admin เห็นเฉลยได้
       .order('created_at', { ascending: false })
 
     return (data || []).map(q => ({
@@ -174,47 +221,27 @@ export const api = {
      5. EXAM SUBMIT
   ===================================================== */
 
-  submitExam: async (
-    userId: string,
-    type: ExamType,
-    score: number,
-    passed: boolean,
-    permitNo?: string
-  ) => {
-
-    await supabase.from('exam_logs').insert({
-      user_id: userId,
-      exam_type: type,
-      score,
-      passed
-    })
-
-    if (passed) {
-      const now = new Date()
-
-      if (type === 'INDUCTION') {
-        const nextYear = new Date()
-        nextYear.setFullYear(now.getFullYear() + 1)
-
-        await supabase
-          .from('users')
-          .update({ induction_expiry: nextYear.toISOString() })
-          .eq('id', userId)
-      }
-
-      if (type === 'WORK_PERMIT' && permitNo) {
-        const expire = new Date()
-        expire.setDate(now.getDate() + 5)
-
-        await supabase.from('work_permits').insert({
-          user_id: userId,
-          permit_no: permitNo,
-          expire_date: expire.toISOString()
-        })
-      }
-    }
-
+  submitExam: async (userId: string, type: ExamType, score: number, passed: boolean, permitNo?: string) => {
+    console.warn("Deprecated: Please use 'submitExamWithAnswers'");
+    const { error } = await supabase.from('exam_logs').insert({ user_id: userId, exam_type: type, score, passed })
+    if (error) throw new Error("Please update code to use submitExamWithAnswers");
     return { passed, score }
+  },
+
+  // ✅ ใช้ตัวนี้
+  submitExamWithAnswers: async (
+      type: ExamType,
+      answers: Record<string, number>,
+      permitNo?: string
+  ) => {
+      const { data, error } = await supabase.rpc('submit_exam_attempt', {
+          exam_type_param: type,
+          answers: answers,
+          permit_no_param: permitNo
+      })
+
+      if (error) throw new Error(error.message)
+      return data 
   },
 
   /* =====================================================
@@ -241,34 +268,28 @@ export const api = {
   ===================================================== */
 
   getDashboardStats: async () => {
-
-    const { data: users } =
-      await supabase.from('users').select('id');
-
-    const { data: vendors } =
-      await supabase.from('vendors')
-        .select('id')
+    // ใช้ count: 'exact', head: true เพื่อประสิทธิภาพ (ไม่โหลด data)
+    const { count: users } = await supabase.from('users').select('*', { count: 'exact', head: true });
+    
+    const { count: vendors } = await supabase.from('vendors')
+        .select('*', { count: 'exact', head: true })
         .eq('status', 'PENDING');
 
-    const { data: permits } =
-      await supabase.from('work_permits')
-        .select('id')
+    const { count: permits } = await supabase.from('work_permits')
+        .select('*', { count: 'exact', head: true })
         .gt('expire_date', new Date().toISOString());
 
-    const { data: logs } =
-      await supabase.from('exam_logs')
-        .select('passed');
+    // Exam Logs อาจจะต้องโหลดมาคำนวณ passed/failed 
+    // หรือสร้าง View ใน DB จะดีกว่า แต่นี่ใช้ท่าเดิมไปก่อน
+    const { data: logs } = await supabase.from('exam_logs').select('passed');
 
-    const passed =
-      logs?.filter(l => l.passed).length || 0;
-
-    const failed =
-      logs?.filter(l => !l.passed).length || 0;
+    const passed = logs?.filter(l => l.passed).length || 0;
+    const failed = logs?.filter(l => !l.passed).length || 0;
 
     return {
-      totalUsers: users?.length || 0,
-      pendingVendors: vendors?.length || 0,
-      activePermits: permits?.length || 0,
+      totalUsers: users || 0,
+      pendingVendors: vendors || 0,
+      activePermits: permits || 0,
       examSummary: [
         { name: 'Passed', value: passed },
         { name: 'Failed', value: failed }
@@ -289,25 +310,24 @@ export const api = {
         exam_type,
         score,
         passed,
-        users!exam_logs_user_id_fkey (
+        users (
           national_id,
           name,
-          vendors (
-            name
-          )
+          age,
+          nationality,
+          vendors ( name )
         )
       `)
       .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('Error fetching report:', error);
-      return [];
-    }
+    if (error) return [];
 
     return (data || []).map((log: any) => ({
-      timestamp: new Date(log.created_at).toLocaleString('th-TH'),
+      timestamp: new Date(log.created_at), // ส่งเป็น Object Date ไปเลยเพื่อไปจัด Format ทีหลัง
       national_id: log.users?.national_id || '-',
       name: log.users?.name || '-',
+      age: log.users?.age || '-',
+      nationality: log.users?.nationality || '-',
       vendor: log.users?.vendors?.name || '-',
       exam_type: log.exam_type,
       score: log.score,
