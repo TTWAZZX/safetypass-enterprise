@@ -13,11 +13,13 @@ import {
   XCircle, 
   Loader2,
   Trash2,
-  Edit3, // ✅ นำปุ่มแก้ไขกลับมาแล้ว
+  Edit3,
   UserPlus,
   Upload,
   Download,
-  History
+  History,
+  ShieldCheck,
+  ChevronRight
 } from 'lucide-react';
 
 const VendorManager: React.FC = () => {
@@ -32,25 +34,24 @@ const VendorManager: React.FC = () => {
   const userFileInputRef = useRef<HTMLInputElement>(null);
   const vendorFileInputRef = useRef<HTMLInputElement>(null);
 
-  // 🟢 Helper: บันทึก Audit Log
+  // ✅ ระบบบันทึกประวัติการกระทำของ Admin
   const logAction = async (action: string, target: string, details: string = '') => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       await supabase.from('audit_logs').insert([{
-        admin_email: user?.email || 'Unknown Admin',
+        admin_email: user?.email || 'System Admin',
         action,
         target,
         details
       }]);
     } catch (err) {
-      console.error('Failed to log action', err);
+      console.error('Audit log failure:', err);
     }
   };
 
   const loadData = async () => {
     setLoading(true);
     try {
-      // 1. ดึงข้อมูลหลักตาม Tab
       let query: any;
       if (activeTab === 'VENDORS') {
         query = supabase.from('vendors').select('*').order('name', { ascending: true });
@@ -66,7 +67,6 @@ const VendorManager: React.FC = () => {
       if (activeTab === 'LOGS') setLogs(data || []);
       else setDataList(data || []);
 
-      // 2. ดึง Vendor List สำรองไว้เสมอ (สำหรับใช้ใน Dropdown หรือ Import)
       const { data: vData } = await supabase.from('vendors').select('id, name').eq('status', 'APPROVED');
       setAllVendors(vData || []);
 
@@ -79,9 +79,8 @@ const VendorManager: React.FC = () => {
 
   useEffect(() => { loadData(); }, [activeTab]);
 
-  // ================= [ EDIT FUNCTIONS - กู้คืนกลับมาแล้ว ] =================
   const handleEditVendor = async (id: string, currentName: string) => {
-    const newName = window.prompt("แก้ไขชื่อบริษัท:", currentName);
+    const newName = window.prompt("แก้ไขชื่อบริษัท (Edit Company Name):", currentName);
     if (!newName || newName === currentName) return;
     const { error } = await supabase.from('vendors').update({ name: newName }).eq('id', id);
     if (error) showToast(error.message, 'error');
@@ -93,7 +92,7 @@ const VendorManager: React.FC = () => {
   };
 
   const handleEditUser = async (user: any) => {
-    const newName = window.prompt("แก้ไขชื่อพนักงาน:", user.name);
+    const newName = window.prompt("แก้ไขชื่อพนักงาน (Edit Personnel Name):", user.name);
     if (!newName || newName === user.name) return;
     const { error } = await supabase.from('users').update({ name: newName }).eq('id', user.id);
     if (error) showToast(error.message, 'error');
@@ -104,7 +103,6 @@ const VendorManager: React.FC = () => {
     }
   };
 
-  // ================= [ EXCEL EXPORT ] =================
   const handleExport = () => {
     let exportData = [];
     let fileName = '';
@@ -115,32 +113,28 @@ const VendorManager: React.FC = () => {
         'National ID': user.national_id,
         'Vendor': user.vendors?.name || 'N/A',
         'Role': user.role,
-        'Training Status': user.induction_expiry ? 'Passed' : 'Not Passed'
+        'Status': user.induction_expiry ? 'Certified' : 'Pending'
       }));
-      fileName = `SafetyPass_Users_${new Date().toISOString().split('T')[0]}.xlsx`;
+      fileName = `Personnel_List_${new Date().toISOString().split('T')[0]}.xlsx`;
     } else if (activeTab === 'VENDORS') {
       exportData = dataList.map(vendor => ({
         'Company Name': vendor.name,
         'Status': vendor.status,
-        'Created At': new Date(vendor.created_at).toLocaleDateString()
+        'Registry Date': new Date(vendor.created_at).toLocaleDateString()
       }));
-      fileName = `SafetyPass_Vendors_${new Date().toISOString().split('T')[0]}.xlsx`;
+      fileName = `Vendor_List_${new Date().toISOString().split('T')[0]}.xlsx`;
     }
 
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, activeTab === 'USERS' ? "Users" : "Vendors");
+    XLSX.utils.book_append_sheet(wb, ws, activeTab);
     XLSX.writeFile(wb, fileName);
-    
-    logAction('EXPORT', activeTab, `Exported ${activeTab.toLowerCase()} list`);
-    showToast('ดาวน์โหลดไฟล์ Excel เรียบร้อย', 'success');
+    showToast('Exported Successfully', 'success');
   };
 
-  // ================= [ EXCEL IMPORT ] =================
   const handleUserImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = async (evt) => {
       try {
@@ -148,28 +142,22 @@ const VendorManager: React.FC = () => {
         const wb = XLSX.read(bstr, { type: 'binary' });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const data: any[] = XLSX.utils.sheet_to_json(ws);
-        let successCount = 0; let failCount = 0;
-
+        let successCount = 0;
         for (const row of data) {
           const name = row['Name'];
           const nid = row['NationalID'] || row['National ID'];
           const vName = row['VendorName'] || row['Vendor'];
-
           if (name && nid) {
             const vendor = allVendors.find(v => v.name === vName);
             const { error } = await supabase.from('users').insert([{
-              name: name,
-              national_id: String(nid),
-              vendor_id: vendor?.id || null,
-              role: 'USER'
+              name, national_id: String(nid), vendor_id: vendor?.id || null, role: 'USER'
             }]);
-            if (!error) successCount++; else failCount++;
+            if (!error) successCount++;
           }
         }
-        logAction('BULK_IMPORT_USERS', `${successCount} Users`, `Failed: ${failCount}`);
-        showToast(`นำเข้าสำเร็จ ${successCount} คน`, 'success');
+        showToast(`Imported ${successCount} entries`, 'success');
         loadData();
-      } catch (err) { showToast('ไฟล์ไม่ถูกต้อง', 'error'); }
+      } catch (err) { showToast('Invalid File Format', 'error'); }
     };
     reader.readAsBinaryString(file);
     e.target.value = '';
@@ -185,56 +173,57 @@ const VendorManager: React.FC = () => {
         const wb = XLSX.read(bstr, { type: 'binary' });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const data: any[] = XLSX.utils.sheet_to_json(ws);
-        let successCount = 0; let failCount = 0;
-
+        let successCount = 0;
         for (const row of data) {
-          const name = row['CompanyName'] || row['Company Name'] || row['Name'];
+          const name = row['CompanyName'] || row['Name'];
           if (name) {
             const { error } = await supabase.from('vendors').insert([{ name, status: 'APPROVED' }]);
-            if (!error) successCount++; else failCount++;
+            if (!error) successCount++;
           }
         }
-        logAction('BULK_IMPORT_VENDORS', `${successCount} Vendors`, `Failed: ${failCount}`);
-        showToast(`นำเข้าสำเร็จ ${successCount} แห่ง`, 'success');
+        showToast(`Imported ${successCount} vendors`, 'success');
         loadData();
-      } catch (err) { showToast('ไฟล์ไม่ถูกต้อง', 'error'); }
+      } catch (err) { showToast('Invalid File Format', 'error'); }
     };
     reader.readAsBinaryString(file);
     e.target.value = '';
   };
 
-  // ================= [ CRUD ACTIONS ] =================
   const handleAddVendor = async () => {
-    const name = window.prompt("ระบุชื่อบริษัทใหม่:");
+    const name = window.prompt("ชื่อบริษัทใหม่ (New Company Name):");
     if (!name) return;
     const { error } = await supabase.from('vendors').insert([{ name, status: 'APPROVED' }]);
     if (error) showToast(error.message, 'error');
-    else { showToast('เพิ่มบริษัทสำเร็จ', 'success'); logAction('CREATE_VENDOR', name); loadData(); }
+    else { showToast('Success', 'success'); logAction('CREATE_VENDOR', name); loadData(); }
   };
+
   const handleDeleteVendor = async (id: string, name: string) => {
     if (!window.confirm(`ยืนยันการลบบริษัท "${name}"?`)) return;
     const { error } = await supabase.from('vendors').delete().eq('id', id);
-    if (error) showToast("ลบไม่ได้เนื่องจากมีข้อมูลเชื่อมโยง", 'error');
-    else { showToast('ลบสำเร็จ', 'success'); logAction('DELETE_VENDOR', name); loadData(); }
+    if (error) showToast("Cannot delete: Active links exist", 'error');
+    else { showToast('Deleted', 'success'); logAction('DELETE_VENDOR', name); loadData(); }
   };
+
   const handleAddUser = async () => {
-    const name = window.prompt("ชื่อ-นามสกุล พนักงาน:");
-    const nationalId = window.prompt("เลขบัตรประชาชน:");
+    const name = window.prompt("ชื่อ-นามสกุล (Full Name):");
+    const nationalId = window.prompt("เลขบัตรประชาชน (National ID):");
     if (!name || !nationalId) return;
-    const vendorName = window.prompt("ชื่อบริษัทสังกัด:");
+    const vendorName = window.prompt("ชื่อบริษัทสังกัด (Affiliation):");
     const vendor = allVendors.find(v => v.name === vendorName);
     const { error } = await supabase.from('users').insert([{ name, national_id: nationalId, vendor_id: vendor?.id || null, role: 'USER' }]);
-    if (error) showToast(error.message, 'error'); else { showToast('เพิ่มสำเร็จ', 'success'); logAction('CREATE_USER', name); loadData(); }
+    if (error) showToast(error.message, 'error'); else { showToast('Success', 'success'); logAction('CREATE_USER', name); loadData(); }
   };
+
   const handleDeleteUser = async (id: string, name: string) => {
-    if (!window.confirm(`ยืนยันการลบ "${name}"?`)) return;
+    if (!window.confirm(`Delete "${name}"?`)) return;
     const { error } = await supabase.from('users').delete().eq('id', id);
-    if (error) showToast(error.message, 'error'); else { showToast('ลบสำเร็จ', 'success'); logAction('DELETE_USER', name); loadData(); }
+    if (error) showToast(error.message, 'error'); else { showToast('Deleted', 'success'); logAction('DELETE_USER', name); loadData(); }
   };
+
   const handleResetTraining = async (id: string, name: string) => {
-    if(!window.confirm("รีเซ็ตสถานะการอบรม?")) return;
+    if(!window.confirm("Reset induction status for this user?")) return;
     const { error } = await supabase.from('users').update({ induction_expiry: null }).eq('id', id);
-    if (error) showToast(error.message, 'error'); else { showToast('รีเซ็ตสำเร็จ', 'success'); logAction('RESET_TRAINING', name); loadData(); }
+    if (error) showToast(error.message, 'error'); else { showToast('Reset Complete', 'success'); logAction('RESET_TRAINING', name); loadData(); }
   };
 
   const filtered = activeTab === 'LOGS' ? logs : dataList.filter(item => 
@@ -243,46 +232,57 @@ const VendorManager: React.FC = () => {
   );
 
   return (
-    <div className="p-8 space-y-6 text-left animate-in fade-in duration-500">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+    <div className="space-y-6 text-left animate-in fade-in duration-500 pb-10">
+      
+      {/* 🧭 HEADER & TAB SYSTEM */}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 border-b border-slate-200 pb-6">
         <div>
-          <h2 className="text-3xl font-black text-slate-900 leading-none">Management Center</h2>
-          <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mt-2">Enterprise Resource Planning</p>
+          <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight uppercase leading-none">Directory</h2>
+          {/* ✅ FIXED: เปลี่ยน p เป็น div เพื่อป้องกัน Hydration Error */}
+          <div className="text-slate-400 font-bold text-[9px] md:text-[10px] uppercase tracking-[0.2em] mt-2 flex items-center gap-2">
+            <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
+            Management Access • Secure Node
+          </div>
         </div>
-        <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
-          <TabButton active={activeTab === 'USERS'} onClick={() => setActiveTab('USERS')} icon={<Users size={16}/>} label="Users" />
-          <TabButton active={activeTab === 'VENDORS'} onClick={() => setActiveTab('VENDORS')} icon={<Building2 size={16}/>} label="Vendors" />
-          <TabButton active={activeTab === 'LOGS'} onClick={() => setActiveTab('LOGS')} icon={<History size={16}/>} label="Audit Logs" />
+        <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200 shadow-inner w-full lg:w-auto overflow-x-auto no-scrollbar">
+          <TabButton active={activeTab === 'VENDORS'} onClick={() => setActiveTab('VENDORS')} icon={<Building2 size={14}/>} label="Vendors" />
+          <TabButton active={activeTab === 'USERS'} onClick={() => setActiveTab('USERS')} icon={<Users size={14}/>} label="Personnel" />
+          <TabButton active={activeTab === 'LOGS'} onClick={() => setActiveTab('LOGS')} icon={<History size={14}/>} label="Audit" />
         </div>
       </div>
 
-      <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden min-h-[500px]">
-        {/* Toolbar */}
-        <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between gap-4 bg-slate-50/30">
-          {activeTab !== 'LOGS' && (
-            <div className="relative flex-1">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+      <div className="bg-white rounded-[2rem] md:rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden min-h-[600px]">
+        
+        {/* 🛠️ TOOLBAR */}
+        <div className="p-5 md:p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between gap-4 bg-slate-50/50">
+          {activeTab !== 'LOGS' ? (
+            <div className="relative flex-1 group">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" size={18} />
               <input 
-                className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:border-blue-500 transition-all shadow-sm"
-                placeholder="ค้นหารายชื่อ..."
+                className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all shadow-sm"
+                placeholder={`Search ${activeTab.toLowerCase()}...`}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
+          ) : (
+             <div className="flex items-center gap-2 text-slate-400 font-black text-[10px] uppercase tracking-widest px-2">
+                <ShieldCheck size={14} /> Security Audit Stream
+             </div>
           )}
           
-          <div className="flex gap-2 ml-auto">
+          <div className="flex flex-wrap gap-2 md:ml-auto">
             {activeTab === 'USERS' && (
               <>
                 <input type="file" ref={userFileInputRef} className="hidden" accept=".xlsx, .xls" onChange={handleUserImport} />
-                <button onClick={() => userFileInputRef.current?.click()} className="bg-emerald-50 text-emerald-600 border border-emerald-100 px-4 py-3 rounded-2xl font-black text-xs uppercase flex items-center gap-2 hover:bg-emerald-100 transition-all">
-                  <Upload size={16}/> Import Users
+                <button onClick={() => userFileInputRef.current?.click()} className="flex-1 md:flex-none bg-emerald-50 text-emerald-600 border border-emerald-100 px-4 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-emerald-100 transition-all active:scale-95 flex items-center justify-center gap-2">
+                  <Upload size={14}/> Import
                 </button>
-                <button onClick={handleExport} className="bg-white text-slate-600 border border-slate-200 px-4 py-3 rounded-2xl font-black text-xs uppercase flex items-center gap-2 hover:border-blue-500 hover:text-blue-600 transition-all">
-                  <Download size={16}/> Export
+                <button onClick={handleExport} className="flex-1 md:flex-none bg-white text-slate-600 border border-slate-200 px-4 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest hover:border-blue-500 transition-all active:scale-95 flex items-center justify-center gap-2">
+                  <Download size={14}/> Export
                 </button>
-                <button onClick={handleAddUser} className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase flex items-center gap-2 hover:bg-slate-900 transition-all shadow-lg shadow-blue-100">
-                  <UserPlus size={16}/> Add User
+                <button onClick={handleAddUser} className="w-full md:w-auto bg-blue-600 text-white px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-900 transition-all shadow-lg shadow-blue-200 active:scale-95 flex items-center justify-center gap-2">
+                  <UserPlus size={14}/> New Entry
                 </button>
               </>
             )}
@@ -290,40 +290,43 @@ const VendorManager: React.FC = () => {
             {activeTab === 'VENDORS' && (
               <>
                 <input type="file" ref={vendorFileInputRef} className="hidden" accept=".xlsx, .xls" onChange={handleVendorImport} />
-                <button onClick={() => vendorFileInputRef.current?.click()} className="bg-emerald-50 text-emerald-600 border border-emerald-100 px-4 py-3 rounded-2xl font-black text-xs uppercase flex items-center gap-2 hover:bg-emerald-100 transition-all">
-                  <Upload size={16}/> Import Vendors
+                <button onClick={() => vendorFileInputRef.current?.click()} className="flex-1 md:flex-none bg-emerald-50 text-emerald-600 border border-emerald-100 px-4 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-emerald-100 transition-all active:scale-95 flex items-center justify-center gap-2">
+                  <Upload size={14}/> Import
                 </button>
-                <button onClick={handleExport} className="bg-white text-slate-600 border border-slate-200 px-4 py-3 rounded-2xl font-black text-xs uppercase flex items-center gap-2 hover:border-blue-500 hover:text-blue-600 transition-all">
-                  <Download size={16}/> Export
+                <button onClick={handleExport} className="flex-1 md:flex-none bg-white text-slate-600 border border-slate-200 px-4 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest hover:border-blue-500 transition-all active:scale-95 flex items-center justify-center gap-2">
+                  <Download size={14}/> Export
                 </button>
-                <button onClick={handleAddVendor} className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase flex items-center gap-2 hover:bg-slate-900 transition-all shadow-lg shadow-blue-100">
-                  <Plus size={16}/> Add Vendor
+                <button onClick={handleAddVendor} className="w-full md:w-auto bg-blue-600 text-white px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-900 transition-all shadow-lg shadow-blue-200 active:scale-95 flex items-center justify-center gap-2">
+                  <Plus size={14}/> New Vendor
                 </button>
               </>
             )}
           </div>
         </div>
 
-        {/* Table Content */}
+        {/* 📊 DATA TABLE */}
         <div className="overflow-x-auto">
           {loading ? (
-            <div className="p-20 text-center text-slate-300 font-black uppercase text-xs tracking-widest"><Loader2 className="animate-spin mx-auto mb-4" size={32}/> Loading Data...</div>
+            <div className="p-32 text-center text-slate-300 font-black uppercase text-[10px] tracking-[0.3em] flex flex-col items-center gap-4">
+               <Loader2 className="animate-spin text-blue-500" size={32}/> 
+               Accessing Secure Node...
+            </div>
           ) : (
-            <table className="w-full text-left">
-              <thead className="bg-slate-50/50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
+            <table className="w-full text-left min-w-[800px]">
+              <thead className="bg-slate-50/50 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100">
                 <tr>
                   {activeTab === 'LOGS' ? (
                     <>
-                      <th className="px-8 py-4">Time</th>
-                      <th className="px-8 py-4">Admin</th>
-                      <th className="px-8 py-4">Action</th>
-                      <th className="px-8 py-4">Details</th>
+                      <th className="px-8 py-5">Event Timestamp</th>
+                      <th className="px-8 py-5">Administrator</th>
+                      <th className="px-8 py-5">Protocol</th>
+                      <th className="px-8 py-5">Registry Details</th>
                     </>
                   ) : (
                     <>
-                      <th className="px-8 py-4">Name / Information</th>
-                      <th className="px-8 py-4">Status / Company</th>
-                      <th className="px-8 py-4 text-center">Actions</th>
+                      <th className="px-8 py-5">Identity / Profile</th>
+                      <th className="px-8 py-5">Compliance Affiliation</th>
+                      <th className="px-8 py-5 text-center">System Actions</th>
                     </>
                   )}
                 </tr>
@@ -331,57 +334,87 @@ const VendorManager: React.FC = () => {
               <tbody className="divide-y divide-slate-50">
                 {activeTab === 'LOGS' ? (
                   filtered.map((log: any) => (
-                    <tr key={log.id} className="hover:bg-slate-50/30">
-                      <td className="px-8 py-4 text-xs font-bold text-slate-500">{new Date(log.created_at).toLocaleString()}</td>
-                      <td className="px-8 py-4 text-xs font-bold">{log.admin_email}</td>
-                      <td className="px-8 py-4"><span className="bg-slate-100 px-2 py-1 rounded text-[10px] font-black uppercase">{log.action}</span></td>
-                      <td className="px-8 py-4 text-xs text-slate-600">
-                        <div className="font-bold text-slate-900">{log.target}</div>
-                        <div className="text-slate-400">{log.details}</div>
+                    <tr key={log.id} className="hover:bg-slate-50/30 transition-colors">
+                      <td className="px-8 py-5 text-[11px] font-black text-slate-500 font-mono tracking-tighter">
+                        {new Date(log.created_at).toLocaleString('th-TH')}
+                      </td>
+                      <td className="px-8 py-5 text-xs font-bold text-slate-700">{log.admin_email}</td>
+                      <td className="px-8 py-5">
+                        <span className="bg-slate-100 text-slate-600 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border border-slate-200">
+                          {log.action}
+                        </span>
+                      </td>
+                      <td className="px-8 py-5 text-xs text-slate-600">
+                        <div className="font-black text-slate-900 uppercase">{log.target}</div>
+                        <div className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">{log.details}</div>
                       </td>
                     </tr>
                   ))
                 ) : (
                   filtered.map(item => (
-                    <tr key={item.id} className="hover:bg-slate-50/30 transition-colors">
-                      <td className="px-8 py-5">
-                        <div className="font-black text-slate-900 leading-none mb-1">{item.name}</div>
-                        {activeTab === 'USERS' && <div className="text-[10px] text-slate-400 font-bold">{item.national_id}</div>}
+                    <tr key={item.id} className="hover:bg-slate-50/30 transition-colors group">
+                      <td className="px-8 py-5 text-left">
+                        <div className="flex items-center gap-3">
+                           <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-400 group-hover:bg-blue-600 group-hover:text-white transition-all flex items-center justify-center font-black text-xs">
+                              {item.name ? item.name.charAt(0) : '?'}
+                           </div>
+                           <div className="min-w-0">
+                              <div className="font-black text-slate-800 uppercase text-xs truncate group-hover:text-blue-600 transition-colors">{item.name}</div>
+                              {activeTab === 'USERS' && <div className="text-[10px] text-slate-400 font-mono mt-0.5 tracking-tighter">{item.national_id}</div>}
+                           </div>
+                        </div>
                       </td>
-                      <td className="px-8 py-5">
+                      <td className="px-8 py-5 text-left">
                         {activeTab === 'VENDORS' ? (
-                          <span className={`px-3 py-1 rounded-lg text-[10px] font-black border ${item.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>
+                          <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-black border uppercase shadow-sm ${item.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>
+                            <div className={`w-1 h-1 rounded-full ${item.status === 'APPROVED' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
                             {item.status}
-                          </span>
+                          </div>
                         ) : (
-                          <span className="text-blue-600 font-black text-[10px] uppercase bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100">{item.vendors?.name || 'Unassigned'}</span>
+                          <span className="text-slate-500 font-black text-[9px] uppercase bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-100 truncate max-w-[200px] block">
+                            {item.vendors?.name || 'External / Unassigned'}
+                          </span>
                         )}
                       </td>
                       <td className="px-8 py-5">
-                        <div className="flex justify-center gap-2">
-                          
-                          {/* ✅ กู้คืนปุ่มแก้ไขกลับมาแล้ว */}
+                        <div className="flex justify-center gap-1.5">
                           <button 
                             onClick={() => activeTab === 'VENDORS' ? handleEditVendor(item.id, item.name) : handleEditUser(item)}
-                            title="Edit"
-                            className="p-2.5 rounded-xl border border-slate-100 text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all"
+                            title="Edit Profile"
+                            className="p-2.5 rounded-xl border border-slate-100 text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all active:scale-90"
                           >
                             <Edit3 size={16} />
                           </button>
 
                           {activeTab === 'USERS' && (
-                            <button onClick={() => handleResetTraining(item.id, item.name)} title="Reset Training" className="p-2.5 rounded-xl border border-amber-100 text-amber-600 hover:bg-amber-50 transition-all"><RotateCcw size={16} /></button>
+                            <button onClick={() => handleResetTraining(item.id, item.name)} title="Reset Compliance" className="p-2.5 rounded-xl border border-amber-100 text-amber-500 hover:bg-amber-50 transition-all active:scale-90">
+                              <RotateCcw size={16} />
+                            </button>
                           )}
                           
                           {activeTab === 'VENDORS' && item.status === 'PENDING' && (
-                            <button onClick={() => api.approveVendor(item.id).then(loadData)} className="p-2.5 rounded-xl bg-emerald-500 text-white hover:bg-emerald-600 shadow-sm"><CheckCircle size={16} /></button>
+                            <button onClick={() => api.approveVendor(item.id).then(loadData)} className="p-2.5 rounded-xl bg-emerald-500 text-white hover:bg-emerald-600 shadow-md active:scale-90 transition-all">
+                              <CheckCircle size={16} />
+                            </button>
                           )}
 
-                          <button onClick={() => activeTab === 'VENDORS' ? handleDeleteVendor(item.id, item.name) : handleDeleteUser(item.id, item.name)} title="Delete" className="p-2.5 rounded-xl border border-red-50 text-red-400 hover:text-white hover:bg-red-500 transition-all"><Trash2 size={16} /></button>
+                          <button onClick={() => activeTab === 'VENDORS' ? handleDeleteVendor(item.id, item.name) : handleDeleteUser(item.id, item.name)} title="Purge Record" className="p-2.5 rounded-xl border border-slate-100 text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all active:scale-90">
+                            <Trash2 size={16} />
+                          </button>
                         </div>
                       </td>
                     </tr>
                   ))
+                )}
+                {!loading && filtered.length === 0 && (
+                   <tr>
+                     <td colSpan={4} className="py-24 text-center">
+                        <div className="flex flex-col items-center opacity-20">
+                           <Search size={48} className="text-slate-300 mb-4" />
+                           <p className="font-black text-slate-400 uppercase text-xs tracking-widest italic text-center">No matching record data found in current node</p>
+                        </div>
+                     </td>
+                   </tr>
                 )}
               </tbody>
             </table>
@@ -392,9 +425,19 @@ const VendorManager: React.FC = () => {
   );
 };
 
+/* --- 🔵 SHARED COMPONENTS --- */
+
 const TabButton = ({ active, onClick, icon, label }: any) => (
-  <button onClick={onClick} className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase flex items-center gap-2 transition-all whitespace-nowrap ${active ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
-    {icon} {label}
+  <button 
+    onClick={onClick} 
+    className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all whitespace-nowrap active:scale-95 ${
+      active 
+        ? 'bg-white text-blue-600 shadow-md' 
+        : 'text-slate-400 hover:text-slate-600 hover:bg-white/50'
+    }`}
+  >
+    <span className={active ? 'text-blue-500' : 'opacity-50'}>{icon}</span> 
+    {label}
   </button>
 );
 

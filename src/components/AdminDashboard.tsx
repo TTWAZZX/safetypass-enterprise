@@ -3,7 +3,7 @@ import { api } from '../services/supabaseApi';
 import { 
   Users, CheckCircle, XCircle, FileSpreadsheet, 
   Search, Calendar, TrendingUp,
-  Loader2, AlertCircle, RotateCcw, Filter
+  Loader2, AlertCircle, RotateCcw, Filter, ChevronRight
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -14,10 +14,9 @@ const AdminDashboard: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  // ✅ New Filter States
   const [filterDate, setFilterDate] = useState('');
-  const [filterStatus, setFilterStatus] = useState('ALL'); // ALL, PASSED, FAILED
-  const [filterType, setFilterType] = useState('ALL');     // ALL, INDUCTION, WORK_PERMIT
+  const [filterStatus, setFilterStatus] = useState('ALL');
+  const [filterType, setFilterType] = useState('ALL');
 
   useEffect(() => {
     fetchData();
@@ -41,7 +40,6 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
-  // ✅ 1. กรองข้อมูลสำหรับแสดงผลในตาราง (Search + Filters)
   const filteredHistory = history.filter(item => {
     const matchesSearch = 
       item.users?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -55,12 +53,8 @@ const AdminDashboard: React.FC = () => {
     return matchesSearch && matchesDate && matchesStatus && matchesType;
   });
 
-  // ✅ 2. ฟังก์ชัน Export เป็น Excel (กรองตามที่เลือกไว้ใน Filter)
   const exportToExcel = () => {
-    if (filteredHistory.length === 0) {
-      alert("ไม่พบข้อมูลตามเงื่อนไขที่เลือก");
-      return;
-    }
+    if (filteredHistory.length === 0) return;
 
     const reportData = filteredHistory.map(item => ({
       'วันที่-เวลา': new Date(item.created_at).toLocaleString('th-TH'),
@@ -75,179 +69,167 @@ const AdminDashboard: React.FC = () => {
     const ws = XLSX.utils.json_to_sheet(reportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Safety_Report");
-    
-    // ตั้งชื่อไฟล์ตาม Filter ที่เลือก
     const dateSuffix = filterDate || new Date().toISOString().split('T')[0];
     XLSX.writeFile(wb, `Safety_Report_${filterType}_${filterStatus}_${dateSuffix}.xlsx`);
   };
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center h-96 text-slate-400 gap-4">
-        <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
-        <p className="font-bold animate-pulse uppercase tracking-widest text-xs">Loading Security Data...</p>
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-slate-400 gap-4">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+        <p className="font-black uppercase tracking-widest text-[10px]">Synchronizing Security Data...</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center h-96 text-red-500 gap-4">
-        <AlertCircle className="w-12 h-12" />
-        <p className="font-bold">{error}</p>
-        <button onClick={fetchData} className="px-4 py-2 bg-slate-100 rounded-lg text-slate-600 hover:bg-slate-200 transition-colors">ลองใหม่อีกครั้ง</button>
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-red-500 gap-4 animate-in fade-in">
+        <AlertCircle className="w-12 h-12 opacity-20" />
+        <p className="font-bold text-sm">{error}</p>
+        <button onClick={fetchData} className="px-6 py-2 bg-slate-100 rounded-xl text-slate-600 font-black text-xs uppercase hover:bg-slate-200 transition-all">Retry Link</button>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-6 md:space-y-8 animate-in fade-in duration-500 text-left">
       
-      {/* 1. Header & Quick Actions */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h2 className="text-3xl font-black text-slate-900 tracking-tight">Overview Dashboard</h2>
-          <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest mt-1">
-            Real-time monitoring & reporting system
+      {/* 1. Header & Primary Actions */}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-4 border-b border-slate-200 pb-6">
+        <div className="space-y-1">
+          <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight uppercase">Admin Console</h2>
+          <p className="text-slate-400 font-bold uppercase text-[9px] md:text-[10px] tracking-[0.2em] flex items-center gap-2">
+            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" /> 
+            Live Monitoring System Dashboard
           </p>
         </div>
-        <button 
-          onClick={exportToExcel}
-          disabled={filteredHistory.length === 0}
-          className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white px-6 py-3 rounded-2xl font-black transition-all shadow-lg shadow-emerald-100 group"
-        >
-          <FileSpreadsheet size={18} className="group-hover:rotate-12 transition-transform" />
-          EXPORT FILTERED EXCEL
-        </button>
-      </div>
-
-      {/* 2. สถิติภาพรวม (Stats Cards) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <StatCard icon={<Users className="text-blue-600" />} label="Exams Taken Today" value={stats.total} color="blue" trend="Daily Activity" />
-        <StatCard icon={<CheckCircle className="text-emerald-600" />} label="Successful Passes" value={stats.passed} color="emerald" trend="Compliance Ready" />
-        <StatCard icon={<XCircle className="text-red-600" />} label="Failed Attempts" value={stats.failed} color="red" trend="Re-training Required" />
-      </div>
-
-      {/* 3. Advanced Filters Section */}
-      <div className="bg-slate-50 p-6 rounded-[2.5rem] border border-slate-200 shadow-inner flex flex-wrap gap-4 items-end">
-        <div className="flex items-center gap-2 w-full mb-2 text-slate-500 font-black text-[11px] uppercase tracking-wider">
-          <Filter size={14} /> Filter Results
-        </div>
-        
-        <div className="flex-1 min-w-[200px]">
-          <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-2">วันที่สอบ / Date</label>
-          <input 
-            type="date" 
-            value={filterDate}
-            onChange={(e) => setFilterDate(e.target.value)}
-            className="w-full p-3 rounded-2xl border border-slate-200 font-bold text-sm outline-none focus:border-blue-500 transition-all"
-          />
-        </div>
-
-        <div className="flex-1 min-w-[150px]">
-          <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-2">สถานะ / Status</label>
-          <select 
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="w-full p-3 rounded-2xl border border-slate-200 font-bold text-sm outline-none focus:border-blue-500 bg-white"
+        <div className="flex w-full lg:w-auto gap-2">
+          <button 
+            onClick={exportToExcel}
+            disabled={filteredHistory.length === 0}
+            className="flex-1 lg:flex-none flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 text-white px-6 py-3.5 rounded-2xl font-black text-xs uppercase transition-all shadow-lg shadow-emerald-100 active:scale-95 group"
           >
-            <option value="ALL">ทั้งหมด (ALL)</option>
-            <option value="PASSED">ผ่าน (PASSED)</option>
-            <option value="FAILED">ตก (FAILED)</option>
-          </select>
+            <FileSpreadsheet size={16} className="group-hover:rotate-12 transition-transform" />
+            Export Data
+          </button>
+          <button onClick={fetchData} className="p-3.5 bg-slate-100 text-slate-500 rounded-2xl hover:bg-blue-50 hover:text-blue-600 transition-all active:scale-90">
+            <RotateCcw size={18} />
+          </button>
         </div>
-
-        <div className="flex-1 min-w-[150px]">
-          <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-2">ประเภท / Exam Type</label>
-          <select 
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value)}
-            className="w-full p-3 rounded-2xl border border-slate-200 font-bold text-sm outline-none focus:border-blue-500 bg-white"
-          >
-            <option value="ALL">ทั้งหมด (ALL)</option>
-            <option value="INDUCTION">INDUCTION</option>
-            <option value="WORK_PERMIT">WORK PERMIT</option>
-          </select>
-        </div>
-
-        <button 
-          onClick={() => { setFilterDate(''); setFilterStatus('ALL'); setFilterType('ALL'); setSearchTerm(''); }}
-          className="p-3 bg-white text-slate-400 hover:text-red-500 border border-slate-200 rounded-2xl transition-all shadow-sm"
-          title="Reset Filters"
-        >
-          <RotateCcw size={20} />
-        </button>
       </div>
 
-      {/* 4. รายการล่าสุด (Recent Activity Table) */}
-      <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden mb-12">
-        <div className="p-8 border-b border-slate-100 flex flex-col md:flex-row gap-6 justify-between bg-slate-50/50">
-          <div className="flex items-center gap-3">
-             <div className="w-1.5 h-8 bg-blue-600 rounded-full"></div>
-             <div>
-                <h3 className="font-black text-slate-800 uppercase text-sm tracking-tight leading-none">Activity Log</h3>
-                <p className="text-[10px] text-slate-400 font-bold mt-1">Filtered result: {filteredHistory.length} records</p>
-             </div>
-          </div>
-          <div className="relative flex-1 max-w-md">
+      {/* 2. Visual Statistics */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+        <StatCard icon={<Users />} label="Total Activity" value={stats.total} color="blue" trend="Today's Load" />
+        <StatCard icon={<CheckCircle />} label="Compliance Pass" value={stats.passed} color="emerald" trend="Authorized" />
+        <StatCard icon={<XCircle />} label="Access Denied" value={stats.failed} color="red" trend="Failed Exam" />
+      </div>
+
+      {/* 3. Smart Filters & Search Bar */}
+      <div className="bg-white p-4 md:p-6 rounded-[2rem] border border-slate-200 shadow-sm space-y-4">
+        <div className="flex flex-col md:flex-row gap-4">
+          {/* Search Box */}
+          <div className="relative flex-1">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input 
               type="text" 
-              placeholder="Search by name, company..." 
-              className="w-full pl-12 pr-4 py-4 rounded-2xl border border-slate-200 focus:border-blue-500 outline-none font-bold text-sm transition-all shadow-inner bg-white"
+              placeholder="Search by name, ID or company..." 
+              className="w-full pl-12 pr-4 py-3.5 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 outline-none font-bold text-sm transition-all shadow-inner"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
+          
+          {/* Filters Toggle Group */}
+          <div className="flex flex-wrap md:flex-nowrap gap-2">
+            <div className="flex-1 min-w-[140px]">
+              <input 
+                type="date" 
+                value={filterDate}
+                onChange={(e) => setFilterDate(e.target.value)}
+                className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 font-bold text-xs outline-none focus:ring-2 focus:ring-blue-500/10 transition-all cursor-pointer"
+              />
+            </div>
+            <select 
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="flex-1 min-w-[120px] px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 font-black text-[10px] uppercase outline-none focus:ring-2 focus:ring-blue-500/10 appearance-none cursor-pointer"
+            >
+              <option value="ALL">Status: ALL</option>
+              <option value="PASSED">PASSED</option>
+              <option value="FAILED">FAILED</option>
+            </select>
+            <select 
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              className="flex-1 min-w-[120px] px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 font-black text-[10px] uppercase outline-none focus:ring-2 focus:ring-blue-500/10 appearance-none cursor-pointer"
+            >
+              <option value="ALL">Type: ALL</option>
+              <option value="INDUCTION">INDUCTION</option>
+              <option value="WORK_PERMIT">WORK PERMIT</option>
+            </select>
+          </div>
         </div>
+      </div>
 
+      {/* 4. Main Activity Table */}
+      <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden mb-10">
         <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="bg-slate-50/80">
-              <tr>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Personnel Info</th>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Exam Details</th>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Score</th>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Time</th>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Result</th>
+          <table className="w-full text-left min-w-[800px]">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-100">
+                <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Personnel & Vendor</th>
+                <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Module</th>
+                <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] text-center">Score</th>
+                <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Timestamp</th>
+                <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] text-right">Access Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {filteredHistory.length > 0 ? filteredHistory.map((item) => (
                 <tr key={item.id} className="hover:bg-slate-50/50 transition-colors group">
-                  <td className="px-8 py-6">
-                    <p className="font-black text-slate-800 leading-none group-hover:text-blue-600 transition-colors">{item.users?.name}</p>
-                    <p className="text-[10px] text-slate-400 font-bold mt-1.5 uppercase tracking-tight">{item.users?.vendors?.name || 'No Company'}</p>
-                  </td>
-                  <td className="px-8 py-6">
+                  <td className="px-8 py-5">
                     <div className="flex flex-col">
-                       <span className={`text-[10px] font-black px-2 py-0.5 rounded w-fit uppercase ${item.exam_type === 'INDUCTION' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'}`}>
-                          {item.exam_type}
-                       </span>
+                      <span className="font-black text-slate-800 text-sm group-hover:text-blue-600 transition-colors uppercase">{item.users?.name}</span>
+                      <span className="text-[9px] text-slate-400 font-bold mt-1 uppercase tracking-wider">{item.users?.vendors?.name || 'External'}</span>
                     </div>
                   </td>
-                  <td className="px-8 py-6 text-center">
-                    <div className="inline-block px-3 py-1.5 bg-slate-100 rounded-xl font-black text-slate-700 text-sm">
-                       {item.score} <span className="text-[10px] text-slate-400">/ {item.total_questions}</span>
-                    </div>
-                  </td>
-                  <td className="px-8 py-6">
-                    <p className="text-[11px] text-slate-500 font-bold">
-                       {new Date(item.created_at).toLocaleString('th-TH', { 
-                          day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' 
-                        })}
-                    </p>
-                  </td>
-                  <td className="px-8 py-6 text-right">
-                    <span className={`px-5 py-2 rounded-full text-[10px] font-black uppercase shadow-sm border ${item.status === 'PASSED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-red-50 text-red-600 border-red-100'}`}>
-                      {item.status}
+                  <td className="px-8 py-5">
+                    <span className={`text-[9px] font-black px-2.5 py-1 rounded-lg border w-fit uppercase ${item.exam_type === 'INDUCTION' ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-purple-50 text-purple-600 border-purple-100'}`}>
+                      {item.exam_type}
                     </span>
+                  </td>
+                  <td className="px-8 py-5 text-center">
+                    <div className="inline-flex flex-col items-center">
+                      <span className="font-black text-slate-700 text-sm leading-none">{item.score}</span>
+                      <span className="text-[8px] text-slate-300 font-bold uppercase mt-1">/ {item.total_questions}</span>
+                    </div>
+                  </td>
+                  <td className="px-8 py-5">
+                    <div className="flex flex-col">
+                      <span className="text-[11px] text-slate-600 font-bold leading-none">
+                        {new Date(item.created_at).toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: '2-digit' })}
+                      </span>
+                      <span className="text-[9px] text-slate-400 mt-1 uppercase">
+                        {new Date(item.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-8 py-5 text-right">
+                    <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[9px] font-black uppercase border shadow-sm ${item.status === 'PASSED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-red-50 text-red-600 border-red-100'}`}>
+                       <div className={`w-1.5 h-1.5 rounded-full ${item.status === 'PASSED' ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                       {item.status}
+                    </div>
                   </td>
                 </tr>
               )) : (
                 <tr>
-                   <td colSpan={5} className="px-8 py-20 text-center text-slate-300 font-bold italic uppercase tracking-widest">
-                      No records match the selected filters
+                   <td colSpan={5} className="px-8 py-24 text-center">
+                      <div className="flex flex-col items-center opacity-30">
+                        <Search size={48} className="text-slate-300 mb-4" />
+                        <p className="font-black text-slate-400 uppercase text-xs tracking-widest italic">Data stream empty for current filters</p>
+                      </div>
                    </td>
                 </tr>
               )}
@@ -259,18 +241,22 @@ const AdminDashboard: React.FC = () => {
   );
 };
 
+// 🔵 Shared Stats Component
 const StatCard = ({ icon, label, value, color, trend }: any) => (
-  <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm flex items-center gap-6 group hover:border-blue-500 hover:shadow-xl hover:shadow-blue-50/50 transition-all cursor-default">
-    <div className={`p-5 rounded-3xl bg-${color}-50 text-${color}-600 group-hover:scale-110 transition-transform duration-500 shadow-inner`}>
-      {React.cloneElement(icon as React.ReactElement, { size: 32, strokeWidth: 2.5 })}
+  <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm flex items-center gap-5 group hover:border-blue-500 hover:shadow-xl hover:shadow-blue-50/20 transition-all cursor-default relative overflow-hidden">
+    <div className={`absolute -right-4 -bottom-4 opacity-[0.03] group-hover:scale-125 transition-transform duration-700`}>
+       {React.cloneElement(icon as React.ReactElement, { size: 120 })}
     </div>
-    <div className="flex-1 text-left">
-      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-2.5">{label}</p>
+    <div className={`p-4 rounded-2xl bg-${color}-50 text-${color}-600 group-hover:bg-${color}-600 group-hover:text-white transition-all duration-300 shadow-inner relative z-10`}>
+      {React.cloneElement(icon as React.ReactElement, { size: 28, strokeWidth: 2.5 })}
+    </div>
+    <div className="flex-1 text-left relative z-10">
+      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-2">{label}</p>
       <div className="flex items-baseline gap-2">
-        <h4 className="text-5xl font-black text-slate-900 leading-none tabular-nums tracking-tighter">{value}</h4>
-        <div className={`flex items-center gap-1 px-2 py-0.5 rounded-lg bg-${color}-50 text-${color}-600 font-bold text-[10px]`}>
-           <TrendingUp size={12} strokeWidth={3} /> {trend}
-        </div>
+        <h4 className="text-4xl font-black text-slate-900 leading-none tabular-nums tracking-tighter">{value}</h4>
+        <span className={`text-[8px] font-bold px-2 py-0.5 rounded-md bg-${color}-50 text-${color}-600 border border-${color}-100 uppercase`}>
+           {trend}
+        </span>
       </div>
     </div>
   </div>

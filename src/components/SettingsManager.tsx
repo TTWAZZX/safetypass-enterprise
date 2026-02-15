@@ -8,7 +8,9 @@ import {
   Loader2, 
   Target, 
   Save, 
-  AlertTriangle 
+  AlertTriangle,
+  ChevronRight,
+  ShieldCheck
 } from 'lucide-react';
 import { useToastContext } from './ToastProvider';
 
@@ -18,7 +20,7 @@ const SettingsManager: React.FC = () => {
   // States สำหรับระบบอัปโหลด
   const [uploading, setUploading] = useState<string | null>(null);
   
-  // States สำหรับระบบตั้งค่าคะแนน (ฟังก์ชันเดิมที่หายไป)
+  // States สำหรับระบบตั้งค่าคะแนน
   const [passingScore, setPassingScore] = useState({
     INDUCTION: 80,
     WORK_PERMIT: 100
@@ -45,7 +47,7 @@ const SettingsManager: React.FC = () => {
     fetchSettings();
   }, []);
 
-  // ✅ ฟังก์ชันบันทึกคะแนน (ฟังก์ชันเดิมที่ถูกต้อง)
+  // ✅ ฟังก์ชันบันทึกคะแนน
   const handleSaveScores = async () => {
     setIsSavingScore(true);
     try {
@@ -88,91 +90,116 @@ const SettingsManager: React.FC = () => {
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="space-y-6 md:space-y-8 animate-in fade-in duration-500 pb-10 text-left">
       
-      {/* 1. ส่วนตั้งค่าเกณฑ์คะแนนสอบ (ฟังก์ชันเดิมที่คุณต้องการ) */}
-      <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden relative">
-        <div className="flex items-center gap-3 mb-8">
-          <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl">
-            <Target size={24} />
-          </div>
-          <div>
-            <h3 className="text-xl font-black text-slate-900 leading-none">Passing Scores</h3>
-            <p className="text-slate-400 text-xs font-bold uppercase mt-1">กำหนดเกณฑ์คะแนนขั้นต่ำในการสอบผ่าน</p>
-          </div>
+      {/* 🧭 SECTION 1: PASSING SCORES CONFIGURATION */}
+      <div className="bg-white p-6 md:p-10 rounded-[2.5rem] border border-slate-200 shadow-sm relative overflow-hidden group">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4">
+            <div className="flex items-center gap-4">
+                <div className="p-4 bg-blue-600 text-white rounded-3xl shadow-lg shadow-blue-200 group-hover:scale-110 transition-transform duration-500">
+                    <Target size={28} strokeWidth={2.5} />
+                </div>
+                <div>
+                    <h3 className="text-xl md:text-2xl font-black text-slate-900 leading-none uppercase tracking-tight">Threshold Settings</h3>
+                    <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mt-1.5 flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                        Global Compliance Passing Rates
+                    </p>
+                </div>
+            </div>
         </div>
 
         {loadingScore ? (
-          <div className="flex justify-center py-10"><Loader2 className="animate-spin text-blue-600" /></div>
+          <div className="flex flex-col items-center justify-center py-20 gap-3">
+             <Loader2 size={32} className="animate-spin text-blue-600" />
+             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Accessing Node...</span>
+          </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-10 mb-10">
             <ScoreInput 
-              label="Induction Pass Rate (%)" 
+              label="Induction Pass Rate" 
+              description="Minimum percentage required for safety orientation."
               value={passingScore.INDUCTION} 
               onChange={(val) => setPassingScore({...passingScore, INDUCTION: val})}
+              color="blue"
             />
             <ScoreInput 
-              label="Work Permit Pass Rate (%)" 
+              label="Work Permit Pass Rate" 
+              description="Critical accuracy required for high-risk operations."
               value={passingScore.WORK_PERMIT} 
               onChange={(val) => setPassingScore({...passingScore, WORK_PERMIT: val})}
+              color="purple"
             />
           </div>
         )}
 
-        <div className="flex justify-end pt-4 border-t border-slate-50">
+        <div className="flex flex-col md:flex-row items-center justify-between pt-8 border-t border-slate-50 gap-4">
+          <div className="flex items-center gap-2 text-slate-400">
+             <ShieldCheck size={16} />
+             <p className="text-[10px] font-bold uppercase tracking-tight">All changes affect current sessions immediately</p>
+          </div>
           <button 
             onClick={handleSaveScores}
             disabled={isSavingScore || loadingScore}
-            className="bg-slate-900 text-white px-8 py-3 rounded-2xl font-black text-sm flex items-center gap-2 hover:bg-blue-600 transition-all shadow-lg shadow-slate-200 disabled:opacity-50"
+            className="w-full md:w-auto bg-slate-900 hover:bg-blue-600 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-3 transition-all shadow-xl active:scale-95 disabled:opacity-50"
           >
             {isSavingScore ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-            Save Configuration
+            Commit Config
           </button>
         </div>
       </div>
 
-      {/* 2. ส่วนจัดการคู่มือ PDF (ระบบอัปโหลดใหม่) */}
-      <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm">
-        <div className="flex items-center gap-3 mb-8">
-          <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
-            <FileText size={24} />
+      {/* 📚 SECTION 2: MANUALS & ASSET MANAGEMENT */}
+      <div className="bg-white p-6 md:p-10 rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden">
+        <div className="flex items-center gap-4 mb-10">
+          <div className="p-4 bg-slate-100 text-slate-600 rounded-3xl">
+            <FileText size={28} strokeWidth={2.5} />
           </div>
           <div>
-            <h3 className="text-xl font-black text-slate-900 leading-none">Manual Management</h3>
-            <p className="text-slate-400 text-xs font-bold uppercase mt-1">จัดการไฟล์คู่มือประกอบการอบรม (PDF)</p>
+            <h3 className="text-xl md:text-2xl font-black text-slate-900 leading-none uppercase tracking-tight">Resource Center</h3>
+            <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mt-1.5">Manage Study Materials (PDF Assets)</p>
           </div>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
           <ManualUploadCard 
-            title="Induction Manual (PDF)"
+            title="Induction Manual"
             type="induction"
             isUploading={uploading === 'induction'}
             onUpload={(e) => handleUploadManual(e, 'induction')}
           />
           <ManualUploadCard 
-            title="Work Permit Manual (PDF)"
+            title="Work Permit Manual"
             type="work_permit"
             isUploading={uploading === 'work_permit'}
             onUpload={(e) => handleUploadManual(e, 'work_permit')}
           />
         </div>
 
-        <div className="mt-8 p-4 bg-amber-50 rounded-2xl border border-amber-100 flex items-start gap-3">
-            <AlertTriangle className="text-amber-500 shrink-0 mt-0.5" size={18} />
-            <p className="text-xs text-amber-700 font-medium leading-relaxed">
-                <strong>คำแนะนำ:</strong> การอัปโหลดไฟล์ใหม่จะทำการบันทึกทับไฟล์เดิมทันที กรุณาตรวจสอบความถูกต้องของเนื้อหาและขนาดไฟล์ (ไม่ควรเกิน 5MB) ก่อนทำการอัปโหลด
-            </p>
+        <div className="mt-10 p-5 bg-amber-50/50 rounded-3xl border border-amber-100 flex items-start gap-4">
+            <div className="p-2 bg-white rounded-xl shadow-sm text-amber-500">
+                <AlertTriangle size={20} />
+            </div>
+            <div className="space-y-1">
+                <p className="text-xs font-black text-amber-800 uppercase tracking-tight">Deployment Notice</p>
+                <p className="text-[11px] text-amber-700/80 font-bold leading-relaxed">
+                    Uploading a new document will **permanently overwrite** the existing file. Ensure the content is validated and the file size is under **5MB** for optimal performance on mobile devices.
+                </p>
+            </div>
         </div>
       </div>
     </div>
   );
 };
 
-// 🔵 Helper Components
-const ScoreInput = ({ label, value, onChange }: any) => (
-  <div className="space-y-2">
-    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{label}</label>
+/* --- 🔵 SUB-COMPONENTS --- */
+
+const ScoreInput = ({ label, description, value, onChange, color }: any) => (
+  <div className="space-y-3 group">
+    <div className="ml-1">
+        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">{label}</label>
+        <p className="text-[9px] text-slate-300 font-bold uppercase tracking-tight">{description}</p>
+    </div>
     <div className="relative">
       <input 
         type="number" 
@@ -180,20 +207,20 @@ const ScoreInput = ({ label, value, onChange }: any) => (
         max="100"
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full bg-slate-50 border border-slate-100 p-4 rounded-2xl font-black text-2xl text-slate-800 focus:bg-white focus:border-blue-500 transition-all outline-none"
+        className={`w-full bg-slate-50 border-2 border-slate-50 p-5 md:p-6 rounded-3xl font-black text-3xl md:text-4xl text-slate-800 focus:bg-white focus:border-${color}-500 transition-all outline-none shadow-inner tabular-nums`}
       />
-      <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 font-black text-xl">%</div>
+      <div className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-200 font-black text-2xl group-focus-within:text-blue-500 transition-colors">%</div>
     </div>
   </div>
 );
 
 const ManualUploadCard = ({ title, type, isUploading, onUpload }: any) => (
-  <div className="p-8 border-2 border-dashed border-slate-200 rounded-3xl flex flex-col items-center text-center group hover:border-blue-400 hover:bg-blue-50/10 transition-all cursor-default">
-    <div className="p-5 bg-slate-50 text-slate-400 rounded-[2rem] mb-5 group-hover:bg-blue-100 group-hover:text-blue-600 transition-all duration-300">
-      <FileText size={40} />
+  <div className="p-8 md:p-10 border-2 border-dashed border-slate-100 bg-slate-50/30 rounded-[2.5rem] flex flex-col items-center text-center group hover:border-blue-400 hover:bg-white transition-all duration-500 cursor-default shadow-sm hover:shadow-xl hover:shadow-blue-500/5">
+    <div className="w-20 h-20 bg-white text-slate-300 rounded-[2rem] mb-6 flex items-center justify-center shadow-sm border border-slate-50 group-hover:bg-blue-600 group-hover:text-white group-hover:scale-110 transition-all duration-500">
+      <FileText size={36} strokeWidth={1.5} />
     </div>
-    <h4 className="font-black text-slate-800 text-lg mb-1">{title}</h4>
-    <p className="text-[10px] text-slate-400 mb-6 tracking-widest uppercase font-black">Supported: PDF Only</p>
+    <h4 className="font-black text-slate-800 text-lg uppercase tracking-tight mb-1">{title}</h4>
+    <p className="text-[9px] font-black text-slate-400 tracking-[0.2em] uppercase mb-8">Asset Format: Adobe PDF</p>
     
     <label className="cursor-pointer relative w-full">
       <input 
@@ -203,9 +230,9 @@ const ManualUploadCard = ({ title, type, isUploading, onUpload }: any) => (
         onChange={onUpload} 
         disabled={isUploading} 
       />
-      <div className={`w-full py-4 rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-2 transition-all shadow-sm ${isUploading ? 'bg-slate-100 text-slate-400' : 'bg-white border border-slate-200 text-slate-900 hover:bg-slate-900 hover:text-white hover:shadow-lg'}`}>
+      <div className={`w-full py-4 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-2 transition-all shadow-sm ${isUploading ? 'bg-slate-100 text-slate-400' : 'bg-white border border-slate-200 text-slate-900 hover:bg-slate-900 hover:text-white hover:border-slate-900'}`}>
         {isUploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-        {isUploading ? 'Processing...' : 'Change Document'}
+        {isUploading ? 'Deploying Assets...' : 'Replace Artifact'}
       </div>
     </label>
   </div>

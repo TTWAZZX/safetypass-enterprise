@@ -2,36 +2,124 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ============================= */
-/* 🔥 SAFETYPASS GLOBAL ANIMATION */
-/* ============================= */
+/* ========================================= */
+/* 🔥 SAFETYPASS ULTIMATE GLOBAL ANIMATIONS  */
+/* ========================================= */
 
+@layer base {
+  body {
+    @apply antialiased text-slate-900 bg-slate-50;
+    font-feature-settings: "cv11", "ss01";
+  }
+}
+
+/* 🟢 1. TOAST ANIMATIONS (iOS Style) */
 @keyframes toast-in {
   0% {
     opacity: 0;
-    transform: translateY(20px) scale(0.95);
+    transform: translate(-50%, -20px) scale(0.9);
   }
   100% {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translate(-50%, 0) scale(1);
   }
 }
 
 @keyframes toast-out {
   0% {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translate(-50%, 0) scale(1);
   }
   100% {
     opacity: 0;
-    transform: translateY(10px) scale(0.95);
+    transform: translate(-50%, -10px) scale(0.95);
   }
 }
 
 .toast-enter {
-  animation: toast-in 0.25s ease-out forwards;
+  animation: toast-in 0.3s cubic-bezier(0.21, 1.02, 0.73, 1) forwards;
 }
 
 .toast-exit {
-  animation: toast-out 0.2s ease-in forwards;
+  animation: toast-out 0.25s cubic-bezier(0.06, 0.71, 0.55, 1) forwards;
+}
+
+/* 🟢 2. SHIMMER EFFECT (สำหรับ Skeleton UI) */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.animate-shimmer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0,
+    rgba(255, 255, 255, 0.2) 20%,
+    rgba(255, 255, 255, 0.5) 60%,
+    rgba(255, 255, 255, 0)
+  );
+  animation: shimmer 2s infinite;
+}
+
+/* 🟢 3. SHAKE EFFECT (สำหรับ Error Feedback) */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
+.animate-shake {
+  animation: shake 0.2s ease-in-out 0s 2;
+}
+
+/* 🟢 4. PULSE FOR NOTIFICATIONS */
+@keyframes soft-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(0.98); }
+}
+
+.animate-soft-pulse {
+  animation: soft-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* 🟢 5. CUSTOM SCROLLBAR (Compact Style) */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-300 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-slate-400;
+}
+
+/* 🟢 6. NO SCROLLBAR UTILITY */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../services/supabaseApi';
 import { User, Vendor } from '../types';
 import { useTranslation } from '../context/LanguageContext';
-import { UserPlus, LogIn, ChevronRight, AlertCircle, Loader2 } from 'lucide-react';
+import { UserPlus, LogIn, ChevronRight, AlertCircle, Loader2, ShieldCheck } from 'lucide-react';
 
 interface AuthProps {
   onLogin: (user: User) => void;
@@ -18,8 +18,8 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   // Register State
   const [regId, setRegId] = useState('');
   const [name, setName] = useState('');
-  const [age, setAge] = useState(''); // ✅ เพิ่มอายุ
-  const [nationality, setNationality] = useState('ไทย (Thai)'); // ✅ เพิ่มสัญชาติ
+  const [age, setAge] = useState('');
+  const [nationality, setNationality] = useState('ไทย (Thai)');
   const [vendorId, setVendorId] = useState('');
   const [otherVendor, setOtherVendor] = useState('');
   
@@ -52,7 +52,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     setLoading(true);
     setError("");
     try {
-      // ✅ ส่ง Age และ Nationality ไปด้วย
       const user = await api.register(
         regId, 
         name, 
@@ -70,75 +69,76 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
-      <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md border border-slate-200">
+    <div className="min-h-[calc(100vh-80px)] flex items-center justify-center p-4 animate-in fade-in duration-500">
+      <div className="bg-white p-6 md:p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 w-full max-w-md border border-slate-100">
         
-        {/* Toggle Header */}
-        <div className="flex bg-slate-100 p-1 rounded-xl mb-8">
+        {/* Toggle Switcher - Compact Style */}
+        <div className="flex bg-slate-100 p-1.5 rounded-[1.2rem] mb-6">
           <button 
             onClick={() => { setMode('LOGIN'); setError(''); }}
-            className={`flex-1 py-3 rounded-lg text-sm font-bold transition-all ${mode === 'LOGIN' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}
+            className={`flex-1 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${mode === 'LOGIN' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}
           >
             {t('auth.login')}
           </button>
           <button 
             onClick={() => { setMode('REGISTER'); setError(''); }}
-            className={`flex-1 py-3 rounded-lg text-sm font-bold transition-all ${mode === 'REGISTER' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}
+            className={`flex-1 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${mode === 'REGISTER' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}
           >
             {t('auth.register')}
           </button>
         </div>
 
         <div className="mb-6 text-center">
-          <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4 text-blue-600">
-            {mode === 'LOGIN' ? <LogIn className="w-8 h-8" /> : <UserPlus className="w-8 h-8" />}
+          <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-blue-100 shadow-inner">
+            {mode === 'LOGIN' ? <LogIn size={24} /> : <UserPlus size={24} />}
           </div>
-          <h2 className="text-2xl font-black text-slate-800">
+          <h2 className="text-xl font-black text-slate-900 tracking-tight uppercase">
             {mode === 'LOGIN' ? 'Welcome Back' : 'Create Account'}
           </h2>
-          <p className="text-slate-500 text-sm mt-2">Safety Passport System</p>
+          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1.5 flex items-center justify-center gap-1.5">
+            <ShieldCheck size={12} className="text-blue-500" /> Security Passport Verification
+          </p>
         </div>
 
         {/* LOGIN FORM */}
         {mode === 'LOGIN' && (
           <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">{t('auth.national_id')}</label>
+            <div className="space-y-1.5">
+              <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('auth.national_id')}</label>
               <input 
                 required 
                 autoFocus
-                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none font-medium"
+                className="w-full px-4 py-3.5 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-slate-700 transition-all shadow-inner"
                 value={loginId}
                 onChange={e => setLoginId(e.target.value)}
-                placeholder="13-digit ID / เลขบัตรประชาชน"
+                placeholder="13-digit National ID"
               />
             </div>
-            <button disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
-               {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <>Login <ChevronRight className="w-4 h-4" /></>}
+            <button disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-2xl shadow-lg shadow-blue-100 transition-all flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95 text-xs uppercase tracking-widest">
+               {loading ? <Loader2 size={18} className="animate-spin" /> : <>Login <ChevronRight size={16} /></>}
             </button>
           </form>
         )}
 
         {/* REGISTER FORM */}
         {mode === 'REGISTER' && (
-          <form onSubmit={handleRegister} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">{t('auth.national_id')}</label>
-                    <input required value={regId} onChange={e => setRegId(e.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="1234567890123" />
+          <form onSubmit={handleRegister} className="space-y-3.5">
+            <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2 space-y-1">
+                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('auth.national_id')}</label>
+                    <input required value={regId} onChange={e => setRegId(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-xs" placeholder="National ID Number" />
                 </div>
-                <div className="col-span-2">
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">{t('auth.full_name')}</label>
-                    <input required value={name} onChange={e => setName(e.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Mr. John Doe" />
+                <div className="col-span-2 space-y-1">
+                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('auth.full_name')}</label>
+                    <input required value={name} onChange={e => setName(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-xs" placeholder="Full Name (EN/TH)" />
                 </div>
-                {/* ✅ เพิ่มช่องกรอก อายุ & สัญชาติ */}
-                <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Age / อายุ</label>
-                    <input required type="number" value={age} onChange={e => setAge(e.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="25" />
+                <div className="space-y-1">
+                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Age / อายุ</label>
+                    <input required type="number" value={age} onChange={e => setAge(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-xs" placeholder="25" />
                 </div>
-                <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nationality / สัญชาติ</label>
-                    <select value={nationality} onChange={e => setNationality(e.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+                <div className="space-y-1">
+                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Nationality / สัญชาติ</label>
+                    <select value={nationality} onChange={e => setNationality(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-xs appearance-none">
                         <option value="ไทย (Thai)">ไทย (Thai)</option>
                         <option value="ต่างชาติ (Foreigner)">ต่างชาติ (Foreigner)</option>
                         <option value="กัมพูชา (Cambodian)">กัมพูชา (Cambodian)</option>
@@ -148,9 +148,9 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">{t('auth.company')}</label>
-              <select required value={vendorId} onChange={e => setVendorId(e.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+            <div className="space-y-1">
+              <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('auth.company')}</label>
+              <select required value={vendorId} onChange={e => setVendorId(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-xs appearance-none">
                 <option value="">-- Select Company --</option>
                 {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                 <option value="OTHER">Other (ระบุเพิ่ม)</option>
@@ -158,21 +158,21 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             </div>
             
             {vendorId === 'OTHER' && (
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">{t('auth.other_company')}</label>
-                <input required value={otherVendor} onChange={e => setOtherVendor(e.target.value)} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none" />
+              <div className="space-y-1 animate-in slide-in-from-top-2 duration-300">
+                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('auth.other_company')}</label>
+                <input required value={otherVendor} onChange={e => setOtherVendor(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-xs" />
               </div>
             )}
 
-            <button disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-2 disabled:opacity-50 mt-4">
-              {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <>Register Account</>}
+            <button disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-2xl shadow-lg shadow-blue-100 transition-all flex items-center justify-center gap-2 disabled:opacity-50 mt-2 active:scale-95 text-xs uppercase tracking-widest">
+              {loading ? <Loader2 size={18} className="animate-spin" /> : <>Register Account</>}
             </button>
           </form>
         )}
 
         {error && (
-          <div className="mt-4 flex items-center gap-2 text-red-600 bg-red-50 p-3 rounded-xl text-xs font-medium">
-            <AlertCircle className="w-4 h-4" /> {error}
+          <div className="mt-4 flex items-center gap-2 text-red-600 bg-red-50 p-3.5 rounded-2xl text-[10px] font-bold border border-red-100 animate-shake">
+            <AlertCircle size={14} /> {error}
           </div>
         )}
       </div>

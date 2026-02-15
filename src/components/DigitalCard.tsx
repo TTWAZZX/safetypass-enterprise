@@ -8,16 +8,15 @@ import {
   ShieldCheck, 
   Loader2,
   Building2,
-  CalendarDays,
-  Ticket, // ไอคอนสำหรับ Work Permit
+  Ticket, 
   User as UserIcon,
-  ArrowLeft
+  ArrowLeft,
+  Shield
 } from 'lucide-react';
 
 interface DigitalCardProps {
   user: User;
   onBack: () => void;
-  // ✅ เพิ่ม Props สำหรับ Work Permit
   type?: 'INDUCTION' | 'WORK_PERMIT'; 
   permit?: WorkPermitSession | null;
 }
@@ -25,31 +24,29 @@ interface DigitalCardProps {
 const DigitalCard: React.FC<DigitalCardProps> = ({ 
   user, 
   onBack, 
-  type = 'INDUCTION', // ค่าเริ่มต้นคือ Induction
+  type = 'INDUCTION', 
   permit 
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const [downloading, setDownloading] = useState(false);
 
-  // ตั้งค่าธีมสีและข้อความตามประเภทบัตร
   const isPermit = type === 'WORK_PERMIT';
-  const themeColor = isPermit ? 'from-purple-900 via-indigo-900 to-blue-900' : 'from-slate-900 via-slate-800 to-emerald-900';
+  const themeColor = isPermit 
+    ? 'from-slate-900 via-indigo-950 to-purple-950' 
+    : 'from-[#0f172a] via-[#1e293b] to-[#064e3b]';
   const accentColor = isPermit ? 'text-purple-400' : 'text-emerald-400';
   const cardTitle = isPermit ? 'WORK PERMIT' : 'SAFETY PASS';
-  const cardIcon = isPermit ? <Ticket className={accentColor} size={24} /> : <ShieldCheck className={accentColor} size={24} />;
+  const cardIcon = isPermit ? <Ticket className={accentColor} size={20} /> : <ShieldCheck className={accentColor} size={20} />;
   
-  // ข้อมูลที่จะแสดง
   const displayId = isPermit ? permit?.permit_no : user.national_id;
-  const idLabel = isPermit ? 'PERMIT NO.' : 'ID NUMBER';
+  const idLabel = isPermit ? 'PERMIT NO.' : 'NATIONAL ID';
   
-  // วันหมดอายุ
   const expiryDate = isPermit 
     ? (permit?.expire_date ? new Date(permit.expire_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' }) : '-')
     : (user.induction_expiry ? new Date(user.induction_expiry).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' }) : '-');
 
   const issueDate = new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' });
 
-  // QR Value: ถ้าเป็น Permit ให้ใส่เลข Permit ไปด้วย (หรือ URL Verify เฉพาะ)
   const qrValue = isPermit 
     ? `https://safetypass.app/verify/${user.id}?permit=${permit?.permit_no}`
     : `https://safetypass.app/verify/${user.id}`;
@@ -58,8 +55,13 @@ const DigitalCard: React.FC<DigitalCardProps> = ({
     if (!cardRef.current) return;
     setDownloading(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      const canvas = await html2canvas(cardRef.current, { scale: 3, useCORS: true, backgroundColor: null });
+      await new Promise(resolve => setTimeout(resolve, 600));
+      // ✅ แก้ไขแล้ว: ลบ borderRadius ออกเพื่อไม่ให้ติด Error
+      const canvas = await html2canvas(cardRef.current, { 
+        scale: 3, 
+        useCORS: true, 
+        backgroundColor: null 
+      });
       const image = canvas.toDataURL("image/png", 1.0);
       const link = document.createElement("a");
       link.href = image;
@@ -74,89 +76,92 @@ const DigitalCard: React.FC<DigitalCardProps> = ({
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] p-4 animate-in zoom-in duration-500">
+    <div className="flex flex-col items-center min-h-screen p-4 animate-in fade-in duration-700 text-left">
       
-      {/* Header Text */}
-      <div className="mb-6 text-center">
-        <button onClick={onBack} className="flex items-center gap-2 text-slate-400 hover:text-slate-600 mb-4 mx-auto text-sm font-bold">
-            <ArrowLeft size={16}/> ย้อนกลับ
+      <div className="w-full max-w-[320px] flex items-center justify-between mb-6">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-slate-400 hover:text-blue-600 transition-colors py-2 px-1 rounded-xl active:bg-slate-100">
+            <ArrowLeft size={16}/>
+            <span className="text-[10px] font-black uppercase tracking-widest">Back</span>
         </button>
-        <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-white shadow-xl ${isPermit ? 'bg-purple-100 text-purple-600' : 'bg-emerald-100 text-emerald-700'}`}>
-          {isPermit ? <Ticket size={32} /> : <CheckCircle2 size={40} />}
+        <div className={`px-3 py-1 rounded-lg border text-[9px] font-black uppercase tracking-tighter ${isPermit ? 'bg-purple-50 text-purple-600 border-purple-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>
+          Digital Identity
         </div>
-        <h2 className="text-2xl font-black text-slate-900">{isPermit ? 'ใบอนุญาตทำงาน (5 วัน)' : 'บัตรประจำตัวความปลอดภัย'}</h2>
-        <p className="text-slate-500">{isPermit ? 'แสดงหน้านี้ต่อเจ้าหน้าที่เพื่อเข้าพื้นที่' : 'ใช้สำหรับยืนยันการผ่านอบรม Induction'}</p>
       </div>
 
-      {/* 🟢 ตัวบัตร Digital Card */}
-      <div className="relative group perspective-1000">
+      <div className="text-center mb-6">
+         <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">
+            {isPermit ? 'Contractor Work Permit' : 'Personnel Safety Pass'}
+         </h2>
+         <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 tracking-wide">
+            {isPermit ? 'Show to security at entry point' : 'Verified Safety Induction Status'}
+         </p>
+      </div>
+
+      <div className="relative group touch-none">
         <div 
           ref={cardRef}
-          className={`w-[340px] h-[540px] bg-gradient-to-br ${themeColor} rounded-[2rem] shadow-2xl overflow-hidden relative text-white border border-slate-700/50`}
+          className={`w-[310px] h-[480px] bg-gradient-to-br ${themeColor} rounded-[2.5rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.5)] overflow-hidden relative text-white border border-white/10`}
         >
-          {/* Background Patterns */}
-          <div className={`absolute top-0 right-0 w-64 h-64 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 opacity-30 ${isPermit ? 'bg-pink-500' : 'bg-blue-500'}`}></div>
-          <div className={`absolute bottom-0 left-0 w-64 h-64 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2 opacity-20 ${isPermit ? 'bg-purple-500' : 'bg-emerald-500'}`}></div>
+          <div className={`absolute top-0 right-0 w-40 h-40 rounded-full blur-[80px] -translate-y-1/2 translate-x-1/2 opacity-40 ${isPermit ? 'bg-pink-600' : 'bg-blue-600'}`}></div>
+          <div className={`absolute bottom-0 left-0 w-40 h-40 rounded-full blur-[80px] translate-y-1/2 -translate-x-1/2 opacity-30 ${isPermit ? 'bg-indigo-600' : 'bg-emerald-600'}`}></div>
 
-          {/* Card Header */}
           <div className="p-6 relative z-10 flex justify-between items-start">
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2 mb-1">
-                {cardIcon}
-                <span className="font-black text-lg tracking-wider">{cardTitle}</span>
+                <div className="bg-white/10 p-1.5 rounded-lg backdrop-blur-md border border-white/20">
+                    {cardIcon}
+                </div>
+                <span className="font-black text-sm tracking-widest uppercase">{cardTitle}</span>
               </div>
-              <p className="text-[10px] text-slate-400 uppercase tracking-[0.2em]">Official Certificate</p>
+              <p className="text-[7px] text-slate-400 font-bold uppercase tracking-[0.3em] ml-1">Identity Confirmed</p>
             </div>
-            <div className="w-10 h-10 bg-white/10 rounded-lg backdrop-blur-sm border border-white/20 flex items-center justify-center">
-               <span className="font-black text-xs">LOGO</span>
+            <div className="p-1.5 bg-white/5 rounded-lg backdrop-blur-md border border-white/10 opacity-40">
+               <Shield size={14} className="text-white" />
             </div>
           </div>
 
-          {/* User Photo & Info */}
           <div className="px-6 relative z-10 text-center mt-2">
-            <div className={`w-28 h-28 mx-auto bg-gradient-to-b p-[3px] rounded-full shadow-lg mb-4 ${isPermit ? 'from-pink-400 to-purple-500 shadow-purple-900/50' : 'from-blue-400 to-emerald-400 shadow-blue-900/50'}`}>
-              <div className="w-full h-full bg-slate-800 rounded-full overflow-hidden flex items-center justify-center">
-                 <UserIcon size={40} className="text-slate-400"/>
+            <div className={`w-20 h-20 mx-auto bg-gradient-to-b p-[2.5px] rounded-[1.8rem] shadow-2xl mb-4 ${isPermit ? 'from-pink-400 to-indigo-500' : 'from-blue-400 to-emerald-400'}`}>
+              <div className="w-full h-full bg-slate-900 rounded-[1.6rem] overflow-hidden flex items-center justify-center border border-white/10">
+                 <UserIcon size={32} className="text-slate-500 opacity-50"/>
               </div>
             </div>
             
-            <h3 className="text-2xl font-bold mb-1 truncate">{user.name}</h3>
-            <div className="flex items-center justify-center gap-2 text-slate-300 text-sm mb-4">
-               <Building2 size={14} />
-               <span className="font-medium">{user.vendors?.name || 'Unknown Vendor'}</span>
+            <h3 className="text-lg font-black mb-1 truncate tracking-tight uppercase px-2">{user.name}</h3>
+            <div className="flex items-center justify-center gap-1.5 text-slate-400 text-[9px] mb-6 font-bold uppercase tracking-wide">
+               <Building2 size={10} className="opacity-50 flex-shrink-0" />
+               <span className="truncate max-w-[160px]">{user.vendors?.name || 'Authorized Contractor'}</span>
             </div>
 
-            {/* Grid Details */}
-            <div className="grid grid-cols-2 gap-3 bg-white/5 rounded-2xl p-4 backdrop-blur-md border border-white/10">
+            <div className="grid grid-cols-2 gap-3 bg-slate-950/40 rounded-[1.5rem] p-4 backdrop-blur-xl border border-white/5 shadow-inner">
                <div className="text-left">
-                  <p className="text-[10px] text-slate-400 uppercase font-bold">Issue Date</p>
-                  <p className={`font-bold text-sm ${accentColor}`}>{issueDate}</p>
+                  <p className="text-[7px] text-slate-500 uppercase font-black tracking-widest mb-0.5">Issue Date</p>
+                  <p className={`font-black text-[11px] ${accentColor}`}>{issueDate}</p>
                </div>
                <div className="text-left">
-                  <p className="text-[10px] text-slate-400 uppercase font-bold">Expiry Date</p>
-                  <p className="font-bold text-sm text-red-400">{expiryDate}</p>
+                  <p className="text-[7px] text-slate-500 uppercase font-black tracking-widest mb-0.5">Expiry Date</p>
+                  <p className="font-black text-[11px] text-red-400">{expiryDate}</p>
                </div>
-               <div className="col-span-2 text-left border-t border-white/10 pt-2 mt-1">
-                  <p className="text-[10px] text-slate-400 uppercase font-bold">{idLabel}</p>
-                  <p className="font-mono text-sm tracking-wider text-slate-200">{displayId}</p>
+               <div className="col-span-2 text-left pt-2.5 border-t border-white/5">
+                  <p className="text-[7px] text-slate-500 uppercase font-black tracking-widest mb-0.5">{idLabel}</p>
+                  <p className="font-mono text-[11px] font-bold tracking-widest text-slate-200">{displayId}</p>
                </div>
             </div>
           </div>
 
-          {/* Footer & QR */}
-          <div className="absolute bottom-0 w-full p-6 bg-slate-950/50 backdrop-blur-xl border-t border-white/5 flex items-center justify-between">
-             <div className="bg-white p-2 rounded-xl">
+          <div className="absolute bottom-0 w-full p-5 bg-slate-950/60 backdrop-blur-2xl border-t border-white/5 flex items-center justify-between">
+             <div className="bg-white p-1 rounded-xl shadow-lg border-[3px] border-white/10">
                 <QRCode 
                   value={qrValue} 
-                  size={64}
-                  level="M" 
+                  size={50}
+                  level="H" 
                 />
              </div>
              <div className="text-right">
-                <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Status</p>
-                <div className={`flex items-center justify-end gap-1.5 px-3 py-1 rounded-full border ${isPermit ? 'bg-purple-500/20 border-purple-500/30' : 'bg-emerald-500/20 border-emerald-500/30'}`}>
-                   <div className={`w-2 h-2 rounded-full animate-pulse ${isPermit ? 'bg-purple-400' : 'bg-emerald-400'}`}></div>
-                   <span className={`text-xs font-bold uppercase ${isPermit ? 'text-purple-400' : 'text-emerald-400'}`}>Active</span>
+                <p className="text-[7px] text-slate-500 uppercase font-black tracking-widest mb-1 text-right">Auth Status</p>
+                <div className={`flex items-center justify-end gap-1 px-2.5 py-1 rounded-lg border ${isPermit ? 'bg-purple-500/10 border-purple-500/20' : 'bg-emerald-500/10 border-emerald-500/20'}`}>
+                   <div className={`w-1 h-1 rounded-full animate-pulse ${isPermit ? 'bg-purple-400' : 'bg-emerald-400'}`}></div>
+                   <span className={`text-[9px] font-black uppercase tracking-tighter ${isPermit ? 'text-purple-400' : 'text-emerald-400'}`}>Verified</span>
                 </div>
              </div>
           </div>
@@ -164,16 +169,19 @@ const DigitalCard: React.FC<DigitalCardProps> = ({
         </div>
       </div>
 
-      {/* Action Buttons */}
-      <div className="mt-8 flex gap-4 w-full max-w-sm">
+      <div className="mt-8 flex flex-col gap-3 w-full max-w-[310px]">
         <button 
           onClick={handleDownload}
           disabled={downloading}
-          className={`flex-1 py-4 text-white font-bold rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-70 ${isPermit ? 'bg-purple-600 hover:bg-purple-700 shadow-purple-200' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-200'}`}
+          className={`w-full py-3.5 text-white font-black rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-70 ${isPermit ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200' : 'bg-[#2563eb] hover:bg-blue-700 shadow-blue-200'}`}
         >
-          {downloading ? <Loader2 className="animate-spin"/> : <Download size={20} />}
-          บันทึกรูป
+          {downloading ? <Loader2 className="animate-spin" size={18}/> : <Download size={18} />}
+          <span className="uppercase text-xs tracking-widest">Download Identity Pass</span>
         </button>
+        
+        <p className="text-[8px] text-slate-400 font-bold text-center uppercase tracking-widest mt-2 opacity-60">
+          Enterprise Security Protocol • ID 2026
+        </p>
       </div>
 
     </div>

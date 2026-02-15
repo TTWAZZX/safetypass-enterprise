@@ -5,7 +5,7 @@ import Auth from './components/Auth';
 import UserPanel from './components/UserPanel';
 import AdminPanel from './components/AdminPanel';
 import LanguageSwitcher from './components/LanguageSwitcher';
-import { Shield, Loader2 } from 'lucide-react';
+import { Shield, Loader2, LogOut } from 'lucide-react';
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './components/ToastProvider';
@@ -15,26 +15,18 @@ const AppContent: React.FC = () => {
   const { t } = useTranslation();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  
-  // ✅ เพิ่ม State เพื่อดักจับ Path ปัจจุบัน (แก้ปัญหาหน้าขาวตอนสแกน)
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
 
   useEffect(() => {
-    // ฟังก์ชันอัปเดต Path เมื่อมีการกด Back/Forward หรือเปลี่ยน URL
     const handleLocationChange = () => {
       setCurrentPath(window.location.pathname);
     };
-
     window.addEventListener('popstate', handleLocationChange);
-    
-    // ตั้งค่าตรวจสอบ Path ทุกครั้งที่ App โหลดใหม่
     handleLocationChange();
 
     try {
-      // ✅ บังคับลบ Class Dark ทิ้งทันทีที่โหลด App
       document.documentElement.classList.remove('dark');
       localStorage.removeItem('safety_pass_theme');
-
       const savedUser = localStorage.getItem('safety_pass_current_user');
       if (savedUser) {
         setCurrentUser(JSON.parse(savedUser));
@@ -44,7 +36,6 @@ const AppContent: React.FC = () => {
     } finally {
       setLoading(false);
     }
-
     return () => window.removeEventListener('popstate', handleLocationChange);
   }, []);
 
@@ -54,12 +45,12 @@ const AppContent: React.FC = () => {
   };
 
   const handleLogout = () => {
-    setCurrentUser(null);
-    localStorage.removeItem('safety_pass_current_user');
+    if(window.confirm("คุณต้องการออกจากระบบใช่หรือไม่?")) {
+      setCurrentUser(null);
+      localStorage.removeItem('safety_pass_current_user');
+    }
   };
 
-  // 🟢 ตรวจสอบ URL สำหรับหน้า Verify (ดักหน้าสุดเพื่อให้เข้าถึงได้โดยไม่ต้อง Login)
-  // ใช้ currentPath แทน window.location.pathname โดยตรงเพื่อให้ React Re-render
   if (currentPath.startsWith('/verify/')) {
     return <VerifyPage />;
   }
@@ -75,40 +66,47 @@ const AppContent: React.FC = () => {
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans">
       
-      {/* Header (สีเข้มถาวร เพื่อความสวยงาม) */}
-      <header className="bg-slate-900 text-white p-4 shadow-md sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
+      {/* --- 📱 GLOBAL HEADER: ปรับให้เล็กลงพิเศษ และเลื่อนหายไปตามเนื้อหา (ไม่ Sticky) --- */}
+      <header className="bg-[#0f172a] text-white py-2.5 shadow-md">
+        <div className="max-w-7xl mx-auto px-4 flex justify-between items-center gap-2">
           
-          <div className="flex items-center gap-3">
-            <div className="bg-blue-600 p-2 rounded-lg">
-              <Shield className="w-6 h-6" />
+          {/* Logo Section - Compact Style */}
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="bg-blue-600 p-1.5 rounded-lg shadow-lg shadow-blue-500/10 flex-shrink-0">
+              <Shield size={16} className="md:w-5 md:h-5 text-white" />
             </div>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight leading-none">
+            <div className="flex flex-col min-w-0">
+              <h1 className="text-[10px] md:text-sm font-black tracking-tighter uppercase leading-none truncate">
                 {t('app.name')}
               </h1>
-              <p className="text-[10px] text-blue-300 uppercase tracking-widest font-semibold mt-1">
+              <p className="text-[6px] md:text-[8px] text-blue-400 uppercase tracking-tighter font-bold mt-0.5 truncate opacity-80">
                 {t('app.tagline')}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-6">
-            <LanguageSwitcher />
+          {/* Actions Section - Space Saving */}
+          <div className="flex items-center gap-2 md:gap-6 flex-shrink-0">
+            {/* ย่อขนาดตัวเลือกภาษาในมือถือ */}
+            <div className="scale-75 md:scale-90 origin-right">
+               <LanguageSwitcher />
+            </div>
 
             {currentUser && (
-              <div className="flex items-center gap-4 border-l border-white/20 pl-6">
-                <div className="text-right hidden sm:block">
-                  <p className="text-sm font-medium">{currentUser.name}</p>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">
+              <div className="flex items-center gap-2 md:gap-4 border-l border-white/10 pl-2 md:pl-6">
+                <div className="text-right hidden lg:block">
+                  <p className="text-xs font-black leading-none">{currentUser.name}</p>
+                  <p className="text-[8px] text-slate-500 font-bold uppercase tracking-tighter mt-1">
                     {currentUser.role}
                   </p>
                 </div>
                 <button 
                   onClick={handleLogout}
-                  className="bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white px-3 py-1.5 rounded-md text-xs font-bold transition-all border border-red-500/20"
+                  className="flex items-center gap-1.5 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white p-1.5 md:px-3 md:py-1.5 rounded-lg text-[9px] font-black transition-all border border-red-500/20"
+                  title="Logout"
                 >
-                  {t('common.logout')}
+                  <LogOut size={12} />
+                  <span className="hidden md:inline uppercase">{t('common.logout')}</span>
                 </button>
               </div>
             )}
@@ -116,7 +114,7 @@ const AppContent: React.FC = () => {
         </div>
       </header>
 
-      {/* Main */}
+      {/* Main Content Area */}
       <main className="flex-grow">
         {!currentUser ? (
           <Auth onLogin={handleLogin} />
@@ -134,13 +132,13 @@ const AppContent: React.FC = () => {
         )}
       </main>
 
-      {/* Footer */}
-      <footer className="bg-white border-t border-slate-200 py-6 mt-12">
+      {/* Footer - Compact */}
+      <footer className="bg-white border-t border-slate-200 py-6 mt-6">
         <div className="max-w-7xl mx-auto px-4 text-center">
-          <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">
-            © 2024 Corporate Contractor Safety Passport System
+          <p className="text-slate-400 text-[9px] font-bold uppercase tracking-[0.2em]">
+            © 2026 SafetyPass • Enterprise System
             <br />
-            Internal Use Only • Enterprise UX Architecture
+            <span className="text-slate-300 opacity-60 font-medium">Internal Use Only</span>
           </p>
         </div>
       </footer>

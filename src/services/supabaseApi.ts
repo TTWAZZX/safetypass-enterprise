@@ -1,6 +1,5 @@
-// src/services/supabaseApi.ts
 import { supabase } from './supabaseClient'
-import { User, Vendor, ExamType, Question, WorkPermitSession } from '../types'
+import { User, Vendor, ExamType, Question, WorkPermitSession, Choice } from '../types'
 
 export const api = {
 
@@ -9,7 +8,6 @@ export const api = {
   ===================================================== */
 
   login: async (nationalId: string): Promise<User> => {
-    // ✅ แก้จาก @safetypass.local เป็น @safetypass.com
     const email = `${nationalId}@safetypass.com`
     const password = nationalId 
 
@@ -63,7 +61,7 @@ export const api = {
     if (authError) throw new Error(authError.message)
     if (!authData.user) throw new Error('Auth Error')
 
-    // ✅ Insert ข้อมูลใหม่ครบทุกช่อง
+    // ✅ Insert ข้อมูลใหม่ครบทุกช่อง (Age, Nationality)
     const { data: newUser, error: dbError } = await supabase
       .from('users')
       .insert({
@@ -78,7 +76,7 @@ export const api = {
       .select('*, vendors(*)')
       .single()
 
-    if (dbError) throw new Error('บันทึก Profile ไม่สำเร็จ')
+    if (dbError) throw new Error('บันทึก Profile ไม่สำเร็จ: ' + dbError.message)
     return newUser as unknown as User
   },
 
@@ -154,23 +152,34 @@ export const api = {
   },
 
   /* =====================================================
-     4. QUESTIONS CRUD
+      4. QUESTIONS CRUD
   ===================================================== */
 
   getQuestions: async (type: ExamType): Promise<Question[]> => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('questions')
-      .select('id, content_th, content_en, choices_json, type')
+      .select('id, content_th, content_en, choices_json, type, image_url, correct_choice_index')
       .eq('type', type)
-      .eq('is_active', true)
+      .eq('is_active', true);
 
-    return (data || []).map(q => ({
-      ...q,
-      choices_json:
+    if (error) {
+      console.error("Error fetching questions:", error);
+      return [];
+    }
+
+    return (data || []).map((q: any) => ({
+      id: q.id,
+      content_th: q.content_th,
+      content_en: q.content_en,
+      type: q.type as ExamType,
+      image_url: q.image_url,
+      correct_choice_index: q.correct_choice_index,
+      choices_json: (
         typeof q.choices_json === 'string'
           ? JSON.parse(q.choices_json)
           : q.choices_json
-    }))
+      ) as Choice[]
+    } as Question));
   },
 
   getAllQuestions: async (): Promise<Question[]> => {
@@ -185,7 +194,7 @@ export const api = {
         typeof q.choices_json === 'string'
           ? JSON.parse(q.choices_json)
           : q.choices_json
-    }))
+    })) as Question[]
   },
 
   createQuestion: async (question: Partial<Question>) => {
@@ -204,7 +213,7 @@ export const api = {
   },
 
   /* =====================================================
-     5. EXAM SUBMISSION & HISTORY (CRITICAL FIX)
+     5. EXAM SUBMISSION & HISTORY (CLIENT-SIDE SCORING COMPATIBLE)
   ===================================================== */
 
   submitExamWithAnswers: async (
@@ -212,25 +221,39 @@ export const api = {
     answers: Record<string, number>,
     permitNo?: string
   ) => {
+    // ดึงข้อมูลข้อสอบจริงมาเพื่อหาเกณฑ์และรวมข้อมูล
     const { data: questions, error } = await supabase
       .from('questions')
-      .select('id, correct_choice_index')
+      .select('id, correct_choice_index, choices_json')
       .eq('type', type);
 
     if (error || !questions) throw new Error('ไม่สามารถดึงข้อมูลข้อสอบได้');
 
+    // ดึงเกณฑ์คะแนนจาก Settings
+    const config = await api.getSystemSettings();
+    const thresholdKey = type === 'INDUCTION' ? 'PASSING_SCORE_INDUCTION' : 'PASSING_SCORE_WORK_PERMIT';
+    const threshold = Number(config[thresholdKey] || 80);
+
+    // ✅ คำนวณคะแนน (รองรับกรณีสลับตัวเลือกโดยเช็คจาก is_correct ใน Client แล้ว หรือเทียบ index เดิม)
     let score = 0;
     questions.forEach((q) => {
-      if (answers[q.id] === q.correct_choice_index) {
-        score++;
+      const userChoiceIndex = answers[q.id];
+      if (userChoiceIndex !== undefined) {
+        const choices = typeof q.choices_json === 'string' ? JSON.parse(q.choices_json) : q.choices_json;
+        // เช็คความถูกต้องจาก property is_correct เพื่อรองรับ Shuffling
+        if (choices[userChoiceIndex]?.is_correct === true) {
+          score++;
+        }
       }
     });
 
-    const passed = (score / questions.length) >= 0.8;
+    const passedPercent = (score / questions.length) * 100;
+    const passed = passedPercent >= threshold;
+    
     const { data: { user } } = await supabase.auth.getUser();
 
     if (user) {
-      // ✅ บันทึกลงตารางใหม่เพื่อ Dashboard
+      // ✅ บันทึกลงตาราง exam_history
       await supabase.from('exam_history').insert([{
         user_id: user.id,
         exam_type: type,
@@ -239,7 +262,7 @@ export const api = {
         status: passed ? 'PASSED' : 'FAILED'
       }]);
 
-      // ✅ บันทึก Log ลงตารางเดิมเพื่อความเข้ากันได้
+      // บันทึกลงตารางเดิมเพื่อความเข้ากันได้
       await supabase.from('exam_logs').insert({ 
         user_id: user.id, 
         exam_type: type, 
@@ -268,20 +291,16 @@ export const api = {
   },
 
   /* =====================================================
-     6. ADMIN DASHBOARD & STATS (FIXED FOR VOLUME & HISTORY)
+     6. ADMIN DASHBOARD & STATS
   ===================================================== */
 
-  // ใน src/services/supabaseApi.ts
   getDashboardStats: async () => {
-    // ดึงข้อมูลพื้นฐาน
     const { count: users } = await supabase.from('users').select('*', { count: 'exact', head: true });
     const { count: vendors } = await supabase.from('vendors').select('*', { count: 'exact', head: true }).eq('status', 'PENDING');
     const { count: permits } = await supabase.from('work_permits').select('*', { count: 'exact', head: true }).gt('expire_date', new Date().toISOString());
 
-    // ✅ ลองดึงจาก history ก่อน
     let { data: history } = await supabase.from('exam_history').select('status, exam_type');
 
-    // ✅ ถ้า history ว่าง ให้ดึงจาก exam_logs มาแสดงแทนชั่วคราว
     if (!history || history.length === 0) {
       const { data: logs } = await supabase.from('exam_logs').select('passed, exam_type');
       history = logs?.map(l => ({
@@ -310,7 +329,6 @@ export const api = {
     };
   },
 
-  // ดึงประวัติการสอบทั้งหมดพร้อมข้อมูล User
   getAllExamHistory: async () => {
     const { data, error } = await supabase
       .from('exam_history')
@@ -328,7 +346,6 @@ export const api = {
     return data;
   },
 
-  // ข้อมูลสำหรับ Export และ Recent Exam History ใน AdminPanel
   getReportData: async () => {
     const { data, error } = await supabase
       .from('exam_history')
@@ -351,7 +368,7 @@ export const api = {
     if (error) return [];
 
     return (data || []).map((log: any) => ({
-      timestamp: log.created_at, // เก็บเป็น string จาก DB เพื่อให้ new Date() ภายหลัง
+      timestamp: log.created_at,
       national_id: log.users?.national_id || '-',
       name: log.users?.name || '-',
       age: log.users?.age || '-',
@@ -363,7 +380,6 @@ export const api = {
     }));
   },
 
-  // ✅ เพิ่มฟังก์ชันนี้เพื่อให้ AdminDashboard หายติดแดง
   getDailyStats: async () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
