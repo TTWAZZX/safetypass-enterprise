@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../services/supabaseApi';
 import { User, Question, ExamType } from '../types';
 import { useTranslation } from '../context/LanguageContext';
+import DigitalCard from './DigitalCard';
 import {
   ArrowLeft,
   CheckCircle2,
@@ -170,24 +171,35 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
   /* ================= RESULT STEP ================= */
 
   if (step === 'RESULT') {
+    if (passed) {
+      // ✅ ถ้าสอบผ่าน แสดง Digital Card
+      return <DigitalCard user={user} onBack={onComplete} />; 
+      // หมายเหตุ: onBack ให้เรียก onComplete เพื่อกลับหน้า UserPanel
+    }
+
+    // ❌ ถ้าสอบตก แสดงหน้า Fail แบบเดิม
     return (
-      <div className="max-w-md mx-auto text-center p-10 bg-white rounded-3xl shadow-xl border border-slate-200 mt-10">
-        {passed ? (
-          <CheckCircle2 className="w-24 h-24 text-emerald-500 mx-auto mb-6" />
-        ) : (
-          <AlertCircle className="w-24 h-24 text-red-500 mx-auto mb-6" />
-        )}
-
-        <h2 className="text-3xl font-black text-slate-900 mb-2">
-          {passed ? t('exam.pass') : t('exam.fail')}
-        </h2>
-
-        <div className="bg-slate-50 rounded-2xl p-6 my-6 border border-slate-200">
-          <p className="text-slate-500 text-xs uppercase mb-2">Total Score</p>
-          <p className="text-4xl font-black text-slate-800">
-            {score} / {questions.length}
-          </p>
+      <div className="max-w-md mx-auto text-center p-10 bg-white rounded-3xl shadow-xl border border-slate-200 mt-10 animate-in zoom-in">
+        <div className="bg-red-50 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6">
+          <AlertCircle className="w-12 h-12 text-red-500" />
         </div>
+
+        <h2 className="text-3xl font-black text-slate-900 mb-2">เสียใจด้วยครับ</h2>
+        <p className="text-slate-500 font-bold">คุณทำคะแนนได้ไม่ถึงเกณฑ์ที่กำหนด</p>
+
+        <div className="bg-slate-50 rounded-2xl p-6 my-8 border border-slate-200">
+          <p className="text-slate-400 text-xs uppercase font-bold tracking-widest mb-2">คะแนนของคุณ</p>
+          <div className="text-5xl font-black text-slate-800">
+            {score} <span className="text-2xl text-slate-400">/ {questions.length}</span>
+          </div>
+        </div>
+
+        <button 
+          onClick={() => setStep('READ')} // ให้โอกาสกลับไปอ่านคู่มือใหม่
+          className="w-full py-4 bg-slate-900 text-white font-bold rounded-2xl hover:bg-slate-700 transition-all"
+        >
+          ลองใหม่อีกครั้ง
+        </button>
       </div>
     );
   }
@@ -229,10 +241,23 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
       <div className="space-y-10">
         {questions.map((q, idx) => (
           <div key={q.id}>
-            <p className="font-bold text-slate-900 mb-4 text-lg">
-              <span className="text-slate-400 mr-2">{idx + 1}.</span>
-              {language === 'th' ? q.content_th : q.content_en}
-            </p>
+            <div>
+              {/* 🟢 ส่วนที่เพิ่ม: แสดงรูปภาพถ้ามี */}
+              {q.image_url && (
+                <div className="mb-4">
+                  <img 
+                    src={q.image_url} 
+                    alt="Question Reference" 
+                    className="rounded-xl max-h-60 object-contain border border-slate-200" 
+                  />
+                </div>
+              )}
+
+              <p className="font-bold text-slate-900 mb-4 text-lg">
+                <span className="text-slate-400 mr-2">{idx + 1}.</span>
+                {language === 'th' ? q.content_th : q.content_en}
+              </p>
+            </div>
 
             <div className="space-y-3 pl-6">
               {q.choices_json.map((c, cIdx) => (

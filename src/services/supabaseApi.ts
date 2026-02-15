@@ -5,7 +5,7 @@ import { User, Vendor, ExamType, Question, WorkPermitSession } from '../types'
 export const api = {
 
   /* =====================================================
-     1. AUTH (แก้ไขโดเมนเป็น .com เพื่อให้ผ่าน Validation)
+     1. AUTH & REGISTRATION
   ===================================================== */
 
   login: async (nationalId: string): Promise<User> => {
@@ -70,8 +70,8 @@ export const api = {
         id: authData.user.id,
         national_id: nationalId,
         name,
-        age,            // เพิ่ม
-        nationality,    // เพิ่ม
+        age,            
+        nationality,    
         vendor_id: finalVendorId,
         role: 'USER'
       })
@@ -83,7 +83,7 @@ export const api = {
   },
 
   /* =====================================================
-     2. VENDOR
+     2. VENDOR MANAGEMENT
   ===================================================== */
 
   getVendors: async (): Promise<Vendor[]> => {
@@ -118,11 +118,10 @@ export const api = {
   },
 
   /* =====================================================
-     3. SETTINGS (PASSING SCORE)
+     3. SYSTEM SETTINGS
   ===================================================== */
 
   getSystemSettings: async () => {
-    // เพิ่มฟังก์ชันนี้เพื่อให้ SettingsManager เรียกใช้ได้
     const { data } = await supabase.from('system_config').select('*');
     const config: Record<string, string> = {};
     data?.forEach((item: any) => {
@@ -142,13 +141,11 @@ export const api = {
   },
 
   updateSystemSetting: async (key: string, value: number) => {
-    // ใช้ upsert เพื่อกัน error กรณีไม่มี key
     await supabase
       .from('system_config')
       .upsert({ key, value: value.toString() })
   },
   
-  // คงไว้เพื่อความเข้ากันได้
   updatePassingScore: async (key: string, value: number) => {
     await supabase
       .from('system_config')
@@ -163,7 +160,7 @@ export const api = {
   getQuestions: async (type: ExamType): Promise<Question[]> => {
     const { data } = await supabase
       .from('questions')
-      .select('id, content_th, content_en, choices_json, type') // ⚠️ เลือกไม่ดึงเฉลยมาแสดง
+      .select('id, content_th, content_en, choices_json, type')
       .eq('type', type)
       .eq('is_active', true)
 
@@ -179,7 +176,7 @@ export const api = {
   getAllQuestions: async (): Promise<Question[]> => {
     const { data } = await supabase
       .from('questions')
-      .select('*') // Admin เห็นเฉลยได้
+      .select('*')
       .order('created_at', { ascending: false })
 
     return (data || []).map(q => ({
@@ -192,99 +189,111 @@ export const api = {
   },
 
   createQuestion: async (question: Partial<Question>) => {
-    const { error } = await supabase
-      .from('questions')
-      .insert(question)
-
+    const { error } = await supabase.from('questions').insert(question)
     if (error) throw error
   },
 
   updateQuestion: async (id: string, updates: Partial<Question>) => {
-    const { error } = await supabase
-      .from('questions')
-      .update(updates)
-      .eq('id', id)
-
+    const { error } = await supabase.from('questions').update(updates).eq('id', id)
     if (error) throw error
   },
 
   deleteQuestion: async (id: string) => {
-    const { error } = await supabase
-      .from('questions')
-      .delete()
-      .eq('id', id)
-
+    const { error } = await supabase.from('questions').delete().eq('id', id)
     if (error) throw error
   },
 
   /* =====================================================
-     5. EXAM SUBMIT
+     5. EXAM SUBMISSION & HISTORY (CRITICAL FIX)
   ===================================================== */
 
-  submitExam: async (userId: string, type: ExamType, score: number, passed: boolean, permitNo?: string) => {
-    console.warn("Deprecated: Please use 'submitExamWithAnswers'");
-    const { error } = await supabase.from('exam_logs').insert({ user_id: userId, exam_type: type, score, passed })
-    if (error) throw new Error("Please update code to use submitExamWithAnswers");
-    return { passed, score }
-  },
-
-  // ✅ ใช้ตัวนี้
   submitExamWithAnswers: async (
-      type: ExamType,
-      answers: Record<string, number>,
-      permitNo?: string
+    type: ExamType,
+    answers: Record<string, number>,
+    permitNo?: string
   ) => {
-      const { data, error } = await supabase.rpc('submit_exam_attempt', {
-          exam_type_param: type,
-          answers: answers,
-          permit_no_param: permitNo
-      })
+    const { data: questions, error } = await supabase
+      .from('questions')
+      .select('id, correct_choice_index')
+      .eq('type', type);
 
-      if (error) throw new Error(error.message)
-      return data 
+    if (error || !questions) throw new Error('ไม่สามารถดึงข้อมูลข้อสอบได้');
+
+    let score = 0;
+    questions.forEach((q) => {
+      if (answers[q.id] === q.correct_choice_index) {
+        score++;
+      }
+    });
+
+    const passed = (score / questions.length) >= 0.8;
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (user) {
+      // ✅ บันทึกลงตารางใหม่เพื่อ Dashboard
+      await supabase.from('exam_history').insert([{
+        user_id: user.id,
+        exam_type: type,
+        score: score,
+        total_questions: questions.length,
+        status: passed ? 'PASSED' : 'FAILED'
+      }]);
+
+      // ✅ บันทึก Log ลงตารางเดิมเพื่อความเข้ากันได้
+      await supabase.from('exam_logs').insert({ 
+        user_id: user.id, 
+        exam_type: type, 
+        score, 
+        passed 
+      });
+      
+      if (passed) {
+        if (type === 'INDUCTION') {
+          const nextYear = new Date();
+          nextYear.setFullYear(nextYear.getFullYear() + 1);
+          await supabase.from('users').update({ induction_expiry: nextYear.toISOString() }).eq('id', user.id);
+        } else if (type === 'WORK_PERMIT') {
+          const expireDate = new Date();
+          expireDate.setDate(expireDate.getDate() + 5); 
+          await supabase.from('work_permits').insert([{
+            user_id: user.id,
+            permit_no: permitNo || `WP-${Date.now().toString().slice(-6)}`,
+            expire_date: expireDate.toISOString(),
+            status: 'ACTIVE'
+          }]);
+        }
+      }
+    }
+    return { score, passed };
   },
 
   /* =====================================================
-     6. WORK PERMIT
+     6. ADMIN DASHBOARD & STATS (FIXED FOR VOLUME & HISTORY)
   ===================================================== */
 
-  getActiveWorkPermit: async (
-    userId: string
-  ): Promise<WorkPermitSession | null> => {
-
-    const { data } = await supabase
-      .from('work_permits')
-      .select('*')
-      .eq('user_id', userId)
-      .gt('expire_date', new Date().toISOString())
-      .limit(1)
-      .maybeSingle()
-
-    return data || null
-  },
-
-  /* =====================================================
-     7. DASHBOARD STATS
-  ===================================================== */
-
+  // ใน src/services/supabaseApi.ts
   getDashboardStats: async () => {
-    // ใช้ count: 'exact', head: true เพื่อประสิทธิภาพ (ไม่โหลด data)
+    // ดึงข้อมูลพื้นฐาน
     const { count: users } = await supabase.from('users').select('*', { count: 'exact', head: true });
-    
-    const { count: vendors } = await supabase.from('vendors')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'PENDING');
+    const { count: vendors } = await supabase.from('vendors').select('*', { count: 'exact', head: true }).eq('status', 'PENDING');
+    const { count: permits } = await supabase.from('work_permits').select('*', { count: 'exact', head: true }).gt('expire_date', new Date().toISOString());
 
-    const { count: permits } = await supabase.from('work_permits')
-        .select('*', { count: 'exact', head: true })
-        .gt('expire_date', new Date().toISOString());
+    // ✅ ลองดึงจาก history ก่อน
+    let { data: history } = await supabase.from('exam_history').select('status, exam_type');
 
-    // Exam Logs อาจจะต้องโหลดมาคำนวณ passed/failed 
-    // หรือสร้าง View ใน DB จะดีกว่า แต่นี่ใช้ท่าเดิมไปก่อน
-    const { data: logs } = await supabase.from('exam_logs').select('passed');
+    // ✅ ถ้า history ว่าง ให้ดึงจาก exam_logs มาแสดงแทนชั่วคราว
+    if (!history || history.length === 0) {
+      const { data: logs } = await supabase.from('exam_logs').select('passed, exam_type');
+      history = logs?.map(l => ({
+        status: l.passed ? 'PASSED' : 'FAILED',
+        exam_type: l.exam_type
+      })) || [];
+    }
 
-    const passed = logs?.filter(l => l.passed).length || 0;
-    const failed = logs?.filter(l => !l.passed).length || 0;
+    const passed = history.filter(l => l.status === 'PASSED').length;
+    const failed = history.filter(l => l.status === 'FAILED').length;
+    const induction = history.filter(l => l.exam_type === 'INDUCTION').length;
+    const wp = history.filter(l => l.exam_type === 'WORK_PERMIT').length;
 
     return {
       totalUsers: users || 0,
@@ -293,23 +302,42 @@ export const api = {
       examSummary: [
         { name: 'Passed', value: passed },
         { name: 'Failed', value: failed }
+      ],
+      activityVolume: [
+        { name: 'Induction', value: induction },
+        { name: 'Work Permit', value: wp }
       ]
     };
   },
 
+  // ดึงประวัติการสอบทั้งหมดพร้อมข้อมูล User
+  getAllExamHistory: async () => {
+    const { data, error } = await supabase
+      .from('exam_history')
+      .select(`
+        *,
+        users (
+          name,
+          national_id,
+          vendors (name)
+        )
+      `)
+      .order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    return data;
+  },
 
-  /* =====================================================
-     8. REPORT DATA
-  ===================================================== */
-
+  // ข้อมูลสำหรับ Export และ Recent Exam History ใน AdminPanel
   getReportData: async () => {
     const { data, error } = await supabase
-      .from('exam_logs')
+      .from('exam_history')
       .select(`
         created_at,
         exam_type,
         score,
-        passed,
+        total_questions,
+        status,
         users (
           national_id,
           name,
@@ -323,16 +351,49 @@ export const api = {
     if (error) return [];
 
     return (data || []).map((log: any) => ({
-      timestamp: new Date(log.created_at), // ส่งเป็น Object Date ไปเลยเพื่อไปจัด Format ทีหลัง
+      timestamp: log.created_at, // เก็บเป็น string จาก DB เพื่อให้ new Date() ภายหลัง
       national_id: log.users?.national_id || '-',
       name: log.users?.name || '-',
       age: log.users?.age || '-',
       nationality: log.users?.nationality || '-',
       vendor: log.users?.vendors?.name || '-',
       exam_type: log.exam_type,
-      score: log.score,
-      result: log.passed ? 'PASSED' : 'FAILED'
+      score: `${log.score}/${log.total_questions}`,
+      result: log.status
     }));
-  }
+  },
 
+  // ✅ เพิ่มฟังก์ชันนี้เพื่อให้ AdminDashboard หายติดแดง
+  getDailyStats: async () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const { data, error } = await supabase
+      .from('exam_history')
+      .select('status')
+      .gte('created_at', today.toISOString());
+
+    if (error) throw error;
+
+    const total = data?.length || 0;
+    const passed = data?.filter(d => d.status === 'PASSED').length || 0;
+    const failed = total - passed;
+
+    return { total, passed, failed };
+  },
+
+  /* =====================================================
+     7. UTILS
+  ===================================================== */
+
+  getActiveWorkPermit: async (userId: string): Promise<WorkPermitSession | null> => {
+    const { data } = await supabase
+      .from('work_permits')
+      .select('*')
+      .eq('user_id', userId)
+      .gt('expire_date', new Date().toISOString())
+      .limit(1)
+      .maybeSingle()
+    return data || null
+  }
 }

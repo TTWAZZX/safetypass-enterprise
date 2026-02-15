@@ -9,13 +9,27 @@ import { Shield, Loader2 } from 'lucide-react';
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './components/ToastProvider';
+import VerifyPage from './components/VerifyPage';
 
 const AppContent: React.FC = () => {
   const { t } = useTranslation();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  
+  // ✅ เพิ่ม State เพื่อดักจับ Path ปัจจุบัน (แก้ปัญหาหน้าขาวตอนสแกน)
+  const [currentPath, setCurrentPath] = useState(window.location.pathname);
 
   useEffect(() => {
+    // ฟังก์ชันอัปเดต Path เมื่อมีการกด Back/Forward หรือเปลี่ยน URL
+    const handleLocationChange = () => {
+      setCurrentPath(window.location.pathname);
+    };
+
+    window.addEventListener('popstate', handleLocationChange);
+    
+    // ตั้งค่าตรวจสอบ Path ทุกครั้งที่ App โหลดใหม่
+    handleLocationChange();
+
     try {
       // ✅ บังคับลบ Class Dark ทิ้งทันทีที่โหลด App
       document.documentElement.classList.remove('dark');
@@ -30,6 +44,8 @@ const AppContent: React.FC = () => {
     } finally {
       setLoading(false);
     }
+
+    return () => window.removeEventListener('popstate', handleLocationChange);
   }, []);
 
   const handleLogin = (user: User) => {
@@ -42,6 +58,12 @@ const AppContent: React.FC = () => {
     localStorage.removeItem('safety_pass_current_user');
   };
 
+  // 🟢 ตรวจสอบ URL สำหรับหน้า Verify (ดักหน้าสุดเพื่อให้เข้าถึงได้โดยไม่ต้อง Login)
+  // ใช้ currentPath แทน window.location.pathname โดยตรงเพื่อให้ React Re-render
+  if (currentPath.startsWith('/verify/')) {
+    return <VerifyPage />;
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -51,7 +73,6 @@ const AppContent: React.FC = () => {
   }
 
   return (
-    // ✅ ลบ transition-colors และ dark:... ออก
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans">
       
       {/* Header (สีเข้มถาวร เพื่อความสวยงาม) */}
