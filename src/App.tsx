@@ -5,7 +5,7 @@ import Auth from './components/Auth';
 import UserPanel from './components/UserPanel';
 import AdminPanel from './components/AdminPanel';
 import LanguageSwitcher from './components/LanguageSwitcher';
-import { Shield, Loader2, LogOut } from 'lucide-react';
+import { Shield, Loader2, LogOut, User as UserIcon } from 'lucide-react';
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './components/ToastProvider';
@@ -64,49 +64,56 @@ const AppContent: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans">
+    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans relative">
       
-      {/* --- 📱 GLOBAL HEADER: ปรับให้เล็กลงพิเศษ และเลื่อนหายไปตามเนื้อหา (ไม่ Sticky) --- */}
-      <header className="bg-[#0f172a] text-white py-2.5 shadow-md">
-        <div className="max-w-7xl mx-auto px-4 flex justify-between items-center gap-2">
+      {/* --- 🌟 REDESIGNED HEADER: Modern & Integrated --- */}
+      <header className="bg-slate-900 text-white shadow-lg sticky top-0 z-50 backdrop-blur-md bg-opacity-95 border-b border-slate-800">
+        <div className="max-w-7xl mx-auto px-4 h-16 flex justify-between items-center gap-4">
           
-          {/* Logo Section - Compact Style */}
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="bg-blue-600 p-1.5 rounded-lg shadow-lg shadow-blue-500/10 flex-shrink-0">
-              <Shield size={16} className="md:w-5 md:h-5 text-white" />
+          {/* Logo Section */}
+          <div className="flex items-center gap-3">
+            <div className="bg-gradient-to-br from-blue-600 to-indigo-600 p-2 rounded-xl shadow-lg shadow-blue-500/20 ring-1 ring-white/10">
+              <Shield size={20} className="text-white" />
             </div>
-            <div className="flex flex-col min-w-0">
-              <h1 className="text-[10px] md:text-sm font-black tracking-tighter uppercase leading-none truncate">
+            <div className="flex flex-col">
+              <h1 className="text-sm font-black tracking-tight uppercase leading-none text-white">
                 {t('app.name')}
               </h1>
-              <p className="text-[6px] md:text-[8px] text-blue-400 uppercase tracking-tighter font-bold mt-0.5 truncate opacity-80">
+              <p className="text-[9px] text-slate-400 uppercase tracking-[0.2em] font-bold mt-0.5">
                 {t('app.tagline')}
               </p>
             </div>
           </div>
 
-          {/* Actions Section - Space Saving */}
-          <div className="flex items-center gap-2 md:gap-6 flex-shrink-0">
-            {/* ย่อขนาดตัวเลือกภาษาในมือถือ */}
-            <div className="scale-75 md:scale-90 origin-right">
+          {/* Actions Section */}
+          <div className="flex items-center gap-3 md:gap-5">
+            {/* Language Switcher */}
+            <div className="bg-slate-800/50 rounded-lg p-1 border border-slate-700">
                <LanguageSwitcher />
             </div>
 
             {currentUser && (
-              <div className="flex items-center gap-2 md:gap-4 border-l border-white/10 pl-2 md:pl-6">
-                <div className="text-right hidden lg:block">
-                  <p className="text-xs font-black leading-none">{currentUser.name}</p>
-                  <p className="text-[8px] text-slate-500 font-bold uppercase tracking-tighter mt-1">
-                    {currentUser.role}
-                  </p>
+              <div className="flex items-center gap-3 pl-3 md:pl-5 border-l border-slate-700">
+                
+                {/* User Info (Hidden on Mobile) */}
+                <div className="text-right hidden md:block">
+                  <p className="text-xs font-bold text-white leading-none mb-0.5">{currentUser.name}</p>
+                  <div className="flex items-center justify-end gap-1">
+                     <span className={`w-1.5 h-1.5 rounded-full ${currentUser.role === 'ADMIN' ? 'bg-amber-500' : 'bg-emerald-500'}`}></span>
+                     <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wide">
+                       {currentUser.role}
+                     </p>
+                  </div>
                 </div>
+
+                {/* Logout Button */}
                 <button 
                   onClick={handleLogout}
-                  className="flex items-center gap-1.5 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white p-1.5 md:px-3 md:py-1.5 rounded-lg text-[9px] font-black transition-all border border-red-500/20"
+                  className="flex items-center gap-2 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white px-3 py-2 rounded-xl text-[10px] font-black transition-all border border-red-500/20 active:scale-95 group"
                   title="Logout"
                 >
-                  <LogOut size={12} />
-                  <span className="hidden md:inline uppercase">{t('common.logout')}</span>
+                  <LogOut size={14} className="group-hover:translate-x-0.5 transition-transform" />
+                  <span className="hidden md:inline uppercase tracking-widest">Logout</span>
                 </button>
               </div>
             )}
@@ -115,7 +122,7 @@ const AppContent: React.FC = () => {
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-grow">
+      <main className="flex-grow relative z-0">
         {!currentUser ? (
           <Auth onLogin={handleLogin} />
         ) : (
@@ -132,13 +139,15 @@ const AppContent: React.FC = () => {
         )}
       </main>
 
-      {/* Footer - Compact */}
-      <footer className="bg-white border-t border-slate-200 py-6 mt-6">
+      {/* Footer - Integrated Style */}
+      <footer className="bg-slate-50 border-t border-slate-200 py-8 mt-auto">
         <div className="max-w-7xl mx-auto px-4 text-center">
-          <p className="text-slate-400 text-[9px] font-bold uppercase tracking-[0.2em]">
-            © 2026 SafetyPass • Enterprise System
-            <br />
-            <span className="text-slate-300 opacity-60 font-medium">Internal Use Only</span>
+          <div className="inline-flex items-center gap-2 mb-2 opacity-50 grayscale hover:grayscale-0 transition-all duration-500">
+             <Shield size={14} className="text-blue-500"/>
+             <span className="text-xs font-black text-slate-700 tracking-tight">SafetyPass Enterprise</span>
+          </div>
+          <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.2em]">
+            © 2026 Secure Access System • Internal Use Only
           </p>
         </div>
       </footer>

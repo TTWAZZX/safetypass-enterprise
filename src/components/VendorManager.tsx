@@ -24,13 +24,29 @@ import {
   CalendarClock
 } from 'lucide-react';
 
-// ✅ ฟังก์ชันช่วยสร้าง UUID (สำหรับพนักงานที่ยังไม่มีบัญชี)
+// ✅ ฟังก์ชันช่วยสร้าง UUID
 function generateUUID() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
     var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
     return v.toString(16);
   });
 }
+
+// ✅ ฟังก์ชันแปลงวันที่จาก Excel (รองรับทั้ง Text และ Serial Number)
+const processExcelDate = (excelDate: any): string | null => {
+    if (!excelDate) return null;
+
+    // กรณีเป็นตัวเลข (Excel Serial Date) เช่น 46387
+    if (typeof excelDate === 'number') {
+        // Excel เริ่มนับวันที่จาก 30 ธ.ค. 1899
+        const date = new Date(Math.round((excelDate - 25569) * 86400 * 1000));
+        return !isNaN(date.getTime()) ? date.toISOString() : null;
+    }
+
+    // กรณีเป็น String (เช่น "2026-12-31" หรือ "31/12/2026")
+    const date = new Date(excelDate);
+    return !isNaN(date.getTime()) ? date.toISOString() : null;
+};
 
 const VendorManager: React.FC = () => {
   const { showToast } = useToastContext();
@@ -185,7 +201,7 @@ const VendorManager: React.FC = () => {
     showToast('Exported Successfully', 'success');
   };
 
-  // ✅ แก้ไข: เพิ่ม Logic ตรวจสอบ ID และสร้าง UUID ใหม่ถ้าจำเป็น
+  // ✅ แก้ไข: ใช้ processExcelDate เพื่อแปลงวันที่ให้ถูกต้อง
   const handleUserImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -206,29 +222,32 @@ const VendorManager: React.FC = () => {
           const vName = row['VendorName'] || row['Vendor'];
           const age = row['Age'] ? Number(row['Age']) : null;
           const nationality = row['Nationality'] || 'ไทย (Thai)';
+          
+          // ✅ แปลงวันที่ Induction Expiry อย่างฉลาด (รับได้ทั้ง Text และ Number)
+          const inductionExpiry = processExcelDate(row['Induction Expiry']);
 
           if (name && nid) {
             const vendor = allVendors.find(v => v.name === vName);
             
-            // 1. เช็คก่อนว่ามี User คนนี้อยู่แล้วหรือยัง (โดยใช้ National ID)
+            // 1. เช็คก่อนว่ามี User คนนี้อยู่แล้วหรือยัง
             const { data: existingUser } = await supabase
                 .from('users')
                 .select('id')
                 .eq('national_id', nid)
                 .maybeSingle();
 
-            // 2. ถ้ามี -> ใช้ ID เดิม (Update)
-            //    ถ้าไม่มี -> สร้าง UUID ใหม่ (Insert)
+            // 2. ใช้ ID เดิม หรือ สร้างใหม่
             const userId = existingUser ? existingUser.id : generateUUID();
 
             const { error } = await supabase.from('users').upsert([{
-              id: userId, // ✅ ใส่ ID ลงไป (สำคัญมาก!)
+              id: userId,
               name, 
               national_id: nid, 
               vendor_id: vendor?.id || null, 
               role: 'USER',
               age: age,
-              nationality: nationality
+              nationality: nationality,
+              induction_expiry: inductionExpiry // ✅ ค่านี้จะถูกต้องแล้ว ไม่เป็นปี 2513
             }], { onConflict: 'national_id' }); 
 
             if (!error) {
@@ -303,7 +322,7 @@ const VendorManager: React.FC = () => {
     const vendorName = window.prompt("ชื่อบริษัทสังกัด (Affiliation):");
     const vendor = allVendors.find(v => v.name === vendorName);
     
-    // ✅ เพิ่มการสร้าง UUID ให้กับการเพิ่ม Manual ด้วย
+    // ✅ เพิ่มการสร้าง UUID ให้กับการเพิ่ม Manual
     const { error } = await supabase.from('users').insert([{ 
         id: generateUUID(),
         name, 

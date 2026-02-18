@@ -3,6 +3,7 @@ import { api } from '../services/supabaseApi';
 import { User, Vendor } from '../types';
 import { useTranslation } from '../context/LanguageContext';
 import { UserPlus, LogIn, ChevronRight, AlertCircle, Loader2, ShieldCheck, Globe2 } from 'lucide-react';
+import PrivacyPolicyModal from './PrivacyPolicyModal'; // ✅ Import Modal ใหม่
 
 interface AuthProps {
   onLogin: (user: User) => void;
@@ -23,16 +24,51 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [isOtherNationality, setIsOtherNationality] = useState(false); 
   const [vendorId, setVendorId] = useState('');
   const [otherVendor, setOtherVendor] = useState('');
+  const [pdpaAccepted, setPdpaAccepted] = useState(false);
+  const [showPolicyModal, setShowPolicyModal] = useState(false); // ✅ State สำหรับเปิด Modal
   
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [fetchingUser, setFetchingUser] = useState(false);
 
   useEffect(() => {
     if (mode === 'REGISTER') {
       api.getVendors().then(setVendors);
     }
   }, [mode]);
+
+  const handleIdBlur = async () => {
+    if (!regId || regId.length < 13) return; 
+    
+    setFetchingUser(true);
+    try {
+      const userData = await api.checkUser(regId);
+      if (userData) {
+        setName(userData.name || '');
+        setAge(userData.age ? String(userData.age) : '');
+        
+        if (userData.vendor_id) {
+           setVendorId(userData.vendor_id);
+        }
+        
+        if (userData.nationality) {
+           const commonNationalities = ['ไทย (Thai)', 'พม่า (Myanmar)', 'กัมพูชา (Cambodian)', 'ลาว (Lao)'];
+           if (commonNationalities.includes(userData.nationality)) {
+              setNationality(userData.nationality);
+              setIsOtherNationality(false);
+           } else {
+              setIsOtherNationality(true);
+              setNationality(userData.nationality);
+           }
+        }
+      }
+    } catch (err) {
+      console.error("Error auto-filling user data", err);
+    } finally {
+      setFetchingUser(false);
+    }
+  };
 
   const handleNationalityChange = (val: string) => {
     if (val === 'OTHER') {
@@ -63,11 +99,10 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     setLoading(true);
     setError("");
     try {
-      // ✅ ส่งข้อมูลไปยัง api.register (ระบบจะตรวจสอบและลบข้อมูล Placeholder ให้เองถ้ามี)
       const user = await api.register(
         regId, 
         name, 
-        vendorId === 'OTHER' ? '' : vendorId, // ถ้าเลือก Other ให้ส่งค่าว่างไปก่อน (Logic ใน api จะสร้าง Vendor ใหม่ให้)
+        vendorId === 'OTHER' ? '' : vendorId, 
         Number(age), 
         nationality, 
         vendorId === 'OTHER' ? otherVendor : undefined
@@ -127,6 +162,13 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 onChange={e => setLoginId(e.target.value)}
                 placeholder="13-digit National ID"
               />
+              {/* ✅ Safety Hint for Login */}
+              <div className="flex items-center gap-1.5 mt-1.5 ml-1 opacity-80">
+                <ShieldCheck size={10} className="text-emerald-500" />
+                <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">
+                  Secure encrypted authentication
+                </span>
+              </div>
             </div>
             <button disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-2xl shadow-lg shadow-blue-100 transition-all flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95 text-xs uppercase tracking-widest">
                 {loading ? <Loader2 size={18} className="animate-spin" /> : <>Login <ChevronRight size={16} /></>}
@@ -139,8 +181,25 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           <form onSubmit={handleRegister} className="space-y-3.5 text-left">
             <div className="grid grid-cols-2 gap-3">
                 <div className="col-span-2 space-y-1">
-                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('auth.national_id')}</label>
-                    <input required value={regId} onChange={e => setRegId(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-xs shadow-inner" placeholder="National ID Number" />
+                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex justify-between">
+                       {t('auth.national_id')}
+                       {fetchingUser && <span className="text-blue-500 animate-pulse">Checking...</span>}
+                    </label>
+                    <input 
+                        required 
+                        value={regId} 
+                        onChange={e => setRegId(e.target.value)} 
+                        onBlur={handleIdBlur}
+                        className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-xs shadow-inner" 
+                        placeholder="National ID Number" 
+                    />
+                    {/* ✅ Safety Hint for Registration */}
+                    <div className="flex items-center gap-1.5 mt-1.5 ml-1 opacity-80">
+                      <ShieldCheck size={10} className="text-emerald-500" />
+                      <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest leading-none">
+                        Protected by military-grade encryption (pgcrypto)
+                      </span>
+                    </div>
                 </div>
                 <div className="col-span-2 space-y-1">
                     <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('auth.full_name')}</label>
@@ -198,7 +257,34 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               </div>
             )}
 
-            <button disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-2xl shadow-lg shadow-blue-100 transition-all flex items-center justify-center gap-2 disabled:opacity-50 mt-2 active:scale-95 text-xs uppercase tracking-widest">
+            {/* ✅ PDPA Checkbox Section */}
+            <div className="mt-4 flex items-start gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+              <input 
+                type="checkbox" 
+                id="pdpa"
+                checked={pdpaAccepted}
+                onChange={(e) => setPdpaAccepted(e.target.checked)}
+                className="mt-1 w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+              />
+              <label htmlFor="pdpa" className="text-[10px] text-slate-500 leading-tight cursor-pointer select-none">
+                ข้าพเจ้ายอมรับ 
+                <span 
+                    className="text-blue-600 font-bold underline mx-1 hover:text-blue-800 transition-colors"
+                    onClick={(e) => {
+                        e.preventDefault(); // ป้องกันไม่ให้ไปติ๊ก Checkbox
+                        setShowPolicyModal(true);
+                    }}
+                >
+                    นโยบายความเป็นส่วนตัว (PDPA)
+                </span> 
+                และยินยอมให้จัดเก็บข้อมูลเพื่อการตรวจสอบความปลอดภัย
+              </label>
+            </div>
+
+            <button 
+                disabled={loading || !pdpaAccepted}
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-black py-4 rounded-2xl shadow-lg shadow-blue-100 transition-all flex items-center justify-center gap-2 mt-4 active:scale-95 text-xs uppercase tracking-widest"
+            >
               {loading ? <Loader2 size={18} className="animate-spin" /> : <>Register Account</>}
             </button>
           </form>
@@ -210,6 +296,9 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           </div>
         )}
       </div>
+
+      {/* ✅ Render Policy Modal */}
+      {showPolicyModal && <PrivacyPolicyModal onClose={() => setShowPolicyModal(false)} />}
     </div>
   );
 };

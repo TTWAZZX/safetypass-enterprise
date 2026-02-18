@@ -13,9 +13,9 @@ import {
   BookOpen,
   Send,
   Clock,
-  RotateCcw,    // ✅ ใช้จาก Library โดยตรง
-  ExternalLink, // ✅ เพิ่มปุ่มขยายสำหรับมือถือ
-  Maximize2     // ✅ เพิ่มปุ่มขยาย
+  RotateCcw,
+  ExternalLink,
+  Maximize2
 } from 'lucide-react';
 
 interface ExamSystemProps {
@@ -46,6 +46,40 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
   const [currentPage, setCurrentPage] = useState(0);
   const questionsPerPage = 5;
 
+  // ✅ 1. Anti-Cheating System: ป้องกันการโกง
+  useEffect(() => {
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+    };
+
+    const handleCopyPaste = (e: ClipboardEvent) => {
+      e.preventDefault();
+      alert("⚠️ Security Alert: Action not allowed during examination.");
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.key === 'F12' || 
+        (e.ctrlKey && e.shiftKey && e.key === 'I') ||
+        (e.ctrlKey && (e.key === 'c' || e.key === 'v'))
+      ) {
+        e.preventDefault();
+      }
+    };
+
+    document.addEventListener('contextmenu', handleContextMenu);
+    document.addEventListener('copy', handleCopyPaste);
+    document.addEventListener('cut', handleCopyPaste);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('contextmenu', handleContextMenu);
+      document.removeEventListener('copy', handleCopyPaste);
+      document.removeEventListener('cut', handleCopyPaste);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
   // ✅ ฟังก์ชันสำหรับการสลับลำดับ (Fisher-Yates Shuffle)
   const shuffleArray = <T,>(array: T[]): T[] => {
     const shuffled = [...array];
@@ -58,7 +92,6 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
 
   useEffect(() => {
     api.getQuestions(type).then((rawQuestions) => {
-      // ✅ สลับข้อสอบ และสลับตัวเลือกภายในแต่ละข้อ
       const prepared = shuffleArray(rawQuestions).map(q => ({
         ...q,
         choices_json: shuffleArray(q.choices_json)
@@ -70,7 +103,6 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
   const handleSubmit = async () => {
     setLoading(true);
     try {
-      // ✅ คำนวณคะแนนฝั่ง Client
       let correctCount = 0;
       questions.forEach((q) => {
         const selectedIdx = answers[q.id];
@@ -82,10 +114,8 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
         }
       });
 
-      // ส่งข้อมูลไปบันทึก
       const result = await api.submitExamWithAnswers(type, answers, permitNo);
       
-      // อัปเดตสถานะ
       setScore(correctCount);
       setPassed(result.passed); 
       setStep('RESULT');
@@ -128,24 +158,26 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
 
   const isQuestionAnswered = (id: string) => answers[id] !== undefined;
 
-  /* ================= 📖 READ STEP (Mobile Optimized) ================= */
+  /* ================= 📖 READ STEP (Mobile Optimized + Desktop Fixed) ================= */
   if (step === 'READ') {
     const pdfUrl = `https://qdodmxrecioltwdryhec.supabase.co/storage/v1/object/public/manuals/${type.toLowerCase()}.pdf`;
 
     return (
-      <div className="max-w-2xl mx-auto p-4 md:p-6 animate-in slide-in-from-bottom-4 duration-500 text-left">
+      <div className="max-w-2xl mx-auto p-4 md:p-6 animate-in slide-in-from-bottom-4 duration-500 text-left select-none">
         <button onClick={onBack} className="flex items-center gap-1.5 text-slate-400 hover:text-blue-600 mb-4 font-black text-[10px] uppercase tracking-widest transition-all">
           <ArrowLeft size={16} /> {t('common.back')}
         </button>
 
-        <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[85vh] md:h-auto">
+        {/* ✅ แก้ไขตรงนี้: ลบ md:h-auto ออก แล้วใช้ h-[85vh] ตลอด หรือกำหนดความสูงขั้นต่ำบน Desktop */}
+        <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[85vh]">
+          
           {/* Header Bar */}
           <div className="p-5 border-b border-slate-100 bg-slate-50 flex items-center justify-between flex-shrink-0">
             <div>
               <h2 className="text-lg md:text-xl font-black text-slate-900 leading-tight">{t('user.manual')}</h2>
               <p className="text-[10px] text-blue-600 font-bold uppercase tracking-widest mt-0.5">{type} Safety Training</p>
             </div>
-            {/* ✅ ปุ่ม Full Screen บน Desktop */}
+            {/* Desktop Full Screen Button */}
             <a 
               href={pdfUrl} 
               target="_blank" 
@@ -157,14 +189,14 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
             </a>
           </div>
 
-          {/* ✅ ส่วนแสดงผล PDF: ปรับให้ยืดเต็มพื้นที่ (Flex Grow) */}
+          {/* ✅ ส่วนแสดงผล PDF */}
           <div className="flex-grow bg-slate-200 relative overflow-hidden">
             <iframe 
               src={`${pdfUrl}#toolbar=0&navpanes=0&view=FitH`} 
               className="w-full h-full border-none absolute inset-0"
               title="Manual Viewer"
             />
-            {/* ✅ ปุ่มลอย Full Screen สำหรับมือถือ */}
+            {/* Mobile Floating Button */}
             <div className="absolute bottom-4 right-4 md:hidden">
                <a 
                 href={pdfUrl}
@@ -208,7 +240,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
     if (passed) return <DigitalCard user={user} onBack={onComplete} />; 
 
     return (
-      <div className="max-w-md mx-auto text-center p-8 bg-white rounded-[2.5rem] shadow-xl border border-slate-100 mt-10 animate-in zoom-in text-left">
+      <div className="max-w-md mx-auto text-center p-8 bg-white rounded-[2.5rem] shadow-xl border border-slate-100 mt-10 animate-in zoom-in text-left select-none">
         <div className="bg-red-50 w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6">
           <AlertCircle className="w-10 h-10 text-red-500" />
         </div>
@@ -236,7 +268,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
   const progressPercent = totalQuestions === 0 ? 0 : Math.round((answeredCount / totalQuestions) * 100);
 
   return (
-    <div className="max-w-2xl mx-auto p-4 md:p-6 animate-in slide-in-from-bottom-4 duration-500 text-left pb-32">
+    <div className="max-w-2xl mx-auto p-4 md:p-6 animate-in slide-in-from-bottom-4 duration-500 text-left pb-32 select-none">
       
       {/* 📍 Top Sticky Progress & Tracker Grid */}
       <div className="sticky top-[-1px] bg-slate-50/95 backdrop-blur-md pt-2 pb-6 mb-8 z-20 border-b border-slate-200">

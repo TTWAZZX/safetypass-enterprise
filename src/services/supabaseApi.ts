@@ -4,7 +4,7 @@ import { User, Vendor, ExamType, Question, WorkPermitSession, Choice } from '../
 export const api = {
 
   /* =====================================================
-     1. AUTH & REGISTRATION
+     1. AUTH & REGISTRATION (SECURE MODE 🔒)
   ===================================================== */
 
   login: async (nationalId: string): Promise<User> => {
@@ -18,6 +18,7 @@ export const api = {
 
     if (authError) throw new Error('เข้าสู่ระบบไม่สำเร็จ: ' + authError.message)
 
+    // 1. ดึงข้อมูล Profile ทั่วไป (จะได้ national_id = "PROTECTED")
     const { data: userData, error: userError } = await supabase
       .from('users')
       .select('*, vendors(*)')
@@ -26,10 +27,39 @@ export const api = {
 
     if (userError || !userData) throw new Error('ไม่พบข้อมูลผู้ใช้งานในระบบ')
     
+    // 2. 🔐 SECURE DECRYPT: เรียก RPC เพื่อถอดรหัสเลขบัตรจริงมาแสดงผล
+    const { data: realId, error: decryptError } = await supabase.rpc('get_my_decrypted_id');
+    
+    if (decryptError) console.error("Decryption failed:", decryptError);
+
     return {
       ...userData,
+      national_id: realId || userData.national_id, // ใช้ค่าที่ถอดรหัสแล้ว ถ้าไม่มีให้ใช้ค่าเดิม
       vendor_id: userData.vendor_id 
     } as unknown as User
+  },
+
+  // ✅ checkUser แบบแก้ไข: ใส่ as any เพื่อแก้ตัวแดง
+  checkUser: async (nationalId: string) => {
+    const { data, error } = await supabase
+      .rpc('check_user_exists', { search_id: nationalId })
+      .maybeSingle();
+      
+    if (error) {
+        console.error("Check user error:", error);
+        return null;
+    }
+    
+    // ✅ FIX: แปลง data เป็น any ก่อน เพื่อให้เข้าถึง vendor_id ได้โดยไม่ติดแดง
+    const userData = data as any;
+
+    // ถ้าเจอข้อมูล ให้ไปดึงชื่อ vendor มาแปะเพิ่ม
+    if (userData && userData.vendor_id) {
+        const { data: vendor } = await supabase.from('vendors').select('name').eq('id', userData.vendor_id).single();
+        return { ...userData, vendors: vendor };
+    }
+    
+    return userData;
   },
 
   register: async (
@@ -49,43 +79,70 @@ export const api = {
       finalVendorId = newVendor.id
     }
 
-    // ✅ เพิ่ม Logic ตรวจสอบข้อมูล Placeholder (จากการ Import)
-    // ถ้ามีข้อมูลที่ Admin Import ไว้แล้ว ให้ลบออกก่อน เพื่อให้การสมัครสมาชิกสร้างข้อมูลใหม่ที่ผูกกับ Auth ID ได้ถูกต้อง
-    const { data: existingUser } = await supabase.from('users').select('id').eq('national_id', nationalId).single();
-    if (existingUser) {
-        // ลบข้อมูล Placeholder เก่าทิ้ง
-        await supabase.from('users').delete().eq('national_id', nationalId);
-    }
+    // ---------------------------------------------------------
+    // ✅ FIX 1: แก้ปัญหา 406 & Handle Encrypted Data Check
+    // ---------------------------------------------------------
+    // ใช้ RPC เช็ค Hash แทนการ Select ตรงๆ (เพราะข้อมูลจริงถูกเข้ารหัสแล้ว)
+    const { data: existingUser } = await supabase
+        .rpc('check_user_exists', { search_id: nationalId })
+        .maybeSingle();
+    
+    // ถ้ามีข้อมูลเก่า (แต่เป็น Placeholder/Inactive) ระบบ Trigger จะจัดการ Hash ให้เองเมื่อเรา Insert ใหม่ทับลงไป
 
     const email = `${nationalId}@safetypass.com`
     const password = nationalId 
 
-    const { data: authData, error: authError } = await supabase.auth.signUp({
+    // ---------------------------------------------------------
+    // ✅ FIX 2: Auto Login Strategy
+    // ---------------------------------------------------------
+    let authUser = null;
+    
+    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
       options: { data: { national_id: nationalId, name: name } }
-    })
+    });
 
-    if (authError) throw new Error(authError.message)
-    if (!authData.user) throw new Error('Auth Error')
+    if (signUpError) {
+        if (signUpError.status === 422 || signUpError.message.includes('already registered')) {
+            console.log("User exists (422), attempting Auto-Login...");
+            const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+                email,
+                password
+            });
 
-    // ✅ Insert ข้อมูลใหม่ครบทุกช่อง (Age, Nationality)
+            if (signInError) throw new Error('บัญชีนี้มีอยู่แล้วแต่เข้าสู่ระบบไม่สำเร็จ (รหัสผ่านอาจผิดพลาด)');
+            authUser = signInData.user;
+        } else {
+            throw new Error(signUpError.message);
+        }
+    } else {
+        authUser = signUpData.user;
+    }
+
+    if (!authUser) throw new Error('Auth Error: Failed to acquire user session.');
+
+    // 3. Upsert ข้อมูล Profile (Trigger ใน DB จะทำการเข้ารหัสให้เองอัตโนมัติ)
     const { data: newUser, error: dbError } = await supabase
       .from('users')
-      .insert({
-        id: authData.user.id,
-        national_id: nationalId,
+      .upsert({
+        id: authUser.id,
+        national_id: nationalId, // ส่งค่าจริงไป เดี๋ยว Trigger จะแปลงเป็น 'PROTECTED' และเก็บ Hash
         name,
         age,            
         nationality,    
         vendor_id: finalVendorId,
-        role: 'USER'
-      })
+        role: 'USER',
+        pdpa_agreed: true,
+        pdpa_agreed_at: new Date().toISOString()
+      }, { onConflict: 'id' })
       .select('*, vendors(*)')
       .single()
 
     if (dbError) throw new Error('บันทึก Profile ไม่สำเร็จ: ' + dbError.message)
-    return newUser as unknown as User
+    
+    // Return ค่ากลับไปโดยหลอกว่าเป็น ID จริง (เพื่อให้ UI แสดงผลถูกต้องทันทีโดยไม่ต้อง fetch ใหม่)
+    return { ...newUser, national_id: nationalId } as unknown as User
   },
 
   /* =====================================================
