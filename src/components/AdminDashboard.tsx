@@ -100,10 +100,10 @@ const AdminDashboard: React.FC = () => {
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-4 border-b border-slate-200 pb-6">
         <div className="space-y-1">
           <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight uppercase">Dashboard Analytics</h2>
-          <p className="text-slate-400 font-bold uppercase text-[9px] md:text-[10px] tracking-[0.2em] flex items-center gap-2">
+          <div className="text-slate-400 font-bold uppercase text-[9px] md:text-[10px] tracking-[0.2em] flex items-center gap-2">
             <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" /> 
             Security Monitoring & Performance Metrics
-          </p>
+          </div>
         </div>
         <div className="flex w-full lg:w-auto gap-2">
           <button 
@@ -120,7 +120,7 @@ const AdminDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* 2. Visual Statistics Widgets (📈 ยกระดับ UX ตรงนี้) */}
+      {/* 2. Visual Statistics Widgets */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard 
           icon={<Activity />} 
@@ -255,19 +255,19 @@ const AdminDashboard: React.FC = () => {
                   </td>
                   <td className="px-8 py-6 text-right">
                     <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-[9px] font-black uppercase border shadow-sm ${item.status === 'PASSED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100 glow-emerald' : 'bg-red-50 text-red-600 border-red-100 glow-red'}`}>
-                       <div className={`w-1.5 h-1.5 rounded-full ${item.status === 'PASSED' ? 'bg-emerald-500' : 'bg-red-500'}`} />
-                       {item.status}
+                        <div className={`w-1.5 h-1.5 rounded-full ${item.status === 'PASSED' ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                        {item.status}
                     </div>
                   </td>
                 </tr>
               )) : (
                 <tr>
-                   <td colSpan={5} className="px-8 py-32 text-center">
+                    <td colSpan={5} className="px-8 py-32 text-center">
                       <div className="flex flex-col items-center opacity-20">
                         <Activity size={60} className="text-slate-300 mb-4 animate-pulse" />
                         <p className="font-black text-slate-400 uppercase text-xs tracking-widest italic">No matching records detected</p>
                       </div>
-                   </td>
+                    </td>
                 </tr>
               )}
             </tbody>

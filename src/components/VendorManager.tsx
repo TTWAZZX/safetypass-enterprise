@@ -218,7 +218,7 @@ const VendorManager: React.FC = () => {
     showToast('Exported Successfully', 'success');
   };
 
-  // ✅ แก้ไขปัญหาการนำเข้า: รองรับหัวตารางไฟล์จริงของคุณ และแก้ปัญหาเลขยกกำลัง (Scientific Notation)
+  // ✅ แก้ไขปัญหาการนำเข้า: รองรับหัวตารางไฟล์จริง และแก้ปัญหาเลขยกกำลัง (Scientific Notation)
   const handleUserImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -233,7 +233,6 @@ const VendorManager: React.FC = () => {
         let fail = 0;
         
         for (const row of data) {
-          // ✅ ดึงค่าจากหัวตารางที่มีช่องว่างตามไฟล์ Excel จริงของคุณ
           const name = (row['Name'] || '').toString().trim();
           
           // ✅ จัดการเลขบัตรประชาชน (แก้ปัญหา 1.1457E+12)

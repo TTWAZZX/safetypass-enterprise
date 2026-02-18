@@ -77,7 +77,7 @@ export const api = {
     }
 
     // ---------------------------------------------------------
-    // ✅ จุดที่แก้ไข: ตรวจสอบข้อมูลที่ Admin Import ไว้ก่อนหน้า
+    // ✅ 1. ตรวจสอบข้อมูลที่ Admin Import ไว้ก่อนหน้า (Conflict Check)
     // ---------------------------------------------------------
     const { data: existingUser } = await supabase
         .rpc('check_user_exists', { search_id: nationalId })
@@ -88,7 +88,7 @@ export const api = {
 
     let authUser = null;
     
-    // 1. ลองสมัครบัญชี Auth
+    // 2. ลองสมัครบัญชี Auth
     const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
@@ -96,7 +96,7 @@ export const api = {
     });
 
     if (signUpError) {
-        // 2. ถ้าบัญชีมีอยู่แล้ว (เช่น Admin เคยลงทะเบียนให้ หรือเคยกดสมัครแล้ว) ให้ทำการ Sign In แทน
+        // ถ้าบัญชีมีอยู่แล้ว (เช่น Admin เคยลงทะเบียนให้ หรือเคยกดสมัครแล้ว) ให้ทำการ Sign In แทน
         if (signUpError.status === 422 || signUpError.message.includes('already registered')) {
             const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
                 email,
@@ -114,7 +114,7 @@ export const api = {
     if (!authUser) throw new Error('ไม่สามารถเชื่อมต่อระบบยืนยันตัวตนได้');
 
     // ---------------------------------------------------------
-    // ✅ จุดที่แก้ไข: ใช้ upsert โดยอ้างอิงจาก national_id_hash (ห้ามใส่ ID ถ้าเป็นคนเดิม)
+    // ✅ 3. ใช้ upsert โดยอ้างอิงจาก national_id_hash (Fix Duplicate Key)
     // ---------------------------------------------------------
     const payload: any = {
       name,
@@ -127,7 +127,7 @@ export const api = {
       pdpa_agreed_at: new Date().toISOString()
     };
 
-    // ถ้า Admin Import ข้อมูลไว้แล้ว ให้ใช้ ID เดิมของพนักงานคนนั้น
+    // ถ้า Admin Import ข้อมูลไว้แล้ว ให้ใช้ ID เดิมของพนักงานคนนั้นเพื่อ Update ทับ
     if (existingUser && (existingUser as any).id) {
         payload.id = (existingUser as any).id;
     } else {
@@ -136,7 +136,7 @@ export const api = {
 
     const { data: newUser, error: dbError } = await supabase
       .from('users')
-      .upsert(payload, { onConflict: 'national_id_hash' }) // ✅ แก้ไขให้ Upsert ผ่าน Hash
+      .upsert(payload, { onConflict: 'national_id_hash' }) 
       .select('*, vendors(*)')
       .single()
 
@@ -169,7 +169,6 @@ export const api = {
     return data || []
   },
 
-  // ✅ ฟังก์ชันที่เพิ่มมาใหม่สำหรับ VendorManager.tsx
   approveVendor: async (id: string) => {
     const { error } = await supabase.from('vendors')
       .update({ status: 'APPROVED' })
@@ -203,7 +202,7 @@ export const api = {
       .select('value')
       .eq('key', key)
       .single()
-    return Number(data?.value || 0)
+    return Number(data?.value || 80) // Default 80
   },
 
   updateSystemSetting: async (key: string, value: number) => {
@@ -220,13 +219,13 @@ export const api = {
   },
 
   /* =====================================================
-      4. QUESTIONS CRUD
+     4. QUESTIONS CRUD
   ===================================================== */
 
   getQuestions: async (type: ExamType): Promise<Question[]> => {
     const { data, error } = await supabase
       .from('questions')
-      .select('*') // ดึงทั้งหมดเพื่อรองรับฟิลด์ pattern และอื่นๆ
+      .select('*') 
       .eq('type', type)
       .eq('is_active', true);
 
@@ -269,7 +268,6 @@ export const api = {
      5. EXAM SUBMISSION & HISTORY
   ===================================================== */
 
-  // ✅ ฟังก์ชันที่เพิ่มมาใหม่สำหรับ VendorManager.tsx
   deleteUser: async (userId: string) => {
     const { error } = await supabase
       .from('users')
@@ -324,9 +322,10 @@ export const api = {
     return { success: true };
   },
 
+  // ✅ ฟังก์ชันคำนวณคะแนนและบันทึกผล
   submitExamWithAnswers: async (
     type: ExamType,
-    answers: Record<string, any>, // รองรับทั้ง number (Index) และ string (Writing)
+    answers: Record<string, any>, 
     permitNo?: string
   ) => {
     const { data: questions, error } = await supabase
@@ -338,6 +337,8 @@ export const api = {
 
     const config = await api.getSystemSettings();
     const thresholdKey = type === 'INDUCTION' ? 'PASSING_SCORE_INDUCTION' : 'PASSING_SCORE_WORK_PERMIT';
+    
+    // ✅ Fix: Default Passing Score เป็น 80 หากดึงค่าไม่ได้ ป้องกันปัญหา 2/2 Failed
     const threshold = Number(config[thresholdKey] || 80);
 
     let score = 0;
@@ -356,12 +357,15 @@ export const api = {
           if (isAllCorrect) score++;
       }
       else {
+          // Check for MC, T/F
           if (choices[userAns]?.is_correct === true || userAns === q.correct_choice_index) score++;
       }
     });
 
     const passedPercent = questions.length > 0 ? (score / questions.length) * 100 : 0;
-    const passed = passedPercent >= threshold;
+    // ✅ Fix: ใช้ >= เพื่อให้ 80% พอดีก็ถือว่าผ่าน
+    const passed = passedPercent >= threshold; 
+    
     await api.submitExamResult(type, score, questions.length, passed, permitNo);
 
     return { score, passed };

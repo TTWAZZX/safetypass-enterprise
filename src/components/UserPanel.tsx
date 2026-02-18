@@ -62,8 +62,6 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
   const [isSaving, setIsSaving] = useState(false);
 
   // ✅ 1. Focus Mode Logic: จัดการการแสดงผล Bottom Nav ในระดับ CSS
-  // เมื่อมีการสอบ หรือดูบัตร เราจะสั่งซ่อน Bottom Nav ผ่านการคุมคลาสที่ตัวแม่ (ถ้าจำเป็น) 
-  // หรือใช้การคุมพื้นที่ผ่าน padding ในหน้านี้
   useEffect(() => {
     const bottomNav = document.querySelector('nav.md\\:hidden');
     if (activeStage !== 'IDLE' || showCard || viewingManual || showHistory) {
@@ -204,11 +202,11 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
                     <div className="space-y-3 text-left">
                        <input className="text-lg font-bold text-slate-900 border-b-2 border-blue-500 outline-none w-full bg-slate-50 px-3 py-2 rounded-t-lg transition-all" value={editName} onChange={(e) => setEditName(e.target.value)} />
                         <div className="grid grid-cols-2 gap-3">
-                           <div>
+                            <div>
                               <label className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Age</label>
                               <input type="number" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-bold text-xs outline-none focus:border-blue-500" value={editAge} onChange={(e) => setEditAge(e.target.value)} />
-                           </div>
-                           <div>
+                            </div>
+                            <div>
                               <label className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Nationality</label>
                               <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-bold text-xs outline-none focus:border-blue-500" value={isOtherNationality ? 'OTHER' : editNationality} onChange={(e) => {
                                   const val = e.target.value;
@@ -221,7 +219,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
                                 <option value="ลาว (Lao)">ลาว (Lao)</option>
                                 <option value="OTHER">อื่นๆ / Other</option>
                               </select>
-                           </div>
+                            </div>
                         </div>
                     </div>
                   ) : (
@@ -278,6 +276,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
               expiryDate={user.induction_expiry}
               icon={<BookOpen size={24} />}
               onClick={() => { if (hasInduction && !isNearExpiry) { setCardType('INDUCTION'); setShowCard(true); } else setActiveStage('INDUCTION'); }}
+              onRetake={() => { if(window.confirm("คุณต้องการเริ่มสอบ Induction ใหม่ใช่หรือไม่?")) setActiveStage('INDUCTION'); }}
               canAction={true}
               buttonText={hasInduction && !isNearExpiry ? (language === 'th' ? "แสดงบัตรดิจิทัล" : "Show Digital ID") : (language === 'th' ? "เริ่มการอบรม" : "Start Induction Exam")}
               color="blue"
@@ -289,7 +288,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
               expiryDate={activePermit?.expire_date}
               icon={!hasInduction ? <Lock size={24} /> : <Ticket size={24} />}
               onClick={() => { if (activePermit) { setCardType('WORK_PERMIT'); setShowCard(true); } else if (hasInduction) setActiveStage('WORK_PERMIT'); }}
-              onRenew={() => { if(window.confirm("ยืนยันเริ่มสอบต่ออายุใบอนุญาต?")) setActiveStage('WORK_PERMIT'); }}
+              onRetake={() => { if(window.confirm("คุณต้องการเริ่มสอบ Work Permit ใหม่ใช่หรือไม่?")) setActiveStage('WORK_PERMIT'); }}
               disabled={!hasInduction} 
               permitNo={activePermit?.permit_no}
               canAction={hasInduction}
@@ -376,12 +375,13 @@ const ResourceCard = ({ icon, title, desc, onClick }: any) => (
   </button>
 );
 
-const StageCard = ({ title, isActive, isNearExpiry, expiryDate, icon, onClick, disabled, permitNo, buttonText, onRenew, color = 'blue' }: any) => {
+// ✅ StageCard ฉบับแก้ไข: เพิ่มปุ่มสอบใหม่ (RotateCcw) เมื่อสอบผ่านแล้ว
+const StageCard = ({ title, isActive, isNearExpiry, expiryDate, icon, onClick, onRetake, disabled, permitNo, buttonText, color = 'blue' }: any) => {
     const { language } = useTranslation();
     const statusType = disabled ? 'LOCKED' : isActive && !isNearExpiry ? 'PASSED' : isNearExpiry ? 'WARNING' : 'READY';
     
     return (
-        <div onClick={!disabled ? onClick : undefined} className={`group p-0.5 rounded-[2rem] transition-all duration-500 ${!disabled ? 'hover:-translate-y-1' : ''}`}>
+        <div className={`group p-0.5 rounded-[2rem] transition-all duration-500 ${!disabled ? 'hover:-translate-y-1' : ''}`}>
             <div className={`bg-white p-5 rounded-[1.8rem] border-2 transition-all relative overflow-hidden shadow-sm h-full flex flex-col justify-between ${
                 disabled ? 'border-slate-100 opacity-60 grayscale cursor-not-allowed' 
                 : statusType === 'PASSED' ? 'border-emerald-100 glow-emerald' 
@@ -431,11 +431,27 @@ const StageCard = ({ title, isActive, isNearExpiry, expiryDate, icon, onClick, d
                             </div>
                         )}
                     </div>
-                    <button className={`px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-2 transition-all shadow-md active:scale-95 ${
+                    
+                    <div className="flex gap-2">
+                        {/* ✅ ปุ่มสอบใหม่ (RotateCcw) - แสดงเมื่อสอบผ่านแล้วเพื่อให้ผู้ใช้กดสอบซ้ำเองได้ */}
+                        {isActive && !disabled && onRetake && (
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); onRetake(); }} 
+                              className="p-2.5 rounded-xl bg-slate-50 text-slate-400 hover:text-blue-600 hover:bg-blue-50 border border-slate-100 transition-all active:scale-90"
+                              title="สอบใหม่ (Retake)"
+                            >
+                                <RotateCcw size={16} />
+                            </button>
+                        )}
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); onClick(); }} 
+                          className={`px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-2 transition-all shadow-md active:scale-95 ${
                             statusType === 'PASSED' ? 'bg-slate-900 text-white hover:bg-slate-800 shadow-slate-200' : disabled ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : `bg-${color}-600 text-white hover:bg-${color}-700 shadow-${color}-200`
-                        }`}>
-                        {buttonText} {!isActive && !disabled && <ChevronRight size={12} />}
-                    </button>
+                          }`}
+                        >
+                            {buttonText} {!isActive && !disabled && <ChevronRight size={12} />}
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

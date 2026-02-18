@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/supabaseApi';
-import Skeleton from './Skeleton';
 import QuestionManager from './QuestionManager';
 import VendorManager from './VendorManager';
 import SettingsManager from './SettingsManager';
@@ -27,7 +26,8 @@ import {
   Trash2,
   Printer,
   Eye,
-  AlertTriangle
+  AlertTriangle,
+  Activity
 } from 'lucide-react';
 
 import {
@@ -71,7 +71,7 @@ const AdminPanel: React.FC = () => {
         api.getReportData()
       ]);
       setStats(dashboardStats);
-      setReportData(historyData);
+      setReportData(historyData || []);
     } catch (err) {
       console.error('Admin Panel Fetch Error:', err);
     } finally {
@@ -247,45 +247,45 @@ const AdminPanel: React.FC = () => {
             <div className="bg-white p-4 md:p-6 rounded-[2rem] border border-slate-200 shadow-sm space-y-4">
                <div className="flex flex-col lg:flex-row gap-4">
                   <div className="relative flex-1">
-                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                     <input 
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                      <input 
                         type="text"
                         placeholder="Search Personnel Name, ID, or Vendor..."
                         className="w-full pl-12 pr-4 py-3.5 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-4 focus:ring-blue-500/5 focus:border-blue-500 outline-none font-bold text-sm transition-all shadow-inner"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                     />
+                      />
                   </div>
                   <div className="flex flex-wrap lg:flex-nowrap gap-2">
-                     <input 
+                      <input 
                         type="date"
                         className="flex-1 px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 font-bold text-xs outline-none focus:ring-2 focus:ring-blue-500/10 cursor-pointer"
                         value={filterDate}
                         onChange={(e) => setFilterDate(e.target.value)}
-                     />
-                     <select 
+                      />
+                      <select 
                         className="flex-1 px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 font-black text-[10px] uppercase outline-none focus:ring-2 focus:ring-blue-500/10 cursor-pointer appearance-none min-w-[120px]"
                         value={filterStatus}
                         onChange={(e) => setFilterStatus(e.target.value)}
-                     >
+                      >
                         <option value="ALL">All Status</option>
                         <option value="PASSED">Passed</option>
                         <option value="FAILED">Failed</option>
-                     </select>
-                     <select 
+                      </select>
+                      <select 
                         className="flex-1 px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 font-black text-[10px] uppercase outline-none focus:ring-2 focus:ring-blue-500/10 cursor-pointer appearance-none min-w-[120px]"
                         value={filterType}
                         onChange={(e) => setFilterType(e.target.value)}
-                     >
+                      >
                         <option value="ALL">All Modules</option>
                         <option value="INDUCTION">Induction</option>
                         <option value="WORK_PERMIT">Work Permit</option>
-                     </select>
+                      </select>
                   </div>
                </div>
             </div>
 
-            {/* RECORDSET TABLE (With Contextual Actions) */}
+            {/* RECORDSET TABLE */}
             <div className="bg-white rounded-[1.8rem] border border-slate-200 shadow-sm overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm min-w-[800px]">
@@ -327,7 +327,6 @@ const AdminPanel: React.FC = () => {
                              {row.result}
                           </div>
                         </td>
-                        {/* 🖱️ 3. Contextual Action Menus (Quick Actions) */}
                         <td className="px-6 py-4 text-right">
                            <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                               <button className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all" title="View Logs"><Eye size={14}/></button>
@@ -338,11 +337,11 @@ const AdminPanel: React.FC = () => {
                       </tr>
                     )) : (
                       <tr><td colSpan={6} className="py-24 text-center">
-                         <div className="flex flex-col items-center opacity-20">
-                            <Activity size={48} className="text-slate-300 mb-4 animate-pulse" />
-                            <p className="font-black text-slate-400 uppercase text-xs tracking-widest italic">No matching results found</p>
-                         </div>
-                      </td></tr>
+                          <div className="flex flex-col items-center opacity-20">
+                             <Activity size={48} className="text-slate-300 mb-4 animate-pulse" />
+                             <p className="font-black text-slate-400 uppercase text-xs tracking-widest italic">No matching results found</p>
+                          </div>
+                       </td></tr>
                     )}
                   </tbody>
                 </table>
@@ -391,8 +390,5 @@ const PremiumStatCard = ({ title, value, icon, color, trend, alert }: any) => (
     <div className={`absolute -right-6 -bottom-6 w-24 h-24 rounded-full opacity-[0.03] bg-${color}-600 group-hover:scale-150 transition-transform duration-1000`}></div>
   </div>
 );
-
-// เพิ่ม Icon ที่ขาดไป
-import { Activity } from 'lucide-react';
 
 export default AdminPanel;

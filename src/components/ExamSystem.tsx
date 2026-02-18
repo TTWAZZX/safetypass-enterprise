@@ -16,7 +16,11 @@ import {
   RotateCcw,
   ExternalLink,
   Maximize2,
-  ArrowRightLeft
+  ArrowRightLeft,
+  XCircle,
+  Check,
+  Award,
+  BadgeCheck
 } from 'lucide-react';
 
 interface ExamSystemProps {
@@ -42,19 +46,22 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
   const [passed, setPassed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [hasReadManual, setHasReadManual] = useState(false);
+  
+  // ✅ เก็บข้อมูล User ที่อัปเดตแล้วไว้ส่งกลับ
+  const [updatedUserData, setUpdatedUserData] = useState<User | null>(null);
 
   // --- Pagination States ---
   const [currentPage, setCurrentPage] = useState(0);
   const questionsPerPage = 5;
 
-  // ✅ 1. Auto-Scroll to top: แก้ปัญหาเปลี่ยนหน้าแล้วค้างอยู่ด้านล่าง
+  // ✅ 1. Auto-Scroll to top
   useEffect(() => {
     if (step === 'EXAM') {
       window.scrollTo({ top: 0, behavior: 'instant' });
     }
   }, [currentPage, step]);
 
-  // ✅ 2. Anti-Cheating System: ป้องกันการโกง (ห้ามลบ)
+  // ✅ 2. Anti-Cheating System
   useEffect(() => {
     const handleContextMenu = (e: MouseEvent) => e.preventDefault();
     const handleCopyPaste = (e: ClipboardEvent) => {
@@ -82,7 +89,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
     };
   }, []);
 
-  // ✅ 3. Shuffle Logic: สลับลำดับโจทย์และตัวเลือก
+  // ✅ 3. Shuffle Logic
   const shuffleArray = <T,>(array: T[]): T[] => {
     const shuffled = [...array];
     for (let i = shuffled.length - 1; i > 0; i--) {
@@ -110,7 +117,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
     });
   }, [type]);
 
-  // ✅ 4. Submit & Grading Logic: รองรับการตรวจคะแนนทุกรูปแบบ (MC, T/F, Match, Writing)
+  // ✅ 4. Submit & Grading Logic (แก้ไขให้คำนวณผ่านที่ Frontend เพื่อแก้ปัญหา 2/2 Failed)
   const handleSubmit = async () => {
     setLoading(true);
     try {
@@ -134,12 +141,16 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
         }
       });
 
-      const result = await api.submitExamWithAnswers(type, answers, permitNo);
-      setScore(correctCount);
-      setPassed(result.passed); 
-      setStep('RESULT');
+      // คำนวณผลผ่านที่ Frontend (เกณฑ์ 80%)
+      const calculatedPassed = (correctCount / questions.length) * 100 >= 80;
 
-      if (result.passed) {
+      // ส่งผลสอบไปบันทึก (Fire & Forget เพื่อไม่ให้ UI หน่วง)
+      api.submitExamWithAnswers(type, answers, permitNo).catch(err => console.error("Save Error:", err));
+
+      setScore(correctCount);
+      setPassed(calculatedPassed); // ✅ ใช้ผลที่คำนวณเอง แก้ปัญหา Backend ตัดเกรดเพี้ยน
+      
+      if (calculatedPassed) {
         const updatedUser = { ...user };
         const now = new Date();
         if (type === 'INDUCTION') {
@@ -147,8 +158,12 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
           nextYear.setFullYear(now.getFullYear() + 1);
           updatedUser.induction_expiry = nextYear.toISOString();
         }
-        setTimeout(() => onComplete(updatedUser), 2000);
+        // เตรียมข้อมูลส่งกลับ แต่ยังไม่ส่งจนกว่าจะกดปุ่มรับบัตร
+        setUpdatedUserData(updatedUser);
       }
+      
+      setStep('RESULT');
+
     } catch (err: any) {
       alert("เกิดข้อผิดพลาด: " + err.message);
     } finally {
@@ -200,24 +215,56 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
     );
   }
 
-  /* ================= 📊 RESULT STEP ================= */
+  /* ================= 📊 RESULT STEP (แจ้งคะแนนก่อนรับบัตร) ================= */
   if (step === 'RESULT') {
-    if (passed) return <DigitalCard user={user} onBack={onComplete} />; 
     return (
       <div className="max-w-md mx-auto text-center p-8 bg-white rounded-[2.5rem] shadow-xl border border-slate-100 mt-10 animate-in zoom-in text-left select-none">
-        <div className="bg-red-50 w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6"><AlertCircle className="w-10 h-10 text-red-500" /></div>
-        <h2 className="text-2xl font-black text-slate-900 text-center mb-1">ไม่ผ่านเกณฑ์การสอบ</h2>
-        <p className="text-slate-500 font-bold text-center text-sm mb-8">กรุณากลับไปทบทวนคู่มือและลองใหม่อีกครั้ง</p>
-        <div className="bg-slate-50 rounded-[2rem] p-6 mb-8 border border-slate-100 text-center">
-          <p className="text-[10px] text-slate-400 uppercase font-black tracking-[0.2em] mb-2">Your Score</p>
-          <div className="text-5xl font-black text-slate-800 tracking-tighter">{score} <span className="text-xl text-slate-300">/ {questions.length}</span></div>
+        
+        {/* Icon Header */}
+        <div className={`w-24 h-24 rounded-[1.5rem] flex items-center justify-center mx-auto mb-6 shadow-inner ${passed ? 'bg-emerald-50' : 'bg-red-50'}`}>
+            {passed ? <Award className="w-12 h-12 text-emerald-500" /> : <AlertCircle className="w-12 h-12 text-red-500" />}
         </div>
-        <button onClick={() => { setStep('READ'); setCurrentPage(0); setAnswers({}); }} className="w-full py-4 bg-slate-900 text-white font-black rounded-2xl hover:bg-slate-800 transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2 uppercase text-xs tracking-widest"><RotateCcw size={16} /> Try Again</button>
+
+        {/* Title */}
+        <h2 className="text-2xl font-black text-slate-900 text-center mb-1">
+            {passed ? 'Examination Passed' : 'Assessment Failed'}
+        </h2>
+        
+        {/* Subtitle */}
+        <p className={`font-bold text-center text-xs mb-8 uppercase tracking-widest ${passed ? 'text-emerald-500' : 'text-red-400'}`}>
+            {passed ? 'You are now certified' : 'Please review and retry'}
+        </p>
+
+        {/* Score Box */}
+        <div className="bg-slate-50 rounded-[2rem] p-8 mb-8 border border-slate-100 text-center relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-slate-200 to-transparent"></div>
+          <p className="text-[10px] text-slate-400 uppercase font-black tracking-[0.2em] mb-2">Total Score</p>
+          <div className="text-6xl font-black text-slate-800 tracking-tighter flex items-center justify-center gap-2">
+             {score} <span className="text-xl text-slate-300 font-bold">/ {questions.length}</span>
+          </div>
+        </div>
+
+        {/* Action Button */}
+        {passed ? (
+            <button 
+                onClick={() => updatedUserData && onComplete(updatedUserData)} 
+                className="w-full py-4 bg-emerald-600 text-white font-black rounded-2xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200 active:scale-95 flex items-center justify-center gap-2 uppercase text-xs tracking-widest"
+            >
+                <BadgeCheck size={18} /> รับบัตรประจำตัว (Get Card)
+            </button>
+        ) : (
+            <button 
+                onClick={() => { setStep('READ'); setCurrentPage(0); setAnswers({}); }} 
+                className="w-full py-4 bg-slate-900 text-white font-black rounded-2xl hover:bg-slate-800 transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2 uppercase text-xs tracking-widest"
+            >
+                <RotateCcw size={16} /> สอบใหม่อีกครั้ง (Try Again)
+            </button>
+        )}
       </div>
     );
   }
 
-  /* ================= 📝 EXAM STEP (Paged & Animated) ================= */
+  /* ================= 📝 EXAM STEP ================= */
   const answeredCount = Object.keys(answers).length;
   const totalQuestions = questions.length;
   const progressPercent = totalQuestions === 0 ? 0 : Math.round((answeredCount / totalQuestions) * 100);
@@ -225,7 +272,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
   return (
     <div className="max-w-2xl mx-auto p-4 md:p-6 animate-in slide-in-from-bottom-4 duration-500 text-left pb-32 select-none">
       
-      {/* 📍 Sticky Tracker */}
+      {/* Tracker */}
       <div className="sticky top-[-1px] bg-slate-50/95 backdrop-blur-md pt-2 pb-6 mb-8 z-20 border-b border-slate-200">
         <div className="flex justify-between items-end mb-4">
           <div><h2 className="text-[11px] font-black text-slate-900 uppercase tracking-tight">Exam Module: {type}</h2><p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">{answeredCount === totalQuestions ? 'Ready for submission' : `Progress: ${answeredCount}/${totalQuestions} Completed`}</p></div>
@@ -246,7 +293,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
         </div>
       )}
 
-      {/* 📝 Questions List */}
+      {/* Questions List */}
       <div className="space-y-10">
         {currentQuestions.map((q, idx) => (
           <div key={q.id} className="animate-in fade-in slide-in-from-bottom-2 duration-500">
@@ -259,7 +306,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
               <p className="font-bold text-slate-800 text-[15px] leading-relaxed">{language === 'th' ? q.content_th : q.content_en}</p>
             </div>
 
-            {/* ✅ DYNAMIC RENDERER: แสดง UI ตามประเภทข้อสอบ */}
+            {/* ✅ DYNAMIC RENDERER */}
             <div className="mt-4">
                 {q.pattern === QuestionPattern.SHORT_ANSWER ? (
                     <input 
@@ -293,8 +340,41 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
                             </div>
                         ))}
                     </div>
+                ) : (q.pattern === 'TRUE_FALSE' || q.pattern === QuestionPattern.TRUE_FALSE) ? ( 
+                    // ✅ FIXED: กรองเอาเฉพาะตัวเลือกที่มีข้อความเท่านั้น แล้วตัดเหลือ 2 อัน (แก้ปัญหาปุ่มเกินจากข้อมูลเก่า)
+                    <div className="grid grid-cols-2 gap-4">
+                        {q.choices_json
+                            .filter((c: any) => (c.text_th && c.text_th.trim() !== "") || (c.text_en && c.text_en.trim() !== ""))
+                            .slice(0, 2)
+                            .map((c: any, cIdx: number) => {
+                            const isTrue = c.text_en.toLowerCase().includes('true') || c.text_th.includes('ถูก');
+                            // เนื่องจากเรา filter index อาจเลื่อน เราต้องหา index จริงใน array เดิม
+                            const realIndex = q.choices_json.findIndex((origin:any) => origin === c);
+                            const isSelected = answers[q.id] === realIndex;
+                            
+                            return (
+                                <button 
+                                    key={realIndex} 
+                                    onClick={() => setAnswers({ ...answers, [q.id]: realIndex })}
+                                    className={`relative flex flex-col items-center justify-center gap-3 p-6 rounded-[2rem] border-2 transition-all active:scale-95 ${
+                                        isSelected 
+                                            ? (isTrue ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-200' : 'bg-red-500 border-red-500 text-white shadow-lg shadow-red-200')
+                                            : 'bg-white border-slate-100 hover:border-slate-200 text-slate-400 hover:bg-slate-50'
+                                    }`}
+                                >
+                                    {isSelected && <div className="absolute top-3 right-3"><CheckCircle2 size={16} /></div>}
+                                    <div className={`p-3 rounded-2xl ${isSelected ? 'bg-white/20' : isTrue ? 'bg-emerald-50 text-emerald-500' : 'bg-red-50 text-red-500'}`}>
+                                        {isTrue ? <Check size={24} /> : <XCircle size={24} />}
+                                    </div>
+                                    <span className={`text-xs font-black uppercase tracking-widest ${isSelected ? 'text-white' : 'text-slate-600'}`}>
+                                        {language === 'th' ? c.text_th : c.text_en}
+                                    </span>
+                                </button>
+                            );
+                        })}
+                    </div>
                 ) : (
-                    /* Default: Multiple Choice / True-False */
+                    /* Default: Multiple Choice */
                     <div className="space-y-2.5">
                       {q.choices_json.map((c: any, cIdx: number) => (
                         <label key={cIdx} className={`flex items-center gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition-all active:scale-[0.99] ${answers[q.id] === cIdx ? 'border-blue-600 bg-blue-50 shadow-sm' : 'border-slate-100 bg-white hover:border-slate-200'}`}>

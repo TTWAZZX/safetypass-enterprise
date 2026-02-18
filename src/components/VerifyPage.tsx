@@ -50,15 +50,19 @@ const VerifyPage: React.FC = () => {
 
       setUserData(user);
 
-      // 2. เช็คเงื่อนไขความปลอดภัย (Induction Valid + Latest Permit Valid)
-      const today = new Date();
-      const isInductionValid = user.induction_expiry && new Date(user.induction_expiry) > today;
+      // 2. เช็คเงื่อนไขความปลอดภัย
+      const today = new Date().getTime();
       
+      // Induction Valid?
+      const isInductionValid = user.induction_expiry && new Date(user.induction_expiry).getTime() > today;
+      
+      // Permit Valid? (ถ้ามี)
       const latestPermit = user.work_permits?.[0];
-      const isPermitValid = latestPermit && new Date(latestPermit.expire_date) > today;
+      const isPermitValid = latestPermit && new Date(latestPermit.expire_date).getTime() > today;
 
-      // สถานะความปลอดภัยรวม
-      if (isInductionValid && isPermitValid) {
+      // ✅ LOGIC UPDATE: ผ่านเงื่อนไขใดเงื่อนไขหนึ่งถือว่า "อนุญาต" (VALID)
+      // (เพราะบางคนอาจเข้ามาแค่ Induction ไม่ต้องมี Work Permit ก็ได้)
+      if (isInductionValid || isPermitValid) {
         setStatus('VALID');
       } else {
         setStatus('EXPIRED');
@@ -164,9 +168,9 @@ const VerifyPage: React.FC = () => {
               <div>
                 <p className={`text-[8px] uppercase font-black tracking-widest ${status === 'VALID' ? 'text-emerald-600/60' : 'text-rose-600/60'}`}>Compliance Valid Until</p>
                 <p className={`font-black text-sm ${status === 'VALID' ? 'text-emerald-700' : 'text-rose-700'}`}>
-                  {new Date(userData.induction_expiry).toLocaleDateString('th-TH', { 
+                  {userData.induction_expiry ? new Date(userData.induction_expiry).toLocaleDateString('th-TH', { 
                     day: 'numeric', month: 'short', year: 'numeric' 
-                  })}
+                  }) : 'Not Available'}
                 </p>
               </div>
             </div>
@@ -178,7 +182,7 @@ const VerifyPage: React.FC = () => {
           <div className="flex items-center justify-center gap-1.5 text-slate-400">
              <Clock size={12} className="opacity-60" />
              <p className="text-[9px] font-black uppercase tracking-widest">
-                VERIFIED AT {new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+               VERIFIED AT {new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
              </p>
           </div>
           <p className="text-[8px] text-slate-300 font-bold uppercase tracking-tighter">
@@ -188,7 +192,7 @@ const VerifyPage: React.FC = () => {
       </div>
 
       <p className="mt-8 text-white/50 text-[9px] font-bold uppercase tracking-[0.3em]">
-         Corporate Contractor Safety System
+          Corporate Contractor Safety System
       </p>
     </div>
   );

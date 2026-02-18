@@ -15,7 +15,8 @@ if (!rootElement) {
 }
 
 // 🚀 สร้าง Root และเริ่มการ Render ระบบ
-const root = ReactDOM.createRoot(rootElement);
+// (เพิ่ม as HTMLElement เพื่อความถูกต้องของ TypeScript)
+const root = ReactDOM.createRoot(rootElement as HTMLElement);
 
 root.render(
   <React.StrictMode>

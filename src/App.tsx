@@ -10,11 +10,13 @@ import {
   Shield, 
   Loader2, 
   LogOut, 
-  User as UserIcon, 
   LayoutDashboard, 
   History, 
   QrCode,
-  Home
+  Home,
+  Menu,       // ✅ เพิ่มไอคอน Menu
+  X,          // ✅ เพิ่มไอคอน X
+  ChevronDown // ✅ เพิ่มไอคอนลูกศรลง
 } from 'lucide-react';
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -29,6 +31,9 @@ const AppContent: React.FC = () => {
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
   
   const [activeTab, setActiveTab] = useState<'HOME' | 'LOGS'>('HOME');
+  
+  // ✅ State สำหรับควบคุมการ เปิด/ปิด เมนูล่าง
+  const [isNavOpen, setIsNavOpen] = useState(true); 
 
   useEffect(() => {
     const handleLocationChange = () => {
@@ -85,11 +90,10 @@ const AppContent: React.FC = () => {
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans relative">
       
-      {/* --- 🌟 HEADER: ปรับจาก sticky เป็น relative เพื่อให้เลื่อนหายไปเมื่อเลื่อนลง --- */}
+      {/* Header */}
       <header className="bg-slate-900 text-white shadow-lg relative z-50 border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-4 h-16 flex justify-between items-center gap-4">
           
-          {/* Logo Section */}
           <div className="flex items-center gap-3">
             <div className="bg-gradient-to-br from-blue-600 to-indigo-600 p-2 rounded-xl shadow-lg shadow-blue-500/20 ring-1 ring-white/10">
               <Shield size={20} className="text-white" />
@@ -104,7 +108,6 @@ const AppContent: React.FC = () => {
             </div>
           </div>
 
-          {/* Actions Section */}
           <div className="flex items-center gap-3 md:gap-5">
             <div className="bg-slate-800/50 rounded-lg p-1 border border-slate-700">
                <LanguageSwitcher />
@@ -135,7 +138,7 @@ const AppContent: React.FC = () => {
         </div>
       </header>
 
-      {/* Main Content Area */}
+      {/* Main Content */}
       <main className="flex-grow relative z-0">
         {!currentUser ? (
           <Auth onLogin={handleLogin} />
@@ -161,39 +164,63 @@ const AppContent: React.FC = () => {
         )}
       </main>
 
-      {/* --- 📱 BOTTOM NAVIGATION: ปรับให้แสดงเฉพาะ User เท่านั้น เพื่อไม่ให้บังปุ่มในหน้า Admin --- */}
+      {/* --- 📱 SMART BOTTOM NAVIGATION (Toggleable) --- */}
       {currentUser && currentUser.role === 'USER' && (
-        <nav className="md:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] w-[90%] max-w-sm">
-          <div className="bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-full p-2 flex items-center justify-around shadow-[0_20px_40px_rgba(0,0,0,0.4)]">
+        <>
+          {/* 1. ปุ่มเปิดเมนู (แสดงเมื่อเมนูปิดอยู่) */}
+          <div className={`md:hidden fixed bottom-6 right-6 z-[60] transition-all duration-500 ${isNavOpen ? 'translate-y-24 opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'}`}>
+             <button 
+                onClick={() => setIsNavOpen(true)}
+                className="bg-slate-900 text-white p-4 rounded-full shadow-xl shadow-slate-900/40 border border-slate-700 active:scale-90 transition-all flex items-center justify-center animate-bounce-slow"
+             >
+                <Menu size={24} />
+             </button>
+          </div>
+
+          {/* 2. แถบเมนูเต็ม (แสดงเมื่อเมนูเปิดอยู่) */}
+          <nav className={`md:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] w-[90%] max-w-sm transition-all duration-500 cubic-bezier(0.175, 0.885, 0.32, 1.275) ${isNavOpen ? 'translate-y-0 opacity-100' : 'translate-y-32 opacity-0 pointer-events-none'}`}>
             
+            {/* ปุ่มปิดเมนูเล็กๆ ด้านบน */}
             <button 
-              onClick={() => { setActiveTab('HOME'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-              className={`p-3 flex flex-col items-center gap-1 transition-all active:scale-90 ${activeTab === 'HOME' ? 'text-blue-500' : 'text-slate-400'}`}
+              onClick={() => setIsNavOpen(false)}
+              className="absolute -top-10 left-1/2 -translate-x-1/2 bg-white/80 backdrop-blur text-slate-500 p-2 rounded-full shadow-sm border border-slate-100 hover:bg-white active:scale-90 transition-all"
             >
-              <Home size={20} />
-              <span className="text-[8px] font-black uppercase tracking-widest">Home</span>
-            </button>
-            
-            <button 
-              className="bg-blue-600 text-white p-4 rounded-full -mt-10 shadow-xl shadow-blue-500/40 border-4 border-slate-50 active:scale-95 transition-all"
-              onClick={scrollToQR}
-            >
-              <QrCode size={24} />
+               <ChevronDown size={20} />
             </button>
 
-            <button 
-              onClick={() => { setActiveTab('LOGS'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-              className={`p-3 flex flex-col items-center gap-1 transition-all active:scale-90 ${activeTab === 'LOGS' ? 'text-blue-500' : 'text-slate-400'}`}
-            >
-              <History size={20} />
-              <span className="text-[8px] font-black uppercase tracking-widest">Logs</span>
-            </button>
-          </div>
-        </nav>
+            <div className="bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-full p-2 flex items-center justify-around shadow-[0_20px_40px_rgba(0,0,0,0.4)]">
+              
+              <button 
+                onClick={() => { setActiveTab('HOME'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                className={`p-3 flex flex-col items-center gap-1 transition-all active:scale-90 ${activeTab === 'HOME' ? 'text-blue-400' : 'text-slate-400'}`}
+              >
+                <Home size={20} />
+                <span className="text-[8px] font-black uppercase tracking-widest">Home</span>
+              </button>
+              
+              {/* ปุ่ม QR ตรงกลาง */}
+              <button 
+                className="bg-blue-600 text-white p-4 rounded-full -mt-10 shadow-xl shadow-blue-500/40 border-4 border-slate-50 active:scale-95 transition-all relative group"
+                onClick={scrollToQR}
+              >
+                <QrCode size={24} className="group-active:rotate-12 transition-transform" />
+                <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[9px] font-black text-slate-500 opacity-0 group-active:opacity-100 transition-opacity whitespace-nowrap bg-white px-2 py-0.5 rounded-md shadow-sm">My ID</span>
+              </button>
+
+              <button 
+                onClick={() => { setActiveTab('LOGS'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                className={`p-3 flex flex-col items-center gap-1 transition-all active:scale-90 ${activeTab === 'LOGS' ? 'text-blue-400' : 'text-slate-400'}`}
+              >
+                <History size={20} />
+                <span className="text-[8px] font-black uppercase tracking-widest">Logs</span>
+              </button>
+            </div>
+          </nav>
+        </>
       )}
 
       {/* Footer */}
-      <footer className="bg-slate-50 border-t border-slate-200 py-8 mt-auto pb-24 md:pb-8">
+      <footer className="bg-slate-50 border-t border-slate-200 py-8 mt-auto pb-32 md:pb-8">
         <div className="max-w-7xl mx-auto px-4 text-center">
           <div className="inline-flex items-center gap-2 mb-2 opacity-50 grayscale">
              <Shield size={14} className="text-blue-500"/>

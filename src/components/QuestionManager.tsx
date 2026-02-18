@@ -21,6 +21,8 @@ const QuestionManager: React.FC = () => {
   const [pattern, setPattern] = useState<QuestionPattern>(QuestionPattern.MULTIPLE_CHOICE);
   const [th, setTh] = useState('');
   const [en, setEn] = useState('');
+  
+  // State สำหรับ Choice / True-False
   const [choices, setChoices] = useState([
     { text_th: '', text_en: '', is_correct: true },
     { text_th: '', text_en: '', is_correct: false },
@@ -38,7 +40,6 @@ const QuestionManager: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
-  // ✅ ปรับปรุงการ Fetch: ป้องกันการกรองข้อมูลพลาด
   const fetchQuestions = async () => {
     setLoading(true);
     try {
@@ -50,7 +51,7 @@ const QuestionManager: React.FC = () => {
 
       if (error) throw error;
 
-      // ทำความสะอาดข้อมูลก่อนแสดงผล (Sanitize)
+      // Sanitize Data
       const sanitized = (data || []).map(q => ({
         ...q,
         pattern: q.pattern || QuestionPattern.MULTIPLE_CHOICE
@@ -69,7 +70,7 @@ const QuestionManager: React.FC = () => {
     fetchQuestions();
   }, [examType]);
 
-  // ================= [ HANDLERS (เหมือนเดิมครบถ้วน) ] =================
+  // ================= [ HANDLERS ] =================
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
@@ -104,15 +105,28 @@ const QuestionManager: React.FC = () => {
     setTh(q.content_th);
     setEn(q.content_en);
     setPreviewUrl(q.image_url);
+
+    setShortAnswer('');
+    setMatchingPairs([{ left_th: '', left_en: '', right_th: '', right_en: '' }]);
+    setChoices([
+      { text_th: '', text_en: '', is_correct: true },
+      { text_th: '', text_en: '', is_correct: false },
+      { text_th: '', text_en: '', is_correct: false },
+      { text_th: '', text_en: '', is_correct: false },
+    ]);
+
     if (qPattern === QuestionPattern.SHORT_ANSWER) {
         setShortAnswer(q.choices_json?.[0]?.correct_answer || '');
     } else if (qPattern === QuestionPattern.MATCHING) {
         setMatchingPairs(q.choices_json || []);
     } else {
-        setChoices(q.choices_json.map((c: any, idx: number) => ({
-          text_th: c.text_th, text_en: c.text_en,
-          is_correct: q.correct_choice_index !== undefined ? q.correct_choice_index === idx : c.is_correct
-        })));
+        const loadedChoices = q.choices_json || [];
+        const fullChoices = [0,1,2,3].map(i => ({
+            text_th: loadedChoices[i]?.text_th || '',
+            text_en: loadedChoices[i]?.text_en || '',
+            is_correct: q.correct_choice_index !== undefined ? q.correct_choice_index === i : (loadedChoices[i]?.is_correct || false)
+        }));
+        setChoices(fullChoices);
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -137,6 +151,19 @@ const QuestionManager: React.FC = () => {
     } else if (pattern === QuestionPattern.MATCHING) {
         finalChoices = matchingPairs;
         correctIndex = 0;
+    } else if (pattern === QuestionPattern.TRUE_FALSE) {
+        // ✅ CLEAN DATA: กรองเอาเฉพาะตัวเลือกที่มีข้อความเท่านั้น เพื่อไม่ให้บันทึกช่องว่างลงไป
+        finalChoices = choices.filter(c => c.text_th.trim() !== '' || c.text_en.trim() !== '');
+        
+        // ถ้ากรองแล้วเหลือ 0 ให้บังคับเอา 2 ช่องแรก (กัน Error)
+        if (finalChoices.length === 0) finalChoices = choices.slice(0, 2);
+        
+        // Reset correctIndex ถ้ามันชี้ไปผิดที่
+        const newCorrectIndex = finalChoices.findIndex(c => c.is_correct);
+        correctIndex = newCorrectIndex !== -1 ? newCorrectIndex : 0;
+        
+        // Ensure only one is correct
+        finalChoices = finalChoices.map((c, idx) => ({ ...c, is_correct: idx === correctIndex }));
     }
 
     const imageUrl = await uploadImageToSupabase();
@@ -154,14 +181,14 @@ const QuestionManager: React.FC = () => {
     try {
       const { error } = editingId ? await supabase.from('questions').update(payload).eq('id', editingId) : await supabase.from('questions').insert(payload);
       if(error) throw error;
-      alert("สำเร็จ!");
+      alert("บันทึกสำเร็จ!");
       handleCancelEdit();
       fetchQuestions();
     } catch (err: any) { alert("Error: " + err.message); }
   };
 
   const handleDelete = async (id: string) => {
-    if(!window.confirm("ลบข้อสอบนี้?")) return;
+    if(!window.confirm("ต้องการลบข้อสอบนี้ใช่หรือไม่?")) return;
     await supabase.from('questions').delete().eq('id', id);
     fetchQuestions();
   };
@@ -173,12 +200,13 @@ const QuestionManager: React.FC = () => {
 
   return (
     <div className="space-y-8 pb-10 text-left">
-      {/* 🟢 Form Section (คงเดิม) */}
+      
+      {/* 🟢 Form Section */}
       <div className={`p-6 md:p-8 rounded-[2rem] border-2 transition-all ${editingId ? 'bg-amber-50/30 border-amber-200' : 'bg-white border-slate-100 shadow-sm'}`}>
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center gap-3">
             <div className={`p-2.5 rounded-xl ${editingId ? 'bg-amber-100 text-amber-600' : 'bg-blue-600 text-white'}`}>{editingId ? <Edit3 size={20} /> : <Plus size={20} />}</div>
-            <div><h3 className="text-lg font-black text-slate-900 uppercase leading-none">Assessment Designer</h3></div>
+            <div><h3 className="text-lg font-black text-slate-900 uppercase leading-none">{editingId ? 'Edit Question' : 'Create Question'}</h3></div>
           </div>
           {editingId && <button onClick={handleCancelEdit} className="p-2 bg-white text-slate-400 hover:text-red-500 rounded-full border border-slate-200"><X size={18}/></button>}
         </div>
@@ -192,24 +220,34 @@ const QuestionManager: React.FC = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div className="space-y-4">
-                <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl p-5 text-center cursor-pointer relative overflow-hidden" onClick={() => imageInputRef.current?.click()}>
+                <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl p-5 text-center cursor-pointer relative overflow-hidden group hover:border-blue-300" onClick={() => imageInputRef.current?.click()}>
                     <input type="file" ref={imageInputRef} className="hidden" accept="image/*" onChange={handleImageChange} />
-                    {previewUrl ? <div className="relative"><img src={previewUrl} className="h-44 mx-auto rounded-2xl object-contain shadow-lg bg-white" /><button onClick={(e) => { e.stopPropagation(); clearImage(); }} className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full border-2 border-white"><X size={14}/></button></div> : <div className="py-10 text-slate-300 flex flex-col items-center gap-2"><ImageIcon size={32}/><span className="text-[10px] font-black uppercase tracking-widest">Media Assets</span></div>}
+                    {previewUrl ? <div className="relative"><img src={previewUrl} className="h-44 mx-auto rounded-2xl object-contain shadow-lg bg-white" /><button onClick={(e) => { e.stopPropagation(); clearImage(); }} className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full border-2 border-white"><X size={14}/></button></div> : <div className="py-10 text-slate-300 flex flex-col items-center gap-2 group-hover:text-blue-400"><ImageIcon size={32}/><span className="text-[10px] font-black uppercase tracking-widest">Media Assets</span></div>}
                 </div>
-                <input placeholder="โจทย์ไทย" value={th} onChange={e=>setTh(e.target.value)} className="w-full p-4 border border-slate-200 rounded-2xl text-sm font-bold bg-white outline-none focus:border-blue-500" />
-                <input placeholder="English" value={en} onChange={e=>setEn(e.target.value)} className="w-full p-4 border border-slate-200 rounded-2xl text-sm font-bold bg-white outline-none focus:border-blue-500" />
+                <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Question (Thai)</label>
+                    <input placeholder="โจทย์ภาษาไทย" value={th} onChange={e=>setTh(e.target.value)} className="w-full p-4 border border-slate-200 rounded-2xl text-sm font-bold bg-white outline-none focus:border-blue-500" />
+                </div>
+                <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Question (English)</label>
+                    <input placeholder="Question in English" value={en} onChange={e=>setEn(e.target.value)} className="w-full p-4 border border-slate-200 rounded-2xl text-sm font-bold bg-white outline-none focus:border-blue-500" />
+                </div>
                 <div className="flex bg-slate-100 p-1.5 rounded-2xl">
-                    <button onClick={() => setExamType('INDUCTION')} className={`flex-1 py-3 rounded-xl font-black text-[10px] transition-all ${examType === 'INDUCTION' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400'}`}>INDUCTION</button>
-                    <button onClick={() => setExamType('WORK_PERMIT')} className={`flex-1 py-3 rounded-xl font-black text-[10px] transition-all ${examType === 'WORK_PERMIT' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400'}`}>WORK PERMIT</button>
+                    <button onClick={() => setExamType('INDUCTION')} className={`flex-1 py-3 rounded-xl font-black text-[10px] transition-all ${examType === 'INDUCTION' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>INDUCTION</button>
+                    <button onClick={() => setExamType('WORK_PERMIT')} className={`flex-1 py-3 rounded-xl font-black text-[10px] transition-all ${examType === 'WORK_PERMIT' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>WORK PERMIT</button>
                 </div>
             </div>
             <div className="space-y-4">
                 {(pattern === QuestionPattern.MULTIPLE_CHOICE || pattern === QuestionPattern.TRUE_FALSE) && (
                     <div className="space-y-2">
+                        {/* ✅ UI: แสดงช่องกรอก 2 หรือ 4 ช่อง ตามประเภท */}
                         {(pattern === QuestionPattern.TRUE_FALSE ? choices.slice(0, 2) : choices).map((c, idx) => (
                             <div key={idx} className={`flex gap-3 items-center p-3 rounded-2xl border-2 transition-all ${c.is_correct ? 'border-emerald-500 bg-emerald-50' : 'border-slate-50 bg-slate-50'}`}>
                                 <input type="radio" name="correct_choice" checked={c.is_correct} onChange={() => { const n = choices.map(ch => ({ ...ch, is_correct: false })); n[idx].is_correct = true; setChoices(n); }} className="w-5 h-5 text-emerald-600 cursor-pointer" />
-                                <div className="flex-1 space-y-1"><input placeholder="ไทย" value={c.text_th} onChange={e => { const n = [...choices]; n[idx].text_th = e.target.value; setChoices(n); }} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-[11px] font-bold outline-none" /><input placeholder="English" value={c.text_en} onChange={e => { const n = [...choices]; n[idx].text_en = e.target.value; setChoices(n); }} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-[11px] font-bold outline-none" /></div>
+                                <div className="flex-1 space-y-1">
+                                    <input placeholder="ตัวเลือก (ไทย)" value={c.text_th} onChange={e => { const n = [...choices]; n[idx].text_th = e.target.value; setChoices(n); }} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-[11px] font-bold outline-none" />
+                                    <input placeholder="Choice (English)" value={c.text_en} onChange={e => { const n = [...choices]; n[idx].text_en = e.target.value; setChoices(n); }} className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-[11px] font-bold outline-none" />
+                                </div>
                             </div>
                         ))}
                     </div>
@@ -218,17 +256,16 @@ const QuestionManager: React.FC = () => {
                 {pattern === QuestionPattern.MATCHING && <div className="space-y-3 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">{matchingPairs.map((pair, idx) => (<div key={idx} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 relative"><div className="grid grid-cols-2 gap-3"><div className="space-y-1"><span className="text-[8px] font-black opacity-30 uppercase tracking-widest">Left</span><input value={pair.left_th} onChange={e => { const n = [...matchingPairs]; n[idx].left_th = e.target.value; setMatchingPairs(n); }} className="w-full p-2 border border-slate-200 rounded-lg text-[10px]" /><input value={pair.left_en} onChange={e => { const n = [...matchingPairs]; n[idx].left_en = e.target.value; setMatchingPairs(n); }} className="w-full p-2 border border-slate-200 rounded-lg text-[10px]" /></div><div className="space-y-1"><span className="text-[8px] font-black opacity-30 uppercase tracking-widest">Right</span><input value={pair.right_th} onChange={e => { const n = [...matchingPairs]; n[idx].right_th = e.target.value; setMatchingPairs(n); }} className="w-full p-2 border border-slate-200 rounded-lg text-[10px]" /><input value={pair.right_en} onChange={e => { const n = [...matchingPairs]; n[idx].right_en = e.target.value; setMatchingPairs(n); }} className="w-full p-2 border border-slate-200 rounded-lg text-[10px]" /></div></div>{matchingPairs.length > 1 && <button onClick={() => setMatchingPairs(matchingPairs.filter((_, i) => i !== idx))} className="absolute -top-1 -right-1 bg-red-100 text-red-500 p-1 rounded-full"><X size={10}/></button>}</div>))}<button onClick={() => setMatchingPairs([...matchingPairs, { left_th: '', left_en: '', right_th: '', right_en: '' }])} className="w-full py-2 border-2 border-dashed border-slate-200 text-slate-400 text-[10px] font-black rounded-xl hover:bg-slate-50 uppercase tracking-widest">Add +</button></div>}
             </div>
         </div>
-        <button onClick={handleSave} disabled={uploadingImage} className="mt-8 w-full md:w-auto bg-slate-900 text-white px-12 py-4 rounded-2xl font-black uppercase text-xs shadow-xl active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2">
+        <button onClick={handleSave} disabled={uploadingImage} className="mt-8 w-full md:w-auto bg-slate-900 text-white px-12 py-4 rounded-2xl font-black uppercase text-xs shadow-xl active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 hover:bg-slate-800">
             {uploadingImage ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>} {uploadingImage ? 'Uploading Assets...' : editingId ? 'Update Question' : 'Deploy Question'}
         </button>
       </div>
 
-      {/* 🔵 Master Repository - แก้ไข Hydration Error ที่นี่ */}
+      {/* 🔵 Master Repository List */}
       <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-slate-100 shadow-sm min-h-[500px]">
         <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
             <div className="text-left">
               <h3 className="text-xl font-black text-slate-900 uppercase">Master Repository</h3>
-              {/* ✅ แก้ไข: เปลี่ยน <p> เป็น <div> เพื่อป้องกัน Hydration Error */}
               <div className="text-[10px] text-slate-400 font-black uppercase tracking-widest flex items-center gap-2 mt-1">
                 <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" /> Element Count: {filteredQuestions.length}
               </div>
@@ -238,6 +275,7 @@ const QuestionManager: React.FC = () => {
                 <button onClick={fetchQuestions} className="p-2.5 bg-slate-50 text-slate-400 rounded-xl hover:text-blue-600 transition-all border border-slate-100 shadow-sm"><RefreshCw size={18}/></button>
             </div>
         </div>
+        
         {loading ? (<div className="py-24 text-center"><Loader2 className="animate-spin mx-auto mb-4 text-blue-500"/><p className="text-[10px] font-black uppercase tracking-widest">Synchronizing Database...</p></div>) : (
             <div className="grid grid-cols-1 gap-4">
                 {currentQuestions.map((q) => (

@@ -3,7 +3,7 @@ import { api } from '../services/supabaseApi';
 import { User, Vendor } from '../types';
 import { useTranslation } from '../context/LanguageContext';
 import { UserPlus, LogIn, ChevronRight, AlertCircle, Loader2, ShieldCheck, Globe2 } from 'lucide-react';
-import PrivacyPolicyModal from './PrivacyPolicyModal'; // ✅ Import Modal ใหม่
+import PrivacyPolicyModal from './PrivacyPolicyModal';
 
 interface AuthProps {
   onLogin: (user: User) => void;
@@ -25,7 +25,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [vendorId, setVendorId] = useState('');
   const [otherVendor, setOtherVendor] = useState('');
   const [pdpaAccepted, setPdpaAccepted] = useState(false);
-  const [showPolicyModal, setShowPolicyModal] = useState(false); // ✅ State สำหรับเปิด Modal
+  const [showPolicyModal, setShowPolicyModal] = useState(false);
   
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [error, setError] = useState('');
@@ -162,7 +162,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 onChange={e => setLoginId(e.target.value)}
                 placeholder="13-digit National ID"
               />
-              {/* ✅ Safety Hint for Login */}
               <div className="flex items-center gap-1.5 mt-1.5 ml-1 opacity-80">
                 <ShieldCheck size={10} className="text-emerald-500" />
                 <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">
@@ -182,8 +181,8 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             <div className="grid grid-cols-2 gap-3">
                 <div className="col-span-2 space-y-1">
                     <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex justify-between">
-                       {t('auth.national_id')}
-                       {fetchingUser && <span className="text-blue-500 animate-pulse">Checking...</span>}
+                        {t('auth.national_id')}
+                        {fetchingUser && <span className="text-blue-500 animate-pulse">Checking...</span>}
                     </label>
                     <input 
                         required 
@@ -193,7 +192,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                         className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-xs shadow-inner" 
                         placeholder="National ID Number" 
                     />
-                    {/* ✅ Safety Hint for Registration */}
                     <div className="flex items-center gap-1.5 mt-1.5 ml-1 opacity-80">
                       <ShieldCheck size={10} className="text-emerald-500" />
                       <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest leading-none">
@@ -257,7 +255,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               </div>
             )}
 
-            {/* ✅ PDPA Checkbox Section */}
             <div className="mt-4 flex items-start gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
               <input 
                 type="checkbox" 
@@ -271,7 +268,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 <span 
                     className="text-blue-600 font-bold underline mx-1 hover:text-blue-800 transition-colors"
                     onClick={(e) => {
-                        e.preventDefault(); // ป้องกันไม่ให้ไปติ๊ก Checkbox
+                        e.preventDefault(); 
                         setShowPolicyModal(true);
                     }}
                 >
@@ -297,7 +294,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         )}
       </div>
 
-      {/* ✅ Render Policy Modal */}
       {showPolicyModal && <PrivacyPolicyModal onClose={() => setShowPolicyModal(false)} />}
     </div>
   );
