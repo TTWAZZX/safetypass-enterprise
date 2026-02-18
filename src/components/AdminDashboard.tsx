@@ -3,7 +3,8 @@ import { api } from '../services/supabaseApi';
 import { 
   Users, CheckCircle, XCircle, FileSpreadsheet, 
   Search, Calendar, TrendingUp,
-  Loader2, AlertCircle, RotateCcw, Filter, ChevronRight
+  Loader2, AlertCircle, RotateCcw, Filter, ChevronRight,
+  ShieldCheck, AlertTriangle, UserX, Activity
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -98,17 +99,17 @@ const AdminDashboard: React.FC = () => {
       {/* 1. Header & Primary Actions */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-4 border-b border-slate-200 pb-6">
         <div className="space-y-1">
-          <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight uppercase">Admin Console</h2>
+          <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight uppercase">Dashboard Analytics</h2>
           <p className="text-slate-400 font-bold uppercase text-[9px] md:text-[10px] tracking-[0.2em] flex items-center gap-2">
             <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" /> 
-            Live Monitoring System Dashboard
+            Security Monitoring & Performance Metrics
           </p>
         </div>
         <div className="flex w-full lg:w-auto gap-2">
           <button 
             onClick={exportToExcel}
             disabled={filteredHistory.length === 0}
-            className="flex-1 lg:flex-none flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 text-white px-6 py-3.5 rounded-2xl font-black text-xs uppercase transition-all shadow-lg shadow-emerald-100 active:scale-95 group"
+            className="flex-1 lg:flex-none flex items-center justify-center gap-2 bg-slate-900 hover:bg-black disabled:bg-slate-200 text-white px-6 py-3.5 rounded-2xl font-black text-xs uppercase transition-all shadow-lg active:scale-95 group"
           >
             <FileSpreadsheet size={16} className="group-hover:rotate-12 transition-transform" />
             Export Data
@@ -119,96 +120,132 @@ const AdminDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* 2. Visual Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
-        <StatCard icon={<Users />} label="Total Activity" value={stats.total} color="blue" trend="Today's Load" />
-        <StatCard icon={<CheckCircle />} label="Compliance Pass" value={stats.passed} color="emerald" trend="Authorized" />
-        <StatCard icon={<XCircle />} label="Access Denied" value={stats.failed} color="red" trend="Failed Exam" />
+      {/* 2. Visual Statistics Widgets (📈 ยกระดับ UX ตรงนี้) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard 
+          icon={<Activity />} 
+          label="Total Exams" 
+          value={stats.total} 
+          color="blue" 
+          trend="Total System Load"
+          description="Overall examination activity"
+        />
+        <StatCard 
+          icon={<ShieldCheck />} 
+          label="Qualified" 
+          value={stats.passed} 
+          color="emerald" 
+          trend={`${stats.total > 0 ? ((stats.passed / stats.total) * 100).toFixed(0) : 0}% Rate`}
+          description="Candidates passed induction"
+          glow="glow-emerald"
+        />
+        <StatCard 
+          icon={<AlertTriangle />} 
+          label="Critical Failures" 
+          value={stats.failed} 
+          color="amber" 
+          trend="Attention Required"
+          description="High-risk failed attempts"
+          glow="glow-amber"
+        />
+        <StatCard 
+          icon={<UserX />} 
+          label="Denied Access" 
+          value={stats.failed} 
+          color="red" 
+          trend="Access Revoked"
+          description="Unsuccessful compliance"
+          glow="glow-red"
+        />
       </div>
 
       {/* 3. Smart Filters & Search Bar */}
-      <div className="bg-white p-4 md:p-6 rounded-[2rem] border border-slate-200 shadow-sm space-y-4">
-        <div className="flex flex-col md:flex-row gap-4">
-          {/* Search Box */}
+      <div className="bg-white p-4 md:p-6 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-4">
+        <div className="flex flex-col lg:flex-row gap-4">
           <div className="relative flex-1">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input 
               type="text" 
-              placeholder="Search by name, ID or company..." 
-              className="w-full pl-12 pr-4 py-3.5 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 outline-none font-bold text-sm transition-all shadow-inner"
+              placeholder="Filter by Personnel Name, National ID or Vendor..." 
+              className="w-full pl-12 pr-4 py-4 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-4 focus:ring-blue-500/5 focus:border-blue-500 outline-none font-bold text-sm transition-all"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
           
-          {/* Filters Toggle Group */}
-          <div className="flex flex-wrap md:flex-nowrap gap-2">
-            <div className="flex-1 min-w-[140px]">
+          <div className="flex flex-wrap lg:flex-nowrap gap-2">
+            <div className="relative">
+              <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
               <input 
                 type="date" 
                 value={filterDate}
                 onChange={(e) => setFilterDate(e.target.value)}
-                className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 font-bold text-xs outline-none focus:ring-2 focus:ring-blue-500/10 transition-all cursor-pointer"
+                className="pl-10 pr-4 py-3.5 rounded-2xl border border-slate-100 bg-slate-50 font-bold text-xs outline-none focus:ring-2 focus:ring-blue-500/10 transition-all cursor-pointer"
               />
             </div>
             <select 
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="flex-1 min-w-[120px] px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 font-black text-[10px] uppercase outline-none focus:ring-2 focus:ring-blue-500/10 appearance-none cursor-pointer"
+              className="px-4 py-3.5 rounded-2xl border border-slate-100 bg-slate-50 font-black text-[10px] uppercase outline-none focus:ring-2 focus:ring-blue-500/10 appearance-none cursor-pointer min-w-[130px]"
             >
-              <option value="ALL">Status: ALL</option>
-              <option value="PASSED">PASSED</option>
-              <option value="FAILED">FAILED</option>
+              <option value="ALL">All Statuses</option>
+              <option value="PASSED">Passed</option>
+              <option value="FAILED">Failed</option>
             </select>
             <select 
               value={filterType}
               onChange={(e) => setFilterType(e.target.value)}
-              className="flex-1 min-w-[120px] px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 font-black text-[10px] uppercase outline-none focus:ring-2 focus:ring-blue-500/10 appearance-none cursor-pointer"
+              className="px-4 py-3.5 rounded-2xl border border-slate-100 bg-slate-50 font-black text-[10px] uppercase outline-none focus:ring-2 focus:ring-blue-500/10 appearance-none cursor-pointer min-w-[130px]"
             >
-              <option value="ALL">Type: ALL</option>
-              <option value="INDUCTION">INDUCTION</option>
-              <option value="WORK_PERMIT">WORK PERMIT</option>
+              <option value="ALL">All Modules</option>
+              <option value="INDUCTION">Induction</option>
+              <option value="WORK_PERMIT">Work Permit</option>
             </select>
           </div>
         </div>
       </div>
 
-      {/* 4. Main Activity Table */}
-      <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden mb-10">
+      {/* 4. Activity Logs Table */}
+      <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden mb-12">
         <div className="overflow-x-auto">
-          <table className="w-full text-left min-w-[800px]">
+          <table className="w-full text-left min-w-[900px]">
             <thead>
-              <tr className="bg-slate-50 border-b border-slate-100">
-                <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Personnel & Vendor</th>
-                <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Module</th>
-                <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] text-center">Score</th>
-                <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Timestamp</th>
-                <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] text-right">Access Status</th>
+              <tr className="bg-slate-50/50 border-b border-slate-100">
+                <th className="px-8 py-6 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Personnel Information</th>
+                <th className="px-8 py-6 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Module Type</th>
+                <th className="px-8 py-6 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] text-center">Efficiency</th>
+                <th className="px-8 py-6 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">System Log Time</th>
+                <th className="px-8 py-6 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] text-right">Gate Access</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {filteredHistory.length > 0 ? filteredHistory.map((item) => (
-                <tr key={item.id} className="hover:bg-slate-50/50 transition-colors group">
-                  <td className="px-8 py-5">
-                    <div className="flex flex-col">
-                      <span className="font-black text-slate-800 text-sm group-hover:text-blue-600 transition-colors uppercase">{item.users?.name}</span>
-                      <span className="text-[9px] text-slate-400 font-bold mt-1 uppercase tracking-wider">{item.users?.vendors?.name || 'External'}</span>
+                <tr key={item.id} className="hover:bg-blue-50/30 transition-colors group">
+                  <td className="px-8 py-6">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 font-black group-hover:bg-blue-600 group-hover:text-white transition-all uppercase">
+                        {item.users?.name?.charAt(0)}
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="font-black text-slate-800 text-sm uppercase">{item.users?.name}</span>
+                        <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">{item.users?.vendors?.name || 'External Contractor'}</span>
+                      </div>
                     </div>
                   </td>
-                  <td className="px-8 py-5">
-                    <span className={`text-[9px] font-black px-2.5 py-1 rounded-lg border w-fit uppercase ${item.exam_type === 'INDUCTION' ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-purple-50 text-purple-600 border-purple-100'}`}>
+                  <td className="px-8 py-6">
+                    <span className={`text-[9px] font-black px-3 py-1.5 rounded-xl border w-fit uppercase ${item.exam_type === 'INDUCTION' ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-purple-50 text-purple-600 border-purple-100'}`}>
                       {item.exam_type}
                     </span>
                   </td>
-                  <td className="px-8 py-5 text-center">
+                  <td className="px-8 py-6 text-center">
                     <div className="inline-flex flex-col items-center">
-                      <span className="font-black text-slate-700 text-sm leading-none">{item.score}</span>
+                      <span className={`font-black text-sm leading-none ${item.status === 'PASSED' ? 'text-emerald-600' : 'text-red-600'}`}>{item.score}</span>
                       <span className="text-[8px] text-slate-300 font-bold uppercase mt-1">/ {item.total_questions}</span>
                     </div>
                   </td>
-                  <td className="px-8 py-5">
+                  <td className="px-8 py-6">
                     <div className="flex flex-col">
-                      <span className="text-[11px] text-slate-600 font-bold leading-none">
+                      <span className="text-[11px] text-slate-600 font-bold">
                         {new Date(item.created_at).toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: '2-digit' })}
                       </span>
                       <span className="text-[9px] text-slate-400 mt-1 uppercase">
@@ -216,8 +253,8 @@ const AdminDashboard: React.FC = () => {
                       </span>
                     </div>
                   </td>
-                  <td className="px-8 py-5 text-right">
-                    <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[9px] font-black uppercase border shadow-sm ${item.status === 'PASSED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-red-50 text-red-600 border-red-100'}`}>
+                  <td className="px-8 py-6 text-right">
+                    <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-[9px] font-black uppercase border shadow-sm ${item.status === 'PASSED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100 glow-emerald' : 'bg-red-50 text-red-600 border-red-100 glow-red'}`}>
                        <div className={`w-1.5 h-1.5 rounded-full ${item.status === 'PASSED' ? 'bg-emerald-500' : 'bg-red-500'}`} />
                        {item.status}
                     </div>
@@ -225,10 +262,10 @@ const AdminDashboard: React.FC = () => {
                 </tr>
               )) : (
                 <tr>
-                   <td colSpan={5} className="px-8 py-24 text-center">
-                      <div className="flex flex-col items-center opacity-30">
-                        <Search size={48} className="text-slate-300 mb-4" />
-                        <p className="font-black text-slate-400 uppercase text-xs tracking-widest italic">Data stream empty for current filters</p>
+                   <td colSpan={5} className="px-8 py-32 text-center">
+                      <div className="flex flex-col items-center opacity-20">
+                        <Activity size={60} className="text-slate-300 mb-4 animate-pulse" />
+                        <p className="font-black text-slate-400 uppercase text-xs tracking-widest italic">No matching records detected</p>
                       </div>
                    </td>
                 </tr>
@@ -241,23 +278,26 @@ const AdminDashboard: React.FC = () => {
   );
 };
 
-// 🔵 Shared Stats Component
-const StatCard = ({ icon, label, value, color, trend }: any) => (
-  <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm flex items-center gap-5 group hover:border-blue-500 hover:shadow-xl hover:shadow-blue-50/20 transition-all cursor-default relative overflow-hidden">
-    <div className={`absolute -right-4 -bottom-4 opacity-[0.03] group-hover:scale-125 transition-transform duration-700`}>
-       {React.cloneElement(icon as React.ReactElement, { size: 120 })}
+// 🔵 Shared Premium Stat Widget
+const StatCard = ({ icon, label, value, color, trend, description, glow }: any) => (
+  <div className={`bg-white p-6 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col gap-4 group hover:border-blue-500 hover:shadow-2xl transition-all duration-500 cursor-default relative overflow-hidden ${glow}`}>
+    <div className={`absolute -right-6 -top-6 opacity-[0.03] group-hover:scale-150 group-hover:rotate-12 transition-transform duration-1000`}>
+        {React.cloneElement(icon as React.ReactElement, { size: 160 })}
     </div>
-    <div className={`p-4 rounded-2xl bg-${color}-50 text-${color}-600 group-hover:bg-${color}-600 group-hover:text-white transition-all duration-300 shadow-inner relative z-10`}>
-      {React.cloneElement(icon as React.ReactElement, { size: 28, strokeWidth: 2.5 })}
-    </div>
-    <div className="flex-1 text-left relative z-10">
-      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-2">{label}</p>
-      <div className="flex items-baseline gap-2">
-        <h4 className="text-4xl font-black text-slate-900 leading-none tabular-nums tracking-tighter">{value}</h4>
-        <span className={`text-[8px] font-bold px-2 py-0.5 rounded-md bg-${color}-50 text-${color}-600 border border-${color}-100 uppercase`}>
-           {trend}
-        </span>
+    
+    <div className="flex justify-between items-start relative z-10">
+      <div className={`p-4 rounded-2xl bg-${color}-50 text-${color}-600 group-hover:bg-${color}-600 group-hover:text-white transition-all duration-500 shadow-inner`}>
+        {React.cloneElement(icon as React.ReactElement, { size: 24, strokeWidth: 2.5 })}
       </div>
+      <span className={`text-[8px] font-black px-2.5 py-1 rounded-lg bg-${color}-50 text-${color}-600 border border-${color}-100 uppercase tracking-tighter`}>
+         {trend}
+      </span>
+    </div>
+
+    <div className="space-y-1 relative z-10">
+      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{label}</p>
+      <h4 className="text-4xl font-black text-slate-900 tracking-tighter tabular-nums">{value}</h4>
+      <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tight opacity-0 group-hover:opacity-100 transition-opacity duration-500">{description}</p>
     </div>
   </div>
 );

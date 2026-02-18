@@ -34,12 +34,11 @@ export const api = {
 
     return {
       ...userData,
-      national_id: realId || userData.national_id, // ใช้ค่าที่ถอดรหัสแล้ว ถ้าไม่มีให้ใช้ค่าเดิม
+      national_id: realId || userData.national_id, 
       vendor_id: userData.vendor_id 
     } as unknown as User
   },
 
-  // ✅ checkUser แบบแก้ไข: ใส่ as any เพื่อแก้ตัวแดง
   checkUser: async (nationalId: string) => {
     const { data, error } = await supabase
       .rpc('check_user_exists', { search_id: nationalId })
@@ -50,10 +49,8 @@ export const api = {
         return null;
     }
     
-    // ✅ FIX: แปลง data เป็น any ก่อน เพื่อให้เข้าถึง vendor_id ได้โดยไม่ติดแดง
     const userData = data as any;
 
-    // ถ้าเจอข้อมูล ให้ไปดึงชื่อ vendor มาแปะเพิ่ม
     if (userData && userData.vendor_id) {
         const { data: vendor } = await supabase.from('vendors').select('name').eq('id', userData.vendor_id).single();
         return { ...userData, vendors: vendor };
@@ -80,23 +77,18 @@ export const api = {
     }
 
     // ---------------------------------------------------------
-    // ✅ FIX 1: แก้ปัญหา 406 & Handle Encrypted Data Check
+    // ✅ จุดที่แก้ไข: ตรวจสอบข้อมูลที่ Admin Import ไว้ก่อนหน้า
     // ---------------------------------------------------------
-    // ใช้ RPC เช็ค Hash แทนการ Select ตรงๆ (เพราะข้อมูลจริงถูกเข้ารหัสแล้ว)
     const { data: existingUser } = await supabase
         .rpc('check_user_exists', { search_id: nationalId })
         .maybeSingle();
-    
-    // ถ้ามีข้อมูลเก่า (แต่เป็น Placeholder/Inactive) ระบบ Trigger จะจัดการ Hash ให้เองเมื่อเรา Insert ใหม่ทับลงไป
 
     const email = `${nationalId}@safetypass.com`
     const password = nationalId 
 
-    // ---------------------------------------------------------
-    // ✅ FIX 2: Auto Login Strategy
-    // ---------------------------------------------------------
     let authUser = null;
     
+    // 1. ลองสมัครบัญชี Auth
     const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
@@ -104,14 +96,13 @@ export const api = {
     });
 
     if (signUpError) {
+        // 2. ถ้าบัญชีมีอยู่แล้ว (เช่น Admin เคยลงทะเบียนให้ หรือเคยกดสมัครแล้ว) ให้ทำการ Sign In แทน
         if (signUpError.status === 422 || signUpError.message.includes('already registered')) {
-            console.log("User exists (422), attempting Auto-Login...");
             const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
                 email,
                 password
             });
-
-            if (signInError) throw new Error('บัญชีนี้มีอยู่แล้วแต่เข้าสู่ระบบไม่สำเร็จ (รหัสผ่านอาจผิดพลาด)');
+            if (signInError) throw new Error('บัญชีนี้ถูกใช้งานแล้ว แต่รหัสผ่านไม่ถูกต้อง');
             authUser = signInData.user;
         } else {
             throw new Error(signUpError.message);
@@ -120,28 +111,40 @@ export const api = {
         authUser = signUpData.user;
     }
 
-    if (!authUser) throw new Error('Auth Error: Failed to acquire user session.');
+    if (!authUser) throw new Error('ไม่สามารถเชื่อมต่อระบบยืนยันตัวตนได้');
 
-    // 3. Upsert ข้อมูล Profile (Trigger ใน DB จะทำการเข้ารหัสให้เองอัตโนมัติ)
+    // ---------------------------------------------------------
+    // ✅ จุดที่แก้ไข: ใช้ upsert โดยอ้างอิงจาก national_id_hash (ห้ามใส่ ID ถ้าเป็นคนเดิม)
+    // ---------------------------------------------------------
+    const payload: any = {
+      name,
+      national_id: nationalId,
+      age,             
+      nationality,    
+      vendor_id: finalVendorId,
+      role: 'USER',
+      pdpa_agreed: true,
+      pdpa_agreed_at: new Date().toISOString()
+    };
+
+    // ถ้า Admin Import ข้อมูลไว้แล้ว ให้ใช้ ID เดิมของพนักงานคนนั้น
+    if (existingUser && (existingUser as any).id) {
+        payload.id = (existingUser as any).id;
+    } else {
+        payload.id = authUser.id;
+    }
+
     const { data: newUser, error: dbError } = await supabase
       .from('users')
-      .upsert({
-        id: authUser.id,
-        national_id: nationalId, // ส่งค่าจริงไป เดี๋ยว Trigger จะแปลงเป็น 'PROTECTED' และเก็บ Hash
-        name,
-        age,            
-        nationality,    
-        vendor_id: finalVendorId,
-        role: 'USER',
-        pdpa_agreed: true,
-        pdpa_agreed_at: new Date().toISOString()
-      }, { onConflict: 'id' })
+      .upsert(payload, { onConflict: 'national_id_hash' }) // ✅ แก้ไขให้ Upsert ผ่าน Hash
       .select('*, vendors(*)')
       .single()
 
-    if (dbError) throw new Error('บันทึก Profile ไม่สำเร็จ: ' + dbError.message)
+    if (dbError) {
+        console.error("Database Upsert Error:", dbError);
+        throw new Error('ลงทะเบียนไม่สำเร็จ: ' + dbError.message);
+    }
     
-    // Return ค่ากลับไปโดยหลอกว่าเป็น ID จริง (เพื่อให้ UI แสดงผลถูกต้องทันทีโดยไม่ต้อง fetch ใหม่)
     return { ...newUser, national_id: nationalId } as unknown as User
   },
 
@@ -155,7 +158,6 @@ export const api = {
       .select('*')
       .eq('status', 'APPROVED')
       .order('name')
-
     return data || []
   },
 
@@ -164,20 +166,22 @@ export const api = {
       .from('vendors')
       .select('*')
       .eq('status', 'PENDING')
-
     return data || []
   },
 
+  // ✅ ฟังก์ชันที่เพิ่มมาใหม่สำหรับ VendorManager.tsx
   approveVendor: async (id: string) => {
-    await supabase.from('vendors')
+    const { error } = await supabase.from('vendors')
       .update({ status: 'APPROVED' })
-      .eq('id', id)
+      .eq('id', id);
+    if (error) throw error;
   },
 
   rejectVendor: async (id: string) => {
-    await supabase.from('vendors')
+    const { error } = await supabase.from('vendors')
       .update({ status: 'REJECTED' })
-      .eq('id', id)
+      .eq('id', id);
+    if (error) throw error;
   },
 
   /* =====================================================
@@ -199,7 +203,6 @@ export const api = {
       .select('value')
       .eq('key', key)
       .single()
-
     return Number(data?.value || 0)
   },
 
@@ -223,27 +226,15 @@ export const api = {
   getQuestions: async (type: ExamType): Promise<Question[]> => {
     const { data, error } = await supabase
       .from('questions')
-      .select('id, content_th, content_en, choices_json, type, image_url, correct_choice_index')
+      .select('*') // ดึงทั้งหมดเพื่อรองรับฟิลด์ pattern และอื่นๆ
       .eq('type', type)
       .eq('is_active', true);
 
-    if (error) {
-      console.error("Error fetching questions:", error);
-      return [];
-    }
+    if (error) return [];
 
     return (data || []).map((q: any) => ({
-      id: q.id,
-      content_th: q.content_th,
-      content_en: q.content_en,
-      type: q.type as ExamType,
-      image_url: q.image_url,
-      correct_choice_index: q.correct_choice_index,
-      choices_json: (
-        typeof q.choices_json === 'string'
-          ? JSON.parse(q.choices_json)
-          : q.choices_json
-      ) as Choice[]
+      ...q,
+      choices_json: typeof q.choices_json === 'string' ? JSON.parse(q.choices_json) : q.choices_json
     } as Question));
   },
 
@@ -255,10 +246,7 @@ export const api = {
 
     return (data || []).map(q => ({
       ...q,
-      choices_json:
-        typeof q.choices_json === 'string'
-          ? JSON.parse(q.choices_json)
-          : q.choices_json
+      choices_json: typeof q.choices_json === 'string' ? JSON.parse(q.choices_json) : q.choices_json
     })) as Question[]
   },
 
@@ -280,6 +268,16 @@ export const api = {
   /* =====================================================
      5. EXAM SUBMISSION & HISTORY
   ===================================================== */
+
+  // ✅ ฟังก์ชันที่เพิ่มมาใหม่สำหรับ VendorManager.tsx
+  deleteUser: async (userId: string) => {
+    const { error } = await supabase
+      .from('users')
+      .delete()
+      .eq('id', userId);
+    if (error) throw error;
+    return true;
+  },
 
   submitExamResult: async (
     type: ExamType,
@@ -328,12 +326,12 @@ export const api = {
 
   submitExamWithAnswers: async (
     type: ExamType,
-    answers: Record<string, number>,
+    answers: Record<string, any>, // รองรับทั้ง number (Index) และ string (Writing)
     permitNo?: string
   ) => {
     const { data: questions, error } = await supabase
       .from('questions')
-      .select('id, correct_choice_index, choices_json')
+      .select('*')
       .eq('type', type);
 
     if (error || !questions) throw new Error('ไม่สามารถดึงข้อมูลข้อสอบได้');
@@ -344,16 +342,25 @@ export const api = {
 
     let score = 0;
     questions.forEach((q) => {
-      const userChoiceIndex = answers[q.id];
-      if (userChoiceIndex !== undefined) {
-        const choices = typeof q.choices_json === 'string' ? JSON.parse(q.choices_json) : q.choices_json;
-        if (choices[userChoiceIndex]?.is_correct === true || userChoiceIndex === q.correct_choice_index) {
-          score++;
-        }
+      const userAns = answers[q.id];
+      if (userAns === undefined) return;
+
+      const choices = typeof q.choices_json === 'string' ? JSON.parse(q.choices_json) : q.choices_json;
+
+      if (q.pattern === 'SHORT_ANSWER') {
+          const correctText = choices[0]?.correct_answer?.toLowerCase().trim();
+          if (userAns.toString().toLowerCase().trim() === correctText) score++;
+      } 
+      else if (q.pattern === 'MATCHING') {
+          const isAllCorrect = choices.every((p: any, idx: number) => userAns[idx] === idx);
+          if (isAllCorrect) score++;
+      }
+      else {
+          if (choices[userAns]?.is_correct === true || userAns === q.correct_choice_index) score++;
       }
     });
 
-    const passedPercent = (score / questions.length) * 100;
+    const passedPercent = questions.length > 0 ? (score / questions.length) * 100 : 0;
     const passed = passedPercent >= threshold;
     await api.submitExamResult(type, score, questions.length, passed, permitNo);
 
@@ -404,7 +411,6 @@ export const api = {
       .from('exam_history')
       .select(`*, users (name, national_id, vendors (name))`)
       .order('created_at', { ascending: false });
-    
     if (error) throw error;
     return data;
   },
@@ -413,18 +419,8 @@ export const api = {
     const { data, error } = await supabase
       .from('exam_history')
       .select(`
-        created_at,
-        exam_type,
-        score,
-        total_questions,
-        status,
-        users (
-          national_id,
-          name,
-          age,
-          nationality,
-          vendors ( name )
-        )
+        created_at, exam_type, score, total_questions, status,
+        users ( national_id, name, age, nationality, vendors ( name ) )
       `)
       .order('created_at', { ascending: false });
 
