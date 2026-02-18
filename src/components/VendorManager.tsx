@@ -20,8 +20,17 @@ import {
   ShieldCheck,
   X,
   Globe2,
-  Calendar
+  Calendar,
+  CalendarClock
 } from 'lucide-react';
+
+// ✅ ฟังก์ชันช่วยสร้าง UUID (สำหรับพนักงานที่ยังไม่มีบัญชี)
+function generateUUID() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
 
 const VendorManager: React.FC = () => {
   const { showToast } = useToastContext();
@@ -35,7 +44,7 @@ const VendorManager: React.FC = () => {
   // ✅ Modal States
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
-  const [editForm, setEditForm] = useState({ name: '', age: '', nationality: '' });
+  const [editForm, setEditForm] = useState({ name: '', age: '', nationality: '', induction_expiry: '' });
   const [isOtherNationality, setIsOtherNationality] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -98,36 +107,43 @@ const VendorManager: React.FC = () => {
     }
   };
 
-  // ✅ เปิด Modal แก้ไขพนักงาน
   const handleEditUser = (user: any) => {
     setEditingUser(user);
     const nationalities = ['ไทย (Thai)', 'พม่า (Myanmar)', 'กัมพูชา (Cambodian)', 'ลาว (Lao)'];
-    const isOther = !nationalities.includes(user.nationality);
+    const isOther = user.nationality && !nationalities.includes(user.nationality);
     
+    let expiryDate = '';
+    if (user.induction_expiry) {
+        expiryDate = new Date(user.induction_expiry).toISOString().split('T')[0];
+    }
+
     setEditForm({
       name: user.name || '',
       age: user.age || '',
-      nationality: user.nationality || 'ไทย (Thai)'
+      nationality: user.nationality || 'ไทย (Thai)',
+      induction_expiry: expiryDate
     });
     setIsOtherNationality(isOther);
     setIsEditModalOpen(true);
   };
 
-  // ✅ บันทึกการแก้ไขพนักงานจาก Modal
   const saveUserEdit = async () => {
     if (!editingUser) return;
     setSubmitting(true);
     try {
+      const expiryVal = editForm.induction_expiry ? new Date(editForm.induction_expiry).toISOString() : null;
+
       const { error } = await supabase.from('users').update({
         name: editForm.name,
         age: Number(editForm.age),
-        nationality: editForm.nationality
+        nationality: editForm.nationality,
+        induction_expiry: expiryVal 
       }).eq('id', editingUser.id);
 
       if (error) throw error;
 
       showToast('อัปเดตข้อมูลพนักงานสำเร็จ', 'success');
-      logAction('EDIT_USER', editingUser.name, `Updated Profile: ${editForm.name}, ${editForm.age}, ${editForm.nationality}`);
+      logAction('EDIT_USER', editingUser.name, `Updated Profile & Induction Expiry`);
       setIsEditModalOpen(false);
       loadData();
     } catch (err: any) {
@@ -147,7 +163,10 @@ const VendorManager: React.FC = () => {
         'National ID': user.national_id,
         'Vendor': user.vendors?.name || 'N/A',
         'Role': user.role,
-        'Status': user.induction_expiry ? 'Certified' : 'Pending'
+        'Age': user.age || '',
+        'Nationality': user.nationality || '',
+        'Status': user.induction_expiry ? 'Certified' : 'Pending',
+        'Induction Expiry': user.induction_expiry ? new Date(user.induction_expiry).toLocaleDateString() : '-'
       }));
       fileName = `Personnel_List_${new Date().toISOString().split('T')[0]}.xlsx`;
     } else if (activeTab === 'VENDORS') {
@@ -166,6 +185,7 @@ const VendorManager: React.FC = () => {
     showToast('Exported Successfully', 'success');
   };
 
+  // ✅ แก้ไข: เพิ่ม Logic ตรวจสอบ ID และสร้าง UUID ใหม่ถ้าจำเป็น
   const handleUserImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -177,21 +197,59 @@ const VendorManager: React.FC = () => {
         const ws = wb.Sheets[wb.SheetNames[0]];
         const data: any[] = XLSX.utils.sheet_to_json(ws);
         let successCount = 0;
+        let failCount = 0;
+        
         for (const row of data) {
           const name = row['Name'];
-          const nid = row['NationalID'] || row['National ID'];
+          const nidRaw = row['NationalID'] || row['National ID'];
+          const nid = nidRaw ? String(nidRaw).trim() : null; 
           const vName = row['VendorName'] || row['Vendor'];
+          const age = row['Age'] ? Number(row['Age']) : null;
+          const nationality = row['Nationality'] || 'ไทย (Thai)';
+
           if (name && nid) {
             const vendor = allVendors.find(v => v.name === vName);
-            const { error } = await supabase.from('users').insert([{
-              name, national_id: String(nid), vendor_id: vendor?.id || null, role: 'USER'
-            }]);
-            if (!error) successCount++;
+            
+            // 1. เช็คก่อนว่ามี User คนนี้อยู่แล้วหรือยัง (โดยใช้ National ID)
+            const { data: existingUser } = await supabase
+                .from('users')
+                .select('id')
+                .eq('national_id', nid)
+                .maybeSingle();
+
+            // 2. ถ้ามี -> ใช้ ID เดิม (Update)
+            //    ถ้าไม่มี -> สร้าง UUID ใหม่ (Insert)
+            const userId = existingUser ? existingUser.id : generateUUID();
+
+            const { error } = await supabase.from('users').upsert([{
+              id: userId, // ✅ ใส่ ID ลงไป (สำคัญมาก!)
+              name, 
+              national_id: nid, 
+              vendor_id: vendor?.id || null, 
+              role: 'USER',
+              age: age,
+              nationality: nationality
+            }], { onConflict: 'national_id' }); 
+
+            if (!error) {
+                successCount++;
+            } else {
+                console.error("Import Error for:", name, error);
+                failCount++;
+            }
           }
         }
-        showToast(`Imported ${successCount} entries`, 'success');
+        
+        if (failCount > 0) {
+            showToast(`Imported ${successCount}, Failed ${failCount}. Check console.`, 'error');
+        } else {
+            showToast(`Imported ${successCount} entries successfully`, 'success');
+        }
         loadData();
-      } catch (err) { showToast('Invalid File Format', 'error'); }
+      } catch (err) { 
+          console.error(err);
+          showToast('Invalid File Format or Data Error', 'error'); 
+      }
     };
     reader.readAsBinaryString(file);
     e.target.value = '';
@@ -211,7 +269,7 @@ const VendorManager: React.FC = () => {
         for (const row of data) {
           const name = row['CompanyName'] || row['Name'];
           if (name) {
-            const { error } = await supabase.from('vendors').insert([{ name, status: 'APPROVED' }]);
+            const { error } = await supabase.from('vendors').upsert([{ name, status: 'APPROVED' }], { onConflict: 'name' });
             if (!error) successCount++;
           }
         }
@@ -244,7 +302,16 @@ const VendorManager: React.FC = () => {
     if (!name || !nationalId) return;
     const vendorName = window.prompt("ชื่อบริษัทสังกัด (Affiliation):");
     const vendor = allVendors.find(v => v.name === vendorName);
-    const { error } = await supabase.from('users').insert([{ name, national_id: nationalId, vendor_id: vendor?.id || null, role: 'USER' }]);
+    
+    // ✅ เพิ่มการสร้าง UUID ให้กับการเพิ่ม Manual ด้วย
+    const { error } = await supabase.from('users').insert([{ 
+        id: generateUUID(),
+        name, 
+        national_id: nationalId, 
+        vendor_id: vendor?.id || null, 
+        role: 'USER' 
+    }]);
+
     if (error) showToast(error.message, 'error'); else { showToast('Success', 'success'); logAction('CREATE_USER', name); loadData(); }
   };
 
@@ -404,9 +471,21 @@ const VendorManager: React.FC = () => {
                             {item.status}
                           </div>
                         ) : (
-                          <span className="text-slate-500 font-black text-[9px] uppercase bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-100 truncate max-w-[200px] block">
-                            {item.vendors?.name || 'External / Unassigned'}
-                          </span>
+                          <div className="flex flex-col gap-1">
+                            <span className="text-slate-500 font-black text-[9px] uppercase bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-100 truncate max-w-[200px] block w-fit">
+                              {item.vendors?.name || 'External / Unassigned'}
+                            </span>
+                            {/* แสดงสถานะ Induction */}
+                            {item.induction_expiry ? (
+                              <span className="text-[8px] font-black text-emerald-500 uppercase flex items-center gap-1">
+                                <CheckCircle size={8} /> Exp: {new Date(item.induction_expiry).toLocaleDateString('th-TH')}
+                              </span>
+                            ) : (
+                               <span className="text-[8px] font-black text-amber-500 uppercase flex items-center gap-1">
+                                <RotateCcw size={8} /> Not Certified
+                              </span>
+                            )}
+                          </div>
                         )}
                       </td>
                       <td className="px-8 py-5">
@@ -461,7 +540,7 @@ const VendorManager: React.FC = () => {
               </button>
             </div>
 
-            <div className="p-8 space-y-6">
+            <div className="p-8 space-y-6 overflow-y-auto max-h-[60vh]">
               {/* Name Field */}
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
@@ -530,6 +609,25 @@ const VendorManager: React.FC = () => {
                   />
                 </div>
               )}
+
+              {/* ✅ ส่วน Override Induction Date (Admin Only Feature) */}
+              <div className="pt-4 border-t border-slate-100">
+                <div className="bg-amber-50 border border-amber-100 p-4 rounded-2xl">
+                    <label className="text-[10px] font-black text-amber-600 uppercase tracking-widest ml-1 flex items-center gap-2 mb-2">
+                        <CalendarClock size={14} /> Induction Expiry Override
+                    </label>
+                    <div className="text-[9px] text-amber-500 mb-2 font-bold leading-tight">
+                        * สำหรับผู้ที่มีใบเซอร์จากที่อื่นแล้ว กำหนดวันที่หมดอายุที่นี่เพื่อข้ามการสอบ (Bypass Exam)
+                    </div>
+                    <input
+                        type="date"
+                        className="w-full bg-white border border-amber-200 p-3 rounded-xl font-bold text-slate-800 outline-none focus:border-amber-500 transition-all shadow-inner"
+                        value={editForm.induction_expiry}
+                        onChange={e => setEditForm({ ...editForm, induction_expiry: e.target.value })}
+                    />
+                </div>
+              </div>
+
             </div>
 
             <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3">

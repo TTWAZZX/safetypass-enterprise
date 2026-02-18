@@ -49,6 +49,14 @@ export const api = {
       finalVendorId = newVendor.id
     }
 
+    // ✅ เพิ่ม Logic ตรวจสอบข้อมูล Placeholder (จากการ Import)
+    // ถ้ามีข้อมูลที่ Admin Import ไว้แล้ว ให้ลบออกก่อน เพื่อให้การสมัครสมาชิกสร้างข้อมูลใหม่ที่ผูกกับ Auth ID ได้ถูกต้อง
+    const { data: existingUser } = await supabase.from('users').select('id').eq('national_id', nationalId).single();
+    if (existingUser) {
+        // ลบข้อมูล Placeholder เก่าทิ้ง
+        await supabase.from('users').delete().eq('national_id', nationalId);
+    }
+
     const email = `${nationalId}@safetypass.com`
     const password = nationalId 
 
@@ -213,56 +221,27 @@ export const api = {
   },
 
   /* =====================================================
-     5. EXAM SUBMISSION & HISTORY (CLIENT-SIDE SCORING COMPATIBLE)
+     5. EXAM SUBMISSION & HISTORY
   ===================================================== */
 
-  submitExamWithAnswers: async (
+  submitExamResult: async (
     type: ExamType,
-    answers: Record<string, number>,
+    score: number,
+    totalQuestions: number,
+    passed: boolean,
     permitNo?: string
   ) => {
-    // ดึงข้อมูลข้อสอบจริงมาเพื่อหาเกณฑ์และรวมข้อมูล
-    const { data: questions, error } = await supabase
-      .from('questions')
-      .select('id, correct_choice_index, choices_json')
-      .eq('type', type);
-
-    if (error || !questions) throw new Error('ไม่สามารถดึงข้อมูลข้อสอบได้');
-
-    // ดึงเกณฑ์คะแนนจาก Settings
-    const config = await api.getSystemSettings();
-    const thresholdKey = type === 'INDUCTION' ? 'PASSING_SCORE_INDUCTION' : 'PASSING_SCORE_WORK_PERMIT';
-    const threshold = Number(config[thresholdKey] || 80);
-
-    // ✅ คำนวณคะแนน (รองรับกรณีสลับตัวเลือกโดยเช็คจาก is_correct ใน Client แล้ว หรือเทียบ index เดิม)
-    let score = 0;
-    questions.forEach((q) => {
-      const userChoiceIndex = answers[q.id];
-      if (userChoiceIndex !== undefined) {
-        const choices = typeof q.choices_json === 'string' ? JSON.parse(q.choices_json) : q.choices_json;
-        // เช็คความถูกต้องจาก property is_correct เพื่อรองรับ Shuffling
-        if (choices[userChoiceIndex]?.is_correct === true) {
-          score++;
-        }
-      }
-    });
-
-    const passedPercent = (score / questions.length) * 100;
-    const passed = passedPercent >= threshold;
-    
     const { data: { user } } = await supabase.auth.getUser();
 
     if (user) {
-      // ✅ บันทึกลงตาราง exam_history
       await supabase.from('exam_history').insert([{
         user_id: user.id,
         exam_type: type,
         score: score,
-        total_questions: questions.length,
+        total_questions: totalQuestions,
         status: passed ? 'PASSED' : 'FAILED'
       }]);
 
-      // บันทึกลงตารางเดิมเพื่อความเข้ากันได้
       await supabase.from('exam_logs').insert({ 
         user_id: user.id, 
         exam_type: type, 
@@ -287,6 +266,40 @@ export const api = {
         }
       }
     }
+    return { success: true };
+  },
+
+  submitExamWithAnswers: async (
+    type: ExamType,
+    answers: Record<string, number>,
+    permitNo?: string
+  ) => {
+    const { data: questions, error } = await supabase
+      .from('questions')
+      .select('id, correct_choice_index, choices_json')
+      .eq('type', type);
+
+    if (error || !questions) throw new Error('ไม่สามารถดึงข้อมูลข้อสอบได้');
+
+    const config = await api.getSystemSettings();
+    const thresholdKey = type === 'INDUCTION' ? 'PASSING_SCORE_INDUCTION' : 'PASSING_SCORE_WORK_PERMIT';
+    const threshold = Number(config[thresholdKey] || 80);
+
+    let score = 0;
+    questions.forEach((q) => {
+      const userChoiceIndex = answers[q.id];
+      if (userChoiceIndex !== undefined) {
+        const choices = typeof q.choices_json === 'string' ? JSON.parse(q.choices_json) : q.choices_json;
+        if (choices[userChoiceIndex]?.is_correct === true || userChoiceIndex === q.correct_choice_index) {
+          score++;
+        }
+      }
+    });
+
+    const passedPercent = (score / questions.length) * 100;
+    const passed = passedPercent >= threshold;
+    await api.submitExamResult(type, score, questions.length, passed, permitNo);
+
     return { score, passed };
   },
 
@@ -332,14 +345,7 @@ export const api = {
   getAllExamHistory: async () => {
     const { data, error } = await supabase
       .from('exam_history')
-      .select(`
-        *,
-        users (
-          name,
-          national_id,
-          vendors (name)
-        )
-      `)
+      .select(`*, users (name, national_id, vendors (name))`)
       .order('created_at', { ascending: false });
     
     if (error) throw error;
@@ -383,12 +389,10 @@ export const api = {
   getDailyStats: async () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-
     const { data, error } = await supabase
       .from('exam_history')
       .select('status')
       .gte('created_at', today.toISOString());
-
     if (error) throw error;
 
     const total = data?.length || 0;
@@ -397,10 +401,6 @@ export const api = {
 
     return { total, passed, failed };
   },
-
-  /* =====================================================
-     7. UTILS
-  ===================================================== */
 
   getActiveWorkPermit: async (userId: string): Promise<WorkPermitSession | null> => {
     const { data } = await supabase

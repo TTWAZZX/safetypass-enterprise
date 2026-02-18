@@ -12,7 +12,10 @@ import {
   ChevronLeft,
   BookOpen,
   Send,
-  Clock
+  Clock,
+  RotateCcw,    // ✅ ใช้จาก Library โดยตรง
+  ExternalLink, // ✅ เพิ่มปุ่มขยายสำหรับมือถือ
+  Maximize2     // ✅ เพิ่มปุ่มขยาย
 } from 'lucide-react';
 
 interface ExamSystemProps {
@@ -67,7 +70,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
   const handleSubmit = async () => {
     setLoading(true);
     try {
-      // ✅ คำนวณคะแนนฝั่ง Client โดยตรวจจากฟิลด์ is_correct ในตัวเลือกที่สุ่มมา
+      // ✅ คำนวณคะแนนฝั่ง Client
       let correctCount = 0;
       questions.forEach((q) => {
         const selectedIdx = answers[q.id];
@@ -79,10 +82,10 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
         }
       });
 
-      // ส่งข้อมูลไปบันทึก (ระบบหลังบ้านจะได้รับ answers ที่ index ตรงกับที่แสดงผลในหน้าจอขณะนั้น)
+      // ส่งข้อมูลไปบันทึก
       const result = await api.submitExamWithAnswers(type, answers, permitNo);
       
-      // อัปเดตสถานะด้วยคะแนนที่คำนวณได้จริง
+      // อัปเดตสถานะ
       setScore(correctCount);
       setPassed(result.passed); 
       setStep('RESULT');
@@ -125,40 +128,62 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
 
   const isQuestionAnswered = (id: string) => answers[id] !== undefined;
 
-  /* ================= 📖 READ STEP ================= */
+  /* ================= 📖 READ STEP (Mobile Optimized) ================= */
   if (step === 'READ') {
+    const pdfUrl = `https://qdodmxrecioltwdryhec.supabase.co/storage/v1/object/public/manuals/${type.toLowerCase()}.pdf`;
+
     return (
       <div className="max-w-2xl mx-auto p-4 md:p-6 animate-in slide-in-from-bottom-4 duration-500 text-left">
         <button onClick={onBack} className="flex items-center gap-1.5 text-slate-400 hover:text-blue-600 mb-4 font-black text-[10px] uppercase tracking-widest transition-all">
           <ArrowLeft size={16} /> {t('common.back')}
         </button>
 
-        <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
-          <div className="p-6 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+        <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[85vh] md:h-auto">
+          {/* Header Bar */}
+          <div className="p-5 border-b border-slate-100 bg-slate-50 flex items-center justify-between flex-shrink-0">
             <div>
-              <h2 className="text-xl font-black text-slate-900 leading-tight">{t('user.manual')}</h2>
+              <h2 className="text-lg md:text-xl font-black text-slate-900 leading-tight">{t('user.manual')}</h2>
               <p className="text-[10px] text-blue-600 font-bold uppercase tracking-widest mt-0.5">{type} Safety Training</p>
             </div>
-            <div className="p-2 bg-white rounded-xl shadow-sm border border-slate-100"><BookOpen className="text-blue-500" size={20} /></div>
+            {/* ✅ ปุ่ม Full Screen บน Desktop */}
+            <a 
+              href={pdfUrl} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="p-2 bg-white text-blue-600 hover:bg-blue-50 rounded-xl border border-slate-200 shadow-sm transition-all"
+              title="Open Full Screen"
+            >
+              <Maximize2 size={20} />
+            </a>
           </div>
 
-          <div className="p-2 bg-slate-100">
-            <div className="bg-white rounded-xl overflow-hidden relative border border-slate-200 shadow-inner">
-              <iframe 
-                src={`https://qdodmxrecioltwdryhec.supabase.co/storage/v1/object/public/manuals/${type.toLowerCase()}.pdf#toolbar=0&navpanes=0`} 
-                className="w-full h-[50vh] md:h-[60vh] border-none"
-                title="Manual Viewer"
-              />
+          {/* ✅ ส่วนแสดงผล PDF: ปรับให้ยืดเต็มพื้นที่ (Flex Grow) */}
+          <div className="flex-grow bg-slate-200 relative overflow-hidden">
+            <iframe 
+              src={`${pdfUrl}#toolbar=0&navpanes=0&view=FitH`} 
+              className="w-full h-full border-none absolute inset-0"
+              title="Manual Viewer"
+            />
+            {/* ✅ ปุ่มลอย Full Screen สำหรับมือถือ */}
+            <div className="absolute bottom-4 right-4 md:hidden">
+               <a 
+                href={pdfUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-slate-900/80 backdrop-blur-md text-white px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 shadow-lg hover:bg-slate-800 transition-all"
+               >
+                 <ExternalLink size={14} /> Full Screen
+               </a>
             </div>
           </div>
 
-          <div className="p-6 bg-white text-center space-y-5">
-            <label className="flex items-start gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-100 cursor-pointer active:bg-blue-50 transition-all text-left">
+          <div className="p-5 bg-white text-center space-y-4 flex-shrink-0 border-t border-slate-100 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] z-10">
+            <label className="flex items-start gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-100 cursor-pointer active:bg-blue-50 transition-all text-left">
               <input 
                 type="checkbox" 
                 checked={hasReadManual}
                 onChange={(e) => setHasReadManual(e.target.checked)}
-                className="mt-1 w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                className="mt-1 w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 flex-shrink-0"
               />
               <span className="text-xs text-slate-600 font-bold leading-relaxed select-none">
                 ข้าพเจ้ายืนยันว่าได้ศึกษาเนื้อหาคู่มือความปลอดภัยครบถ้วนแล้ว และพร้อมเข้าทำแบบทดสอบ
@@ -168,7 +193,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
             <button
               disabled={!hasReadManual}
               onClick={() => setStep('EXAM')}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-2xl shadow-lg shadow-blue-100 transition-all text-base disabled:opacity-50 disabled:grayscale flex items-center justify-center gap-2 active:scale-95"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-2xl shadow-lg shadow-blue-100 transition-all text-sm uppercase tracking-wider disabled:opacity-50 disabled:grayscale flex items-center justify-center gap-2 active:scale-95"
             >
               {t('exam.start')} <ChevronRight size={18} />
             </button>
@@ -349,10 +374,5 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
     </div>
   );
 };
-
-// 🔵 Helper Components
-const RotateCcw = ({ size }: { size: number }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-);
 
 export default ExamSystem;
