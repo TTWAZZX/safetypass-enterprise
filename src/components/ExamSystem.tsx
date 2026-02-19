@@ -182,6 +182,27 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
       setScore(correctCount);
       setPassed(calculatedPassed); 
       
+      // 🔥 ย้ายออกมาไว้นอก if (calculatedPassed) เพื่อให้ส่งแจ้งเตือนทั้งตอนผ่านและตก
+      if (type === 'WORK_PERMIT') {
+        try {
+          fetch('/api/notify-work-permit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: user.name,
+              vendor: user.vendors?.name || 'EXTERNAL (ไม่มีสังกัด)',
+              score: correctCount,
+              maxScore: questions.length,
+              permitNo: permitNo,
+              status: calculatedPassed ? 'PASSED' : 'FAILED' // ✅ แยกสถานะผ่าน/ตก
+            })
+          }).catch(e => console.error("LINE Notification Trigger Error:", e));
+        } catch (err) {
+          console.error("Fail to trigger LINE API:", err);
+        }
+      }
+
+      // เฉพาะคนสอบผ่านเท่านั้นที่ต้องจัดการเรื่องข้อมูล User และวันหมดอายุ
       if (calculatedPassed) {
         const updatedUser = { ...user };
         const now = new Date();
@@ -191,26 +212,6 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
           updatedUser.induction_expiry = nextYear.toISOString();
         }
         setUpdatedUserData(updatedUser);
-
-        // 🔥 แก้ไขส่วนนี้: ส่งแจ้งเตือน LINE สำหรับ Work Permit ไม่ว่าจะผ่านหรือไม่ผ่าน
-        if (type === 'WORK_PERMIT') {
-          try {
-            fetch('/api/notify-work-permit', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                name: user.name,
-                vendor: user.vendors?.name || 'EXTERNAL (ไม่มีสังกัด)',
-                score: correctCount,
-                maxScore: questions.length,
-                permitNo: permitNo,
-                status: calculatedPassed ? 'PASSED' : 'FAILED' // ✅ ส่งสถานะไปให้ API แยกสีการ์ด
-              })
-            }).catch(e => console.error("LINE Notification Trigger Error:", e));
-          } catch (err) {
-            console.error("Fail to trigger LINE API:", err);
-          }
-        }
       }
       
       setStep('RESULT');
