@@ -192,7 +192,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
         }
         setUpdatedUserData(updatedUser);
 
-        // ✅ ส่งแจ้งเตือน LINE สำหรับ Work Permit (ทั้งผ่านและไม่ผ่าน)
+        // 🔥 แก้ไขส่วนนี้: ส่งแจ้งเตือน LINE สำหรับ Work Permit ไม่ว่าจะผ่านหรือไม่ผ่าน
         if (type === 'WORK_PERMIT') {
           try {
             fetch('/api/notify-work-permit', {
@@ -204,7 +204,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
                 score: correctCount,
                 maxScore: questions.length,
                 permitNo: permitNo,
-                status: calculatedPassed ? 'PASSED' : 'FAILED' // ✅ เพิ่มสถานะตรงนี้
+                status: calculatedPassed ? 'PASSED' : 'FAILED' // ✅ ส่งสถานะไปให้ API แยกสีการ์ด
               })
             }).catch(e => console.error("LINE Notification Trigger Error:", e));
           } catch (err) {
