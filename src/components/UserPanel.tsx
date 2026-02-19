@@ -26,7 +26,8 @@ import {
   Globe2,
   CheckCircle2,
   AlertTriangle,
-  ArrowRightCircle
+  ArrowRightCircle,
+  Maximize2
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useToastContext } from './ToastProvider';
@@ -200,7 +201,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
               <div className="flex-1 w-full pt-4 md:pt-0 text-center md:text-left">
                   {isEditing ? (
                     <div className="space-y-3 text-left">
-                       <input className="text-lg font-bold text-slate-900 border-b-2 border-blue-500 outline-none w-full bg-slate-50 px-3 py-2 rounded-t-lg transition-all" value={editName} onChange={(e) => setEditName(e.target.value)} />
+                        <input className="text-lg font-bold text-slate-900 border-b-2 border-blue-500 outline-none w-full bg-slate-50 px-3 py-2 rounded-t-lg transition-all" value={editName} onChange={(e) => setEditName(e.target.value)} />
                         <div className="grid grid-cols-2 gap-3">
                             <div>
                               <label className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Age</label>
@@ -242,16 +243,16 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
               </div>
 
               <div className="flex gap-2 w-full md:w-auto mt-2 md:mt-0 justify-center">
-                 {isEditing ? (
+                  {isEditing ? (
                     <div className="flex gap-2 w-full">
-                       <button onClick={handleUpdateProfile} disabled={isSaving} className="flex-1 bg-emerald-600 text-white py-2.5 px-4 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all">
-                         {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save
-                       </button>
-                       <button onClick={() => setIsEditing(false)} className="px-4 bg-slate-100 text-slate-500 rounded-xl text-[10px] font-black uppercase hover:bg-slate-200">Cancel</button>
+                        <button onClick={handleUpdateProfile} disabled={isSaving} className="flex-1 bg-emerald-600 text-white py-2.5 px-4 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all">
+                          {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save
+                        </button>
+                        <button onClick={() => setIsEditing(false)} className="px-4 bg-slate-100 text-slate-500 rounded-xl text-[10px] font-black uppercase hover:bg-slate-200">Cancel</button>
                     </div>
-                 ) : (
+                  ) : (
                     <button onClick={() => setIsEditing(true)} className="p-3 bg-slate-50 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all active:scale-90 border border-transparent hover:border-blue-100"><Edit3 size={18} /></button>
-                 )}
+                  )}
               </div>
           </div>
         </div>
@@ -332,20 +333,46 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
           </div>
         )}
 
-        {/* Manual Viewer Modal */}
+        {/* ✅ Manual Viewer Modal (แก้ไขเพื่อไม่ให้บังปุ่ม) */}
         {viewingManual && (
-          <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[100] flex flex-col items-center justify-end md:justify-center">
-            <div className="bg-white w-full max-w-3xl h-[90vh] md:h-[85vh] rounded-t-[2.5rem] md:rounded-[2.5rem] flex flex-col overflow-hidden animate-in slide-in-from-bottom-10 shadow-2xl">
-              <div className="p-6 border-b flex justify-between items-center bg-slate-50">
-                <div className="flex items-center gap-4 text-left">
-                  <div className="p-3 bg-blue-600 text-white rounded-2xl shadow-lg"><FileText size={24} /></div>
-                  <div><h3 className="text-lg font-black text-slate-900">{viewingManual} Manual</h3><p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Safety Training Documentation</p></div>
+          <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[100] flex flex-col items-center justify-center p-0 md:p-4"> 
+            <div className="bg-white w-full h-full md:max-w-4xl md:h-[90vh] md:rounded-[2.5rem] flex flex-col overflow-hidden animate-in zoom-in-95 duration-300 shadow-2xl">
+              
+              {/* 1. ส่วนหัว (Header) - เพิ่ม flex-shrink-0 เพื่อไม่ให้ส่วนนี้ถูกเบียดหายไป */}
+              <div className="p-4 md:p-6 border-b flex justify-between items-center bg-slate-50 flex-shrink-0 z-10 relative">
+                <div className="flex items-center gap-3 md:gap-4 text-left">
+                  <div className="p-2 md:p-3 bg-blue-600 text-white rounded-xl md:rounded-2xl shadow-lg">
+                    <FileText size={20} className="md:w-6 md:h-6" />
+                  </div>
+                  <div>
+                      <h3 className="text-base md:text-lg font-black text-slate-900 leading-tight">{viewingManual} Manual</h3>
+                      <p className="text-[9px] md:text-[10px] text-slate-400 font-bold uppercase tracking-widest">Safety Documentation</p>
+                  </div>
                 </div>
-                <button onClick={() => setViewingManual(null)} className="p-3 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-2xl transition-all"><X size={24} /></button>
+                <div className="flex items-center gap-2">
+                    <a 
+                        href={`https://qdodmxrecioltwdryhec.supabase.co/storage/v1/object/public/manuals/${viewingManual.toLowerCase()}.pdf`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-2 md:p-3 hover:bg-blue-50 text-blue-500 rounded-xl transition-all"
+                    >
+                        <Globe2 size={20} className="md:w-6 md:h-6" />
+                    </a>
+                    <button onClick={() => setViewingManual(null)} className="p-2 md:p-3 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-xl transition-all">
+                        <X size={20} className="md:w-6 md:h-6" />
+                    </button>
+                </div>
               </div>
+
+              {/* 2. ส่วนแสดง PDF - ใช้ flex-grow เพื่อให้กินพื้นที่ที่เหลือ */}
               <div className="flex-grow bg-slate-200 relative">
-                <iframe src={`https://qdodmxrecioltwdryhec.supabase.co/storage/v1/object/public/manuals/${viewingManual.toLowerCase()}.pdf#toolbar=0`} className="w-full h-full border-none" title="Manual Viewer" />
+                <iframe 
+                    src={`https://qdodmxrecioltwdryhec.supabase.co/storage/v1/object/public/manuals/${viewingManual.toLowerCase()}.pdf#toolbar=0&navpanes=0&view=FitH`} 
+                    className="w-full h-full border-none" 
+                    title="Manual Viewer" 
+                />
               </div>
+              
             </div>
           </div>
         )}
@@ -456,6 +483,56 @@ const StageCard = ({ title, isActive, isNearExpiry, expiryDate, icon, onClick, o
             </div>
         </div>
     );
+};
+
+// 💀 Skeleton Loader Component (ใช้สำหรับแสดงตอน Loading)
+export const UserPanelSkeleton = () => {
+  return (
+    <div className="max-w-2xl mx-auto p-4 space-y-8 animate-pulse text-left">
+      {/* Hero Skeleton */}
+      <div className="relative mt-16">
+         <div className="bg-slate-200 h-40 rounded-[2rem] w-full border border-slate-100"></div>
+         <div className="absolute -top-12 left-6 w-24 h-24 bg-slate-200 rounded-[1.5rem] border-4 border-white"></div>
+         <div className="ml-32 mt-4 space-y-3 absolute top-6">
+            <div className="h-6 w-40 bg-slate-200 rounded-full"></div>
+            <div className="flex gap-2">
+                <div className="h-5 w-24 bg-slate-200 rounded-full"></div>
+                <div className="h-5 w-20 bg-slate-200 rounded-full"></div>
+            </div>
+         </div>
+      </div>
+
+      {/* Journey Skeleton */}
+      <div className="space-y-4">
+         <div className="flex justify-between items-center px-1">
+             <div className="h-4 w-32 bg-slate-200 rounded-full"></div>
+             <div className="h-6 w-20 bg-slate-200 rounded-full"></div>
+         </div>
+         <div className="h-40 bg-slate-100 rounded-[2rem] border border-slate-200 p-5 flex flex-col justify-between">
+            <div className="flex gap-4">
+               <div className="w-12 h-12 bg-slate-200 rounded-2xl"></div>
+               <div className="space-y-2 flex-1 pt-1">
+                  <div className="h-4 w-1/3 bg-slate-200 rounded-full"></div>
+                  <div className="h-3 w-1/4 bg-slate-200 rounded-full"></div>
+               </div>
+            </div>
+            <div className="flex justify-between items-end mt-4">
+                <div className="space-y-1">
+                    <div className="h-2 w-16 bg-slate-200 rounded-full"></div>
+                    <div className="h-3 w-24 bg-slate-200 rounded-full"></div>
+                </div>
+                <div className="h-10 w-32 bg-slate-200 rounded-xl"></div>
+            </div>
+         </div>
+      </div>
+      
+      {/* Resources Skeleton */}
+      <div className="grid grid-cols-2 gap-4">
+          <div className="h-32 bg-slate-100 rounded-[1.5rem] border border-slate-200"></div>
+          <div className="h-32 bg-slate-100 rounded-[1.5rem] border border-slate-200"></div>
+      </div>
+    </div>
+  );
 };
 
 export default UserPanel;

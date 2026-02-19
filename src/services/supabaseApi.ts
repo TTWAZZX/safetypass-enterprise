@@ -1,10 +1,12 @@
 import { supabase } from './supabaseClient'
 import { User, Vendor, ExamType, Question, WorkPermitSession, Choice } from '../types'
+// ✅ แก้ไข Import ให้ถูกต้อง
+import SHA256 from 'crypto-js/sha256';
 
 export const api = {
 
   /* =====================================================
-     1. AUTH & REGISTRATION (SECURE MODE 🔒)
+      1. AUTH & REGISTRATION (HYBRID SECURITY MODE 🔒)
   ===================================================== */
 
   login: async (nationalId: string): Promise<User> => {
@@ -40,8 +42,13 @@ export const api = {
   },
 
   checkUser: async (nationalId: string) => {
+    // ✅ แก้ไขการเรียกใช้ Hash เป็น SHA256
+    const hash = SHA256(nationalId).toString();
+    
     const { data, error } = await supabase
-      .rpc('check_user_exists', { search_id: nationalId })
+      .from('users')
+      .select('*, vendors(*)')
+      .or(`national_id.eq.${nationalId},national_id_hash.eq.${hash}`)
       .maybeSingle();
       
     if (error) {
@@ -79,9 +86,8 @@ export const api = {
     // ---------------------------------------------------------
     // ✅ 1. ตรวจสอบข้อมูลที่ Admin Import ไว้ก่อนหน้า (Conflict Check)
     // ---------------------------------------------------------
-    const { data: existingUser } = await supabase
-        .rpc('check_user_exists', { search_id: nationalId })
-        .maybeSingle();
+    // ใช้ checkUser ของเราเองที่รองรับทั้ง Hash และเลขจริง
+    const existingUser = await api.checkUser(nationalId);
 
     const email = `${nationalId}@safetypass.com`
     const password = nationalId 
@@ -116,10 +122,15 @@ export const api = {
     // ---------------------------------------------------------
     // ✅ 3. ใช้ upsert โดยอ้างอิงจาก national_id_hash (Fix Duplicate Key)
     // ---------------------------------------------------------
+    
+    // ✅ แก้ไขการเรียกใช้ Hash เป็น SHA256
+    const nationalIdHash = SHA256(nationalId).toString();
+
     const payload: any = {
       name,
       national_id: nationalId,
-      age,             
+      national_id_hash: nationalIdHash, // เพิ่ม Hash ลงไปใน Payload ด้วย
+      age,            
       nationality,    
       vendor_id: finalVendorId,
       role: 'USER',
@@ -149,7 +160,7 @@ export const api = {
   },
 
   /* =====================================================
-     2. VENDOR MANAGEMENT
+      2. VENDOR MANAGEMENT
   ===================================================== */
 
   getVendors: async (): Promise<Vendor[]> => {
@@ -184,7 +195,7 @@ export const api = {
   },
 
   /* =====================================================
-     3. SYSTEM SETTINGS
+      3. SYSTEM SETTINGS (FIXED: UPSERT ✅)
   ===================================================== */
 
   getSystemSettings: async () => {
@@ -201,25 +212,28 @@ export const api = {
       .from('system_config')
       .select('value')
       .eq('key', key)
-      .single()
+      .maybeSingle() // ✅ เปลี่ยนเป็น maybeSingle เพื่อกัน Error กรณีไม่เจอค่า
     return Number(data?.value || 80) // Default 80
   },
 
-  updateSystemSetting: async (key: string, value: number) => {
-    await supabase
+  // ✅ ฟังก์ชันพระเอก: ใช้ upsert เพื่อ "สร้างใหม่" หรือ "อัปเดต" ในคำสั่งเดียว
+  updateSystemSetting: async (key: string, value: number | string) => {
+    const { error } = await supabase
       .from('system_config')
-      .upsert({ key, value: value.toString() })
+      .upsert(
+        { key, value: String(value) }, 
+        { onConflict: 'key' } // 👈 สำคัญ: ระบุว่าให้เช็คซ้ำที่คอลัมน์ key
+      );
+    if (error) throw error;
   },
   
+  // ✅ ปรับปรุง: ให้เรียกใช้ updateSystemSetting แทน เพื่อความชัวร์
   updatePassingScore: async (key: string, value: number) => {
-    await supabase
-      .from('system_config')
-      .update({ value: value.toString() })
-      .eq('key', key)
+    await api.updateSystemSetting(key, value);
   },
 
   /* =====================================================
-     4. QUESTIONS CRUD
+      4. QUESTIONS CRUD
   ===================================================== */
 
   getQuestions: async (type: ExamType): Promise<Question[]> => {
@@ -265,10 +279,11 @@ export const api = {
   },
 
   /* =====================================================
-     5. EXAM SUBMISSION & HISTORY
+      5. EXAM SUBMISSION & HISTORY
   ===================================================== */
 
   deleteUser: async (userId: string) => {
+    // Note: ควรใช้ handleDeleteUser ใน VendorManager เพื่อ Cascade Delete
     const { error } = await supabase
       .from('users')
       .delete()
@@ -322,12 +337,13 @@ export const api = {
     return { success: true };
   },
 
-  // ✅ ฟังก์ชันคำนวณคะแนนและบันทึกผล
+  // ✅ เวอร์ชัน Super Compatible: ตรวจทั้งเลขข้อถูก และ Flag ใน Choice (จบปัญหาคะแนนไม่ตรง)
   submitExamWithAnswers: async (
     type: ExamType,
     answers: Record<string, any>, 
     permitNo?: string
   ) => {
+    // 1. ดึงเฉลยจาก Database
     const { data: questions, error } = await supabase
       .from('questions')
       .select('*')
@@ -335,44 +351,95 @@ export const api = {
 
     if (error || !questions) throw new Error('ไม่สามารถดึงข้อมูลข้อสอบได้');
 
+    // 2. ดึงเกณฑ์คะแนน (Default 80)
     const config = await api.getSystemSettings();
     const thresholdKey = type === 'INDUCTION' ? 'PASSING_SCORE_INDUCTION' : 'PASSING_SCORE_WORK_PERMIT';
-    
-    // ✅ Fix: Default Passing Score เป็น 80 หากดึงค่าไม่ได้ ป้องกันปัญหา 2/2 Failed
     const threshold = Number(config[thresholdKey] || 80);
 
     let score = 0;
-    questions.forEach((q) => {
+
+    console.log("🔥 START GRADING DEBUG 🔥");
+
+    // 3. เริ่มตรวจคำตอบ
+    questions.forEach((q, index) => {
       const userAns = answers[q.id];
-      if (userAns === undefined) return;
+      
+      // ถ้า User ไม่ตอบ -> ข้าม (ผิด)
+      if (userAns === undefined || userAns === null) {
+          console.log(`Q${index+1}: No Answer (FAIL)`);
+          return;
+      }
 
-      const choices = typeof q.choices_json === 'string' ? JSON.parse(q.choices_json) : q.choices_json;
+      // เตรียมข้อมูลเฉลย
+      let choices = q.choices_json;
+      if (typeof choices === 'string') {
+        try { choices = JSON.parse(choices); } catch (e) { choices = []; }
+      }
 
-      if (q.pattern === 'SHORT_ANSWER') {
-          const correctText = choices[0]?.correct_answer?.toLowerCase().trim();
-          if (userAns.toString().toLowerCase().trim() === correctText) score++;
+      let isCorrect = false;
+
+      // ---------------------------------------------------------
+      // 🔍 วิธีที่ 1: ตรวจแบบ Text (สำหรับ Short Answer)
+      // ---------------------------------------------------------
+      if (q.pattern === 'SHORT_ANSWER' || q.pattern === 'short_answer') {
+          const correctText = choices[0]?.correct_answer?.toString().toLowerCase().trim();
+          const userText = userAns.toString().toLowerCase().trim();
+          if (userText === correctText) isCorrect = true;
       } 
-      else if (q.pattern === 'MATCHING') {
-          const isAllCorrect = choices.every((p: any, idx: number) => userAns[idx] === idx);
-          if (isAllCorrect) score++;
+      // ---------------------------------------------------------
+      // 🔍 วิธีที่ 2: ตรวจแบบ Matching (จับคู่)
+      // ---------------------------------------------------------
+      else if (q.pattern === 'MATCHING' || q.pattern === 'matching') {
+          if (Array.isArray(userAns)) {
+            isCorrect = choices.every((p: any, idx: number) => Number(userAns[idx]) === idx);
+          }
       }
+      // ---------------------------------------------------------
+      // 🔍 วิธีที่ 3: ตรวจแบบ Choice (Multiple Choice / True-False)
+      // ---------------------------------------------------------
       else {
-          // Check for MC, T/F
-          if (choices[userAns]?.is_correct === true || userAns === q.correct_choice_index) score++;
+          const userIndex = Number(userAns); // แปลงคำตอบ User เป็นตัวเลข (Index)
+          
+          // ✅ CHECK 3.1: เทียบกับคอลัมน์ correct_answer ใน Database (ถ้ามี)
+          // เช่น DB เก็บ "0" แล้ว User ส่งมา 0
+          if (q.correct_answer !== null && q.correct_answer !== undefined) {
+              if (Number(q.correct_answer) === userIndex) {
+                  isCorrect = true;
+              }
+          }
+
+          // ✅ CHECK 3.2: ถ้ายังไม่ถูก ให้ลองไปดูใน JSON Choice ว่ามี is_correct: true ไหม
+          if (!isCorrect && choices[userIndex]) {
+              const val = choices[userIndex].is_correct;
+              const isFlagged = 
+                  val === true || 
+                  String(val).toLowerCase() === 'true'; // รองรับ "true"
+              
+              if (isFlagged) isCorrect = true;
+          }
       }
+
+      if (isCorrect) score++;
+      
+      // 🛑 LOG ดูผลการตรวจรายข้อ (กด F12 ดูได้เลย)
+      console.log(`Q${index+1} (${q.id}): UserAns=${userAns}, DB_Correct=${q.correct_answer} -> ${isCorrect ? '✅ PASS' : '❌ FAIL'}`);
     });
 
+    console.log(`🏁 FINAL SCORE: ${score}/${questions.length}`);
+    console.log("🔥 END GRADING DEBUG 🔥");
+
+    // 4. คำนวณผลลัพธ์ผ่าน/ไม่ผ่าน
     const passedPercent = questions.length > 0 ? (score / questions.length) * 100 : 0;
-    // ✅ Fix: ใช้ >= เพื่อให้ 80% พอดีก็ถือว่าผ่าน
     const passed = passedPercent >= threshold; 
     
+    // 5. บันทึกลง Database
     await api.submitExamResult(type, score, questions.length, passed, permitNo);
 
     return { score, passed };
   },
 
   /* =====================================================
-     6. ADMIN DASHBOARD & STATS
+      6. ADMIN DASHBOARD & STATS (DATA EXPORT FIXED ✅)
   ===================================================== */
 
   getDashboardStats: async () => {
@@ -419,16 +486,26 @@ export const api = {
     return data;
   },
 
+  // ✅ แก้ไข: ลบคอมเมนต์ภาษาไทยออก (สำคัญมาก)
   getReportData: async () => {
     const { data, error } = await supabase
       .from('exam_history')
       .select(`
         created_at, exam_type, score, total_questions, status,
-        users ( national_id, name, age, nationality, vendors ( name ) )
+        users ( 
+            national_id,
+            name, 
+            age, 
+            nationality, 
+            vendors ( name ) 
+        )
       `)
       .order('created_at', { ascending: false });
 
-    if (error) return [];
+    if (error) {
+        console.error("Report Fetch Error:", error); // เพิ่ม log เพื่อดู error ชัดๆ
+        return [];
+    }
 
     return (data || []).map((log: any) => ({
       timestamp: log.created_at,

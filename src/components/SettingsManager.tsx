@@ -1,67 +1,70 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { api } from '../services/supabaseApi';
-import { 
-  Upload, 
-  FileText, 
-  CheckCircle2, 
-  Loader2, 
-  Target, 
-  Save, 
-  AlertTriangle,
-  ChevronRight,
-  ShieldCheck
-} from 'lucide-react';
 import { useToastContext } from './ToastProvider';
+import { 
+  FileText, 
+  Save, 
+  Loader2, 
+  ShieldAlert, 
+  Upload, 
+  ServerCog,
+  AlertTriangle,
+  Target
+} from 'lucide-react';
 
 const SettingsManager: React.FC = () => {
   const { showToast } = useToastContext();
   
-  // States สำหรับระบบอัปโหลด
+  // Upload States
   const [uploading, setUploading] = useState<string | null>(null);
   
-  // States สำหรับระบบตั้งค่าคะแนน
-  const [passingScore, setPassingScore] = useState({
-    INDUCTION: 80,
-    WORK_PERMIT: 100
-  });
-  const [loadingScore, setLoadingScore] = useState(true);
-  const [isSavingScore, setIsSavingScore] = useState(false);
+  // Config States
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [inductionScore, setInductionScore] = useState<number>(80);
+  const [permitScore, setPermitScore] = useState<number>(80);
 
-  // ✅ ดึงค่าคะแนนเดิมจากฐานข้อมูลตอนโหลดหน้า
+  // Load Settings
   useEffect(() => {
-    const fetchSettings = async () => {
-      try {
-        setLoadingScore(true);
-        const config = await api.getSystemSettings();
-        setPassingScore({
-          INDUCTION: Number(config.PASSING_SCORE_INDUCTION || 80),
-          WORK_PERMIT: Number(config.PASSING_SCORE_WORK_PERMIT || 100)
-        });
-      } catch (err) {
-        console.error('Failed to fetch settings:', err);
-      } finally {
-        setLoadingScore(false);
-      }
-    };
-    fetchSettings();
+    loadConfig();
   }, []);
 
-  // ✅ ฟังก์ชันบันทึกคะแนน
-  const handleSaveScores = async () => {
-    setIsSavingScore(true);
+  const loadConfig = async () => {
+    setLoading(true);
     try {
-      await api.updateSystemSetting('PASSING_SCORE_INDUCTION', passingScore.INDUCTION);
-      await api.updateSystemSetting('PASSING_SCORE_WORK_PERMIT', passingScore.WORK_PERMIT);
-      showToast('บันทึกเกณฑ์คะแนนสอบเรียบร้อยแล้ว', 'success');
-    } catch (err: any) {
-      showToast('บันทึกล้มเหลว: ' + err.message, 'error');
+      const config = await api.getSystemSettings();
+      // แปลงค่าที่ได้จาก DB มาใส่ State (ถ้าไม่มีให้ใช้ 80)
+      if (config['PASSING_SCORE_INDUCTION']) setInductionScore(Number(config['PASSING_SCORE_INDUCTION']));
+      if (config['PASSING_SCORE_WORK_PERMIT']) setPermitScore(Number(config['PASSING_SCORE_WORK_PERMIT']));
+    } catch (err) {
+      console.error(err);
+      showToast('ไม่สามารถโหลดค่า Config ได้', 'error');
     } finally {
-      setIsSavingScore(false);
+      setLoading(false);
     }
   };
 
-  // ✅ ฟังก์ชันอัปโหลดไฟล์คู่มือ PDF
+  // ✅ Save Logic: ใช้ updateSystemSetting (ที่เป็น Upsert) และโหลดค่าซ้ำเพื่อยืนยัน
+  const handleSaveConfig = async () => {
+    setSaving(true);
+    try {
+      await Promise.all([
+        api.updateSystemSetting('PASSING_SCORE_INDUCTION', inductionScore),
+        api.updateSystemSetting('PASSING_SCORE_WORK_PERMIT', permitScore)
+      ]);
+
+      showToast('บันทึกการตั้งค่าระบบเรียบร้อยแล้ว', 'success');
+      await loadConfig(); // Reload เพื่อความชัวร์
+    } catch (err: any) {
+      console.error(err);
+      showToast('บันทึกไม่สำเร็จ: ' + err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ✅ Upload Logic
   const handleUploadManual = async (event: React.ChangeEvent<HTMLInputElement>, type: 'induction' | 'work_permit') => {
     try {
       setUploading(type);
@@ -72,12 +75,9 @@ const SettingsManager: React.FC = () => {
         return showToast('กรุณาอัปโหลดไฟล์ PDF เท่านั้น', 'error');
       }
 
-      // อัปโหลดไฟล์ไปที่ bucket "manuals" ใน Supabase
       const { error } = await supabase.storage
         .from('manuals')
-        .upload(`${type}.pdf`, file, {
-          upsert: true 
-        });
+        .upload(`${type}.pdf`, file, { upsert: true });
 
       if (error) throw error;
 
@@ -89,64 +89,94 @@ const SettingsManager: React.FC = () => {
     }
   };
 
+  if (loading) return <div className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-blue-600" /></div>;
+
   return (
-    <div className="space-y-6 md:space-y-8 animate-in fade-in duration-500 pb-10 text-left">
+    <div className="space-y-6 animate-in fade-in duration-500 max-w-4xl mx-auto pb-10">
       
-      {/* 🧭 SECTION 1: PASSING SCORES CONFIGURATION */}
-      <div className="bg-white p-6 md:p-10 rounded-[2.5rem] border border-slate-200 shadow-sm relative overflow-hidden group">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4">
-            <div className="flex items-center gap-4">
-                <div className="p-4 bg-blue-600 text-white rounded-3xl shadow-lg shadow-blue-200 group-hover:scale-110 transition-transform duration-500">
-                    <Target size={28} strokeWidth={2.5} />
+      {/* Header */}
+      <div className="flex items-center gap-4 border-b border-slate-200 pb-6">
+        <div className="p-3 bg-slate-900 text-white rounded-2xl shadow-lg">
+           <ServerCog size={24} />
+        </div>
+        <div>
+           <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">System Configuration</h2>
+           <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Global Parameters & Thresholds</p>
+        </div>
+      </div>
+
+      {/* ⚙️ Threshold Settings (UI แบบใหม่: Sliders) */}
+      <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden relative">
+         <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-blue-500 via-purple-500 to-emerald-500" />
+         
+         <div className="p-8">
+            <div className="flex items-start gap-4 mb-8">
+                <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl border border-blue-100">
+                    <ShieldAlert size={24} />
                 </div>
                 <div>
-                    <h3 className="text-xl md:text-2xl font-black text-slate-900 leading-none uppercase tracking-tight">Threshold Settings</h3>
-                    <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mt-1.5 flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                        Global Compliance Passing Rates
-                    </p>
+                    <h3 className="text-lg font-black text-slate-800 uppercase">Threshold Settings</h3>
+                    <p className="text-xs text-slate-400 font-bold mt-1">กำหนดเกณฑ์คะแนนขั้นต่ำสำหรับการผ่านการทดสอบ (Passing Score)</p>
                 </div>
             </div>
-        </div>
 
-        {loadingScore ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-3">
-             <Loader2 size={32} className="animate-spin text-blue-600" />
-             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Accessing Node...</span>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-10 mb-10">
-            <ScoreInput 
-              label="Induction Pass Rate" 
-              description="Minimum percentage required for safety orientation."
-              value={passingScore.INDUCTION} 
-              onChange={(val) => setPassingScore({...passingScore, INDUCTION: val})}
-              color="blue"
-            />
-            <ScoreInput 
-              label="Work Permit Pass Rate" 
-              description="Critical accuracy required for high-risk operations."
-              value={passingScore.WORK_PERMIT} 
-              onChange={(val) => setPassingScore({...passingScore, WORK_PERMIT: val})}
-              color="purple"
-            />
-          </div>
-        )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* Induction Score */}
+                <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 hover:border-blue-300 transition-all group">
+                    <div className="flex justify-between items-center mb-4">
+                        <label className="text-xs font-black text-slate-500 uppercase tracking-widest">Induction Pass Rate</label>
+                        <span className={`px-3 py-1 rounded-full text-[10px] font-black border ${inductionScore >= 80 ? 'bg-emerald-100 text-emerald-600 border-emerald-200' : 'bg-amber-100 text-amber-600 border-amber-200'}`}>
+                            {inductionScore >= 80 ? 'STRICT' : 'STANDARD'}
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-4">
+                        <input 
+                            type="range" 
+                            min="0" max="100" step="5"
+                            value={inductionScore}
+                            onChange={(e) => setInductionScore(Number(e.target.value))}
+                            className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                        />
+                        <div className="w-16 h-16 bg-white rounded-2xl border-2 border-blue-100 flex items-center justify-center text-xl font-black text-slate-800 shadow-sm group-hover:scale-110 transition-transform">
+                            {inductionScore}%
+                        </div>
+                    </div>
+                </div>
 
-        <div className="flex flex-col md:flex-row items-center justify-between pt-8 border-t border-slate-50 gap-4">
-          <div className="flex items-center gap-2 text-slate-400">
-             <ShieldCheck size={16} />
-             <p className="text-[10px] font-bold uppercase tracking-tight">All changes affect current sessions immediately</p>
-          </div>
-          <button 
-            onClick={handleSaveScores}
-            disabled={isSavingScore || loadingScore}
-            className="w-full md:w-auto bg-slate-900 hover:bg-blue-600 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-3 transition-all shadow-xl active:scale-95 disabled:opacity-50"
-          >
-            {isSavingScore ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-            Commit Config
-          </button>
-        </div>
+                {/* Work Permit Score */}
+                <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 hover:border-purple-300 transition-all group">
+                    <div className="flex justify-between items-center mb-4">
+                        <label className="text-xs font-black text-slate-500 uppercase tracking-widest">Work Permit Pass Rate</label>
+                        <span className={`px-3 py-1 rounded-full text-[10px] font-black border ${permitScore >= 80 ? 'bg-emerald-100 text-emerald-600 border-emerald-200' : 'bg-amber-100 text-amber-600 border-amber-200'}`}>
+                            {permitScore >= 80 ? 'STRICT' : 'STANDARD'}
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-4">
+                        <input 
+                            type="range" 
+                            min="0" max="100" step="5"
+                            value={permitScore}
+                            onChange={(e) => setPermitScore(Number(e.target.value))}
+                            className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
+                        />
+                        <div className="w-16 h-16 bg-white rounded-2xl border-2 border-purple-100 flex items-center justify-center text-xl font-black text-slate-800 shadow-sm group-hover:scale-110 transition-transform">
+                            {permitScore}%
+                        </div>
+                    </div>
+                </div>
+            </div>
+         </div>
+         
+         <div className="bg-slate-50 p-6 border-t border-slate-100 flex justify-end">
+             <button 
+                onClick={handleSaveConfig} 
+                disabled={saving}
+                className="flex items-center gap-2 px-8 py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-black transition-all shadow-lg active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+             >
+                {saving ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
+                Commit Config
+             </button>
+         </div>
       </div>
 
       {/* 📚 SECTION 2: MANUALS & ASSET MANAGEMENT */}
@@ -166,13 +196,13 @@ const SettingsManager: React.FC = () => {
             title="Induction Manual"
             type="induction"
             isUploading={uploading === 'induction'}
-            onUpload={(e) => handleUploadManual(e, 'induction')}
+            onUpload={(e: any) => handleUploadManual(e, 'induction')}
           />
           <ManualUploadCard 
             title="Work Permit Manual"
             type="work_permit"
             isUploading={uploading === 'work_permit'}
-            onUpload={(e) => handleUploadManual(e, 'work_permit')}
+            onUpload={(e: any) => handleUploadManual(e, 'work_permit')}
           />
         </div>
 
@@ -183,7 +213,7 @@ const SettingsManager: React.FC = () => {
             <div className="space-y-1">
                 <p className="text-xs font-black text-amber-800 uppercase tracking-tight">Deployment Notice</p>
                 <p className="text-[11px] text-amber-700/80 font-bold leading-relaxed">
-                    Uploading a new document will **permanently overwrite** the existing file. Ensure the content is validated and the file size is under **5MB** for optimal performance on mobile devices.
+                    Uploading a new document will permanently overwrite the existing file.
                 </p>
             </div>
         </div>
@@ -191,28 +221,6 @@ const SettingsManager: React.FC = () => {
     </div>
   );
 };
-
-/* --- 🔵 SUB-COMPONENTS --- */
-
-const ScoreInput = ({ label, description, value, onChange, color }: any) => (
-  <div className="space-y-3 group">
-    <div className="ml-1">
-        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">{label}</label>
-        <p className="text-[9px] text-slate-300 font-bold uppercase tracking-tight">{description}</p>
-    </div>
-    <div className="relative">
-      <input 
-        type="number" 
-        min="0" 
-        max="100"
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className={`w-full bg-slate-50 border-2 border-slate-50 p-5 md:p-6 rounded-3xl font-black text-3xl md:text-4xl text-slate-800 focus:bg-white focus:border-${color}-500 transition-all outline-none shadow-inner tabular-nums`}
-      />
-      <div className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-200 font-black text-2xl group-focus-within:text-blue-500 transition-colors">%</div>
-    </div>
-  </div>
-);
 
 const ManualUploadCard = ({ title, type, isUploading, onUpload }: any) => (
   <div className="p-8 md:p-10 border-2 border-dashed border-slate-100 bg-slate-50/30 rounded-[2.5rem] flex flex-col items-center text-center group hover:border-blue-400 hover:bg-white transition-all duration-500 cursor-default shadow-sm hover:shadow-xl hover:shadow-blue-500/5">

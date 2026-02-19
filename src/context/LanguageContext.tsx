@@ -12,11 +12,11 @@ interface LanguageContextType {
 // 2. คำแปลภาษา (Dictionary)
 const translations = {
   th: {
-    'app.name': 'ระบบความปลอดภัยผู้รับเหมา',
-    'app.tagline': 'มาตรฐานความปลอดภัยระดับองค์กร',
+    'app.name': 'CTR GatePass',
+    'app.tagline': 'Zero Incidents',
     'auth.login': 'เข้าสู่ระบบ',
     'auth.register': 'ลงทะเบียน',
-    'auth.national_id': 'เลขบัตรประชาชน',
+    'auth.national_id': 'เลขบัตรประชาชน/บัตรชมพู',
     'auth.full_name': 'ชื่อ-นามสกุล',
     'auth.company': 'บริษัท (Vendor)',
     'auth.other_company': 'ชื่อบริษัทอื่นๆ (ระบุ)',
@@ -44,11 +44,11 @@ const translations = {
     'common.loading': 'กำลังโหลด...'
   },
   en: {
-    'app.name': 'Contractor Safety Passport',
-    'app.tagline': 'Enterprise Safety Standard',
+    'app.name': 'CTR GatePass',
+    'app.tagline': 'Zero Incidents',
     'auth.login': 'Login',
     'auth.register': 'Register',
-    'auth.national_id': 'National ID',
+    'auth.national_id': 'National/Non Thai ID',
     'auth.full_name': 'Full Name',
     'auth.company': 'Vendor',
     'auth.other_company': 'Other Company Name',

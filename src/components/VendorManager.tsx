@@ -27,6 +27,12 @@ import {
   CheckCircle2
 } from 'lucide-react';
 
+// ✅ Helper Function: UI Masking (สำหรับปิดบังเลขบัตรในหน้าจอ)
+const maskNationalID = (id: string | null | undefined) => {
+  if (!id || id.length < 13) return '-------------';
+  return `${id.substring(0, 3)}••••••${id.substring(9)}`;
+};
+
 // ✅ ฟังก์ชันช่วยสร้าง UUID
 function generateUUID() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -35,22 +41,22 @@ function generateUUID() {
   });
 }
 
-// ✅ ฟังก์ชันแปลงวันที่จาก Excel (ฉบับ Smart ที่สุด - รองรับ 2/15/2027 และทุกรูปแบบ)
+// ✅ 1. SMART DATE PARSER: ฉลาดที่สุด รับได้ทุกรูปแบบ (รองรับ 2/15/2027 จากไฟล์คุณ)
 const processExcelDate = (excelDate: any): string | null => {
     if (!excelDate) return null;
     
     try {
         let date: Date | null = null;
 
-        // 1. กรณีเป็น Excel Serial Number (เช่น 45345)
+        // 1.1 กรณีเป็น Excel Serial Number
         if (typeof excelDate === 'number') {
             date = new Date(Math.round((excelDate - 25569) * 86400 * 1000));
         } 
-        // 2. กรณีเป็น String (จัดการ 2/15/2027, 15/02/2027, 2027-02-15)
+        // 1.2 กรณีเป็น String (จัดการ 2/15/2027, 15/02/2027, 2027-02-15)
         else if (typeof excelDate === 'string') {
             const cleanStr = excelDate.trim().replace(/[-.]/g, '/');
             
-            // ลอง parse ตรงๆ ก่อน
+            // ลอง parse แบบปกติก่อน (ISO Format)
             const tryDirect = new Date(cleanStr);
             if (!isNaN(tryDirect.getTime()) && cleanStr.includes('-')) {
                 date = tryDirect;
@@ -65,9 +71,11 @@ const processExcelDate = (excelDate: any): string | null => {
 
                     // 💡 Smart Logic: ตรวจสอบตำแหน่งวัน/เดือน
                     if (p0 > 12) { 
-                        date = new Date(year, p1 - 1, p0); // เป็นแบบวัน/เดือน/ปี
+                        // เช่น 15/02/2027 -> ตัวแรกคือวัน
+                        date = new Date(year, p1 - 1, p0);
                     } else if (p1 > 12) {
-                        date = new Date(year, p0 - 1, p1); // เป็นแบบเดือน/วัน/ปี
+                        // เช่น 02/15/2027 -> ตัวกลางคือวัน (เหมือนไฟล์ของคุณ)
+                        date = new Date(year, p0 - 1, p1);
                     } else {
                         // ถ้าไม่ชัดเจน (เช่น 01/05/2027) ให้ยึด เดือน/วัน/ปี ตามมาตรฐาน Excel
                         date = new Date(year, p0 - 1, p1);
@@ -75,17 +83,15 @@ const processExcelDate = (excelDate: any): string | null => {
                 }
             }
         } 
-        // 3. กรณีเป็น Date Object
+        // 1.3 กรณีเป็น Date Object
         else if (excelDate instanceof Date) {
             date = excelDate;
         }
 
-        // ตรวจสอบความถูกต้องและ Return
         if (date && !isNaN(date.getTime())) {
-            date.setHours(12, 0, 0, 0); // กันเรื่อง Timezone เลื่อนวัน
+            date.setHours(12, 0, 0, 0); // กัน Timezone เลื่อนวัน
             return date.toISOString();
         }
-        
         return null;
     } catch (e) {
         console.error("Date Parse Error:", e);
@@ -232,7 +238,7 @@ const VendorManager: React.FC = () => {
     if (activeTab === 'USERS') {
       exportData = dataList.map(user => ({
         'Name': user.name,
-        'National ID': user.national_id,
+        'National ID': user.national_id ? "'" + user.national_id : '-', // ใส่ ' นำหน้า
         'Vendor': user.vendors?.name || 'N/A',
         'Role': user.role,
         'Age': user.age || '',
@@ -257,6 +263,7 @@ const VendorManager: React.FC = () => {
     showToast('Exported Successfully', 'success');
   };
 
+  // ✅ 2. IMPORT LOGIC: แก้ปัญหาเรื่องการอ่านวันที่ (ใช้ Smart Date Parsing)
   const handleUserImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -277,7 +284,10 @@ const VendorManager: React.FC = () => {
               nid = Number(nid).toLocaleString('fullwide', {useGrouping:false});
           }
           const vName = (row['Vendor'] || '').toString().trim();
-          const processedExpiry = processExcelDate(row['Induction Expiry']);
+          
+          // ✅ เรียกใช้ Smart Date Parser เพื่อจัดการ 2/15/2027
+          const rawExpiry = row['Induction Expiry'];
+          const processedExpiry = processExcelDate(rawExpiry);
 
           if (name && nid) {
             const vendor = allVendors.find(v => v.name === vName);
@@ -296,6 +306,7 @@ const VendorManager: React.FC = () => {
 
             payload.id = exist ? exist.id : generateUUID();
 
+            // ใช้ upsert เพื่ออัปเดตข้อมูลเดิม (เช่นเปลี่ยนจาก PROTECTED เป็นเลขจริง)
             const { error } = await supabase.from('users').upsert([payload], { 
               onConflict: 'national_id_hash',
               ignoreDuplicates: false 
@@ -385,7 +396,7 @@ const VendorManager: React.FC = () => {
       
       if (error) throw error;
 
-      showToast(`ลบข้อมูลพนักงาน ${name} และประวัติทั้งหมดสำเร็จ`, 'success');
+      showToast(`ลบข้อมูลพนักงาน ${name} สำเร็จ`, 'success');
       logAction('DELETE_USER', name, 'Full Cascade Delete Done');
       loadData();
     } catch (err: any) {
@@ -471,7 +482,10 @@ const VendorManager: React.FC = () => {
                       <td className="px-8 py-5">
                         <div className="flex items-center gap-3">
                            <div className="w-10 h-10 rounded-2xl bg-slate-100 text-slate-400 group-hover:bg-blue-600 group-hover:text-white transition-all flex items-center justify-center font-black text-xs shadow-inner uppercase">{item.name?.charAt(0)}</div>
-                           <div><div className="font-black text-slate-800 uppercase text-xs truncate max-w-[200px]">{item.name}</div>{activeTab === 'USERS' && <div className="text-[10px] text-slate-400 font-mono mt-0.5 tracking-tighter">ID: {item.national_id}</div>}</div>
+                           <div>
+                             <div className="font-black text-slate-800 uppercase text-xs truncate max-w-[200px]">{item.name}</div>
+                             {activeTab === 'USERS' && <div className="text-[10px] text-slate-400 font-mono mt-0.5 tracking-tighter">ID: {maskNationalID(item.national_id)}</div>}
+                           </div>
                         </div>
                       </td>
                       <td className="px-8 py-5">
@@ -518,12 +532,13 @@ const VendorManager: React.FC = () => {
         </div>
       </div>
 
+      {/* 📝 EDIT USER MODAL */}
       {isEditModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setIsEditModalOpen(false)} />
           <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl border relative z-10 p-8 text-left animate-in zoom-in-95 duration-300">
               <div className="flex justify-between items-center mb-6 border-b pb-4">
-                  <div><h3 className="text-xl font-black text-slate-900 uppercase">Edit Profile</h3><p className="text-[10px] text-blue-500 font-bold uppercase tracking-widest mt-1">ID: {editingUser?.national_id}</p></div>
+                  <div><h3 className="text-xl font-black text-slate-900 uppercase">Edit Profile</h3><p className="text-[10px] text-blue-500 font-bold uppercase tracking-widest mt-1">ID: {maskNationalID(editingUser?.national_id)}</p></div>
                   <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-red-500 transition-colors"><X size={24}/></button>
               </div>
               <div className="space-y-4">

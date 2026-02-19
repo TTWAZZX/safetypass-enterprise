@@ -51,6 +51,13 @@ const COLORS = {
   secondary: '#8b5cf6'
 };
 
+// ✅ Helper Function: UI Masking (สำหรับปิดบังเลขบัตรในหน้าจอ)
+const maskNationalID = (id: string | null | undefined) => {
+  if (!id || id.length < 13) return '-------------';
+  // แสดงหน้า 3 ตัว + หลัง 4 ตัว (เช่น 123XXXXXX4567)
+  return `${id.substring(0, 3)}••••••${id.substring(9)}`;
+};
+
 const AdminPanel: React.FC = () => {
   const [stats, setStats] = useState<any>(null);
   const [reportData, setReportData] = useState<any[]>([]);
@@ -99,25 +106,54 @@ const AdminPanel: React.FC = () => {
 
   const filteredHistory = getFilteredData();
 
+  // ✅ Export Logic: ดึงเลขบัตรตัวจริงมาใส่ Excel (ไม่ใช้ Masking)
   const handleExportExcel = () => {
     const dataToExport = getFilteredData();
     if (dataToExport.length === 0) {
       alert("ไม่พบข้อมูลตามเงื่อนไขที่เลือก");
       return;
     }
-    const header = ["วันที่ทำแบบทดสอบ", "ผลการสอบ", "คะแนน", "ชื่อ-นามสกุล", "อายุ", "สัญชาติ", "เลขบัตรประชาชน", "สังกัดบริษัท", "ประเภทการสอบ"];
+
+    const header = [
+      "วันที่ทำแบบทดสอบ", 
+      "เลขบัตรประชาชน", // เพิ่มคอลัมน์นี้
+      "ชื่อ-นามสกุล", 
+      "สังกัดบริษัท", 
+      "ประเภทการสอบ", 
+      "คะแนน", 
+      "ผลการสอบ", 
+      "อายุ", 
+      "สัญชาติ"
+    ];
+
     const body = dataToExport.map((row) => [
-      new Date(row.timestamp).toLocaleDateString('th-TH'),
-      row.result === 'PASSED' ? 'ผ่าน' : 'ไม่ผ่าน',
-      row.score,
+      new Date(row.timestamp).toLocaleString('th-TH'),
+      // ✅ ใส่ ' นำหน้าเพื่อให้ Excel อ่านเป็น Text ตัวเต็ม (ป้องกันเลขเพี้ยน)
+      row.national_id ? "'" + row.national_id : '-', 
       row.name,
+      row.vendor || '-',
+      row.exam_type,
+      row.score,
+      row.result === 'PASSED' ? 'ผ่าน (PASS)' : 'ไม่ผ่าน (FAIL)',
       row.age || '-',
-      row.nationality || '-',
-      "'" + row.national_id,
-      row.vendor,
-      row.exam_type
+      row.nationality || '-'
     ]);
+
     const ws = XLSX.utils.aoa_to_sheet([header, ...body]);
+    
+    // ตั้งค่าความกว้างคอลัมน์
+    ws['!cols'] = [
+      { wch: 20 }, // วันที่
+      { wch: 18 }, // เลขบัตร
+      { wch: 25 }, // ชื่อ
+      { wch: 25 }, // บริษัท
+      { wch: 15 }, 
+      { wch: 10 }, 
+      { wch: 15 },
+      { wch: 8 }, 
+      { wch: 15 }
+    ];
+
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Exam_Report");
     XLSX.writeFile(wb, `Safety_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
@@ -243,7 +279,7 @@ const AdminPanel: React.FC = () => {
               </div>
             </div>
 
-            {/* 🔍 2. Advanced Global Search & Smart Filter */}
+            {/* Advanced Global Search & Smart Filter */}
             <div className="bg-white p-4 md:p-6 rounded-[2rem] border border-slate-200 shadow-sm space-y-4">
                <div className="flex flex-col lg:flex-row gap-4">
                   <div className="relative flex-1">
@@ -285,7 +321,7 @@ const AdminPanel: React.FC = () => {
                </div>
             </div>
 
-            {/* RECORDSET TABLE */}
+            {/* RECORDSET TABLE (With Masking) */}
             <div className="bg-white rounded-[1.8rem] border border-slate-200 shadow-sm overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm min-w-[800px]">
@@ -305,7 +341,9 @@ const AdminPanel: React.FC = () => {
                         <td className="px-6 py-4">
                           <div className="flex flex-col">
                              <p className="font-black text-slate-800 text-xs truncate uppercase group-hover:text-blue-600 transition-colors">{row.name}</p>
-                             <p className="text-[9px] text-slate-400 font-bold uppercase truncate tracking-wider">{row.vendor}</p>
+                             {/* ✅ UI Masking: แสดงเลขบัตรแบบปิดบัง */}
+                             <p className="text-[9px] text-slate-400 font-bold uppercase truncate tracking-wider">{maskNationalID(row.national_id)}</p>
+                             <p className="text-[8px] text-slate-300 font-bold uppercase truncate tracking-wider">{row.vendor}</p>
                           </div>
                         </td>
                         <td className="px-4 py-4">
@@ -358,7 +396,7 @@ const AdminPanel: React.FC = () => {
   );
 };
 
-/* --- 🔵 SHARED COMPONENTS --- */
+/* --- SHARED COMPONENTS --- */
 
 const SidebarButton = ({ icon, label, active, onClick, badge }: any) => (
   <button onClick={onClick} className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all duration-300 active:scale-95 group ${active ? 'bg-slate-900 text-white shadow-xl shadow-slate-900/10 translate-x-1' : 'text-slate-500 hover:bg-slate-50'}`}>

@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../services/supabaseApi';
 import { User, Question, ExamType, QuestionPattern } from '../types';
 import { useTranslation } from '../context/LanguageContext';
-import DigitalCard from './DigitalCard';
 import {
   ArrowLeft,
   CheckCircle2,
@@ -10,11 +9,9 @@ import {
   Loader2,
   ChevronRight,
   ChevronLeft,
-  BookOpen,
   Send,
   Clock,
   RotateCcw,
-  ExternalLink,
   Maximize2,
   ArrowRightLeft,
   XCircle,
@@ -89,7 +86,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
     };
   }, []);
 
-  // ✅ 3. Shuffle Logic
+  // ✅ 3. Shuffle Logic (Updated: Shuffle Only Questions, NOT Choices)
   const shuffleArray = <T,>(array: T[]): T[] => {
     const shuffled = [...array];
     for (let i = shuffled.length - 1; i > 0; i--) {
@@ -101,54 +98,89 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
 
   useEffect(() => {
     api.getQuestions(type).then((rawQuestions) => {
+      // ✅ สลับ "ลำดับข้อคำถาม" (Questions) ได้เหมือนเดิม
       const prepared = shuffleArray(rawQuestions).map(q => {
+        
+        let processedChoices = q.choices_json;
+        if (typeof processedChoices === 'string') {
+             try { processedChoices = JSON.parse(processedChoices); } catch (e) { processedChoices = []; }
+        }
+
         // หากเป็นข้อสอบจับคู่ ให้เตรียมข้อมูลฝั่งขวาที่ Shuffle แล้ว
         if (q.pattern === QuestionPattern.MATCHING) {
-            const pairs = [...q.choices_json];
+            const pairs = [...processedChoices];
             return { ...q, choices_json: pairs, shuffled_right: shuffleArray(pairs) };
         }
-        // ปรนัยปกติ สลับตัวเลือก
+        
+        // ⚠️ FIXED: ปรนัยปกติ ไม่สลับตัวเลือก (Choices) แล้ว เพื่อให้ Index ตรงกับ Database
         return {
           ...q,
-          choices_json: shuffleArray(q.choices_json)
+          choices_json: processedChoices // ไม่ใส่ shuffleArray() ที่นี่
         };
       });
       setQuestions(prepared);
     });
   }, [type]);
 
-  // ✅ 4. Submit & Grading Logic (แก้ไขให้คำนวณผ่านที่ Frontend เพื่อแก้ปัญหา 2/2 Failed)
+  // ✅ 4. Submit & Grading Logic (เวอร์ชันแก้ไข: ตรวจคำตอบแม่นยำขึ้น)
   const handleSubmit = async () => {
+    if (loading) return;
     setLoading(true);
+    
     try {
       let correctCount = 0;
+      
+      // วนลูปตรวจทีละข้อ
       questions.forEach((q) => {
         const userAns = answers[q.id];
-        if (userAns === undefined) return;
 
-        if (q.pattern === QuestionPattern.SHORT_ANSWER) {
-            const correctText = q.choices_json[0]?.correct_answer?.toLowerCase().trim();
-            if (userAns.toString().toLowerCase().trim() === correctText) correctCount++;
+        // 1. ถ้าไม่ได้ตอบ ให้ข้าม (ถือว่าผิด)
+        if (userAns === undefined || userAns === null) return;
+
+        // 2. ตรวจตามประเภทคำถาม
+        if (q.pattern === 'SHORT_ANSWER' || q.pattern === 'short_answer') {
+            // แบบเติมคำ: ตัดช่องว่างหน้าหลัง และแปลงเป็นตัวเล็กก่อนเทียบ
+            const correctText = q.choices_json[0]?.correct_answer?.toString().toLowerCase().trim();
+            const userText = userAns.toString().toLowerCase().trim();
+            if (userText === correctText) correctCount++;
         } 
-        else if (q.pattern === QuestionPattern.MATCHING) {
+        else if (q.pattern === 'MATCHING' || q.pattern === 'matching') {
+            // แบบจับคู่: ต้องถูกทุกคู่
             const pairs = q.choices_json;
-            const isAllCorrect = pairs.every((p: any, idx: number) => userAns[idx] === idx);
-            if (isAllCorrect) correctCount++;
+            // เช็คว่า userAns เป็น Array และค่าตรงกับ Index หรือไม่
+            if (Array.isArray(userAns)) {
+                const isAllCorrect = pairs.every((p: any, idx: number) => Number(userAns[idx]) === idx);
+                if (isAllCorrect) correctCount++;
+            }
         }
         else {
-            const selectedChoice = q.choices_json[userAns];
-            if (selectedChoice?.is_correct) correctCount++;
+            // แบบเลือกตอบ (Multiple Choice / True-False)
+            // userAns คือ index ของตัวเลือกที่ตอบ
+            const selectedChoice = q.choices_json[Number(userAns)];
+            
+            if (selectedChoice) {
+                // ⚠️ จุดแก้สำคัญ: รองรับทั้ง Boolean (true) และ String ("true") และ Case-insensitive
+                const isCorrectFlag = selectedChoice.is_correct;
+                
+                const isReallyCorrect = 
+                    isCorrectFlag === true || 
+                    String(isCorrectFlag) === 'true' || 
+                    String(isCorrectFlag) === 'True' ||
+                    String(isCorrectFlag) === 'TRUE';
+
+                if (isReallyCorrect) correctCount++;
+            }
         }
       });
 
-      // คำนวณผลผ่านที่ Frontend (เกณฑ์ 80%)
+      // คำนวณผล (เกณฑ์ 80%)
       const calculatedPassed = (correctCount / questions.length) * 100 >= 80;
 
-      // ส่งผลสอบไปบันทึก (Fire & Forget เพื่อไม่ให้ UI หน่วง)
-      api.submitExamWithAnswers(type, answers, permitNo).catch(err => console.error("Save Error:", err));
+      // บันทึกลงฐานข้อมูล (รอให้เสร็จก่อนค่อยไปต่อ)
+      await api.submitExamWithAnswers(type, answers, permitNo);
 
       setScore(correctCount);
-      setPassed(calculatedPassed); // ✅ ใช้ผลที่คำนวณเอง แก้ปัญหา Backend ตัดเกรดเพี้ยน
+      setPassed(calculatedPassed); 
       
       if (calculatedPassed) {
         const updatedUser = { ...user };
@@ -158,14 +190,14 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
           nextYear.setFullYear(now.getFullYear() + 1);
           updatedUser.induction_expiry = nextYear.toISOString();
         }
-        // เตรียมข้อมูลส่งกลับ แต่ยังไม่ส่งจนกว่าจะกดปุ่มรับบัตร
         setUpdatedUserData(updatedUser);
       }
       
       setStep('RESULT');
 
     } catch (err: any) {
-      alert("เกิดข้อผิดพลาด: " + err.message);
+      console.error("Submission Error:", err);
+      alert("ไม่สามารถบันทึกผลสอบได้: " + err.message);
     } finally {
       setLoading(false);
     }

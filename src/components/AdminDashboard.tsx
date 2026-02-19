@@ -15,6 +15,7 @@ const AdminDashboard: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState<string | null>(null);
 
+  // ✅ Added Filtering States
   const [filterDate, setFilterDate] = useState('');
   const [filterStatus, setFilterStatus] = useState('ALL');
   const [filterType, setFilterType] = useState('ALL');
@@ -41,11 +42,12 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
+  // ✅ Enhanced Filtering Logic
   const filteredHistory = history.filter(item => {
     const matchesSearch = 
       item.users?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.users?.vendors?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.users?.national_id?.includes(searchTerm);
+      item.users?.national_id?.includes(searchTerm); // สามารถค้นหาด้วยเลขบัตรจริงได้แล้ว
 
     const matchesDate = filterDate ? item.created_at.startsWith(filterDate) : true;
     const matchesStatus = filterStatus === 'ALL' ? true : item.status === filterStatus;
@@ -60,7 +62,8 @@ const AdminDashboard: React.FC = () => {
     const reportData = filteredHistory.map(item => ({
       'วันที่-เวลา': new Date(item.created_at).toLocaleString('th-TH'),
       'ชื่อ-นามสกุล': item.users?.name || 'N/A',
-      'เลขบัตร': item.users?.national_id || 'N/A',
+      // ✅ ใส่ ' เพื่อให้ Excel อ่านเป็น Text ตัวเต็ม ไม่ปัดเป็น Scientific Notation
+      'เลขบัตร': item.users?.national_id ? `'${item.users.national_id}` : 'N/A', 
       'บริษัท/ซัพพลายเออร์': item.users?.vendors?.name || 'N/A',
       'ประเภทการสอบ': item.exam_type,
       'คะแนน': `${item.score}/${item.total_questions}`,
@@ -68,6 +71,19 @@ const AdminDashboard: React.FC = () => {
     }));
 
     const ws = XLSX.utils.json_to_sheet(reportData);
+    
+    // Auto-width columns
+    const wscols = [
+        { wch: 20 }, // Date
+        { wch: 25 }, // Name
+        { wch: 18 }, // ID
+        { wch: 25 }, // Vendor
+        { wch: 15 }, // Type
+        { wch: 10 }, // Score
+        { wch: 15 }  // Result
+    ];
+    ws['!cols'] = wscols;
+
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Safety_Report");
     const dateSuffix = filterDate || new Date().toISOString().split('T')[0];
@@ -290,7 +306,7 @@ const StatCard = ({ icon, label, value, color, trend, description, glow }: any) 
         {React.cloneElement(icon as React.ReactElement, { size: 24, strokeWidth: 2.5 })}
       </div>
       <span className={`text-[8px] font-black px-2.5 py-1 rounded-lg bg-${color}-50 text-${color}-600 border border-${color}-100 uppercase tracking-tighter`}>
-         {trend}
+          {trend}
       </span>
     </div>
 
