@@ -274,24 +274,38 @@ const VendorManager: React.FC = () => {
         const wb = XLSX.read(bstr, { type: 'binary', cellDates: false });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const data: any[] = XLSX.utils.sheet_to_json(ws);
+        
         let success = 0;
         let fail = 0;
         
+        console.log("📦 User Data from Excel:", data);
+
         for (const row of data) {
-          const name = (row['Name'] || '').toString().trim();
-          let nid = (row['National ID'] || '').toString().trim();
+          // 1. ดึงข้อมูลพื้นฐาน (รองรับชื่อหัวตารางหลายแบบ)
+          const name = (row['Name'] || row['Full Name'] || row['ชื่อ-นามสกุล'] || '').toString().trim();
+          let nid = (row['National ID'] || row['ID Card'] || row['เลขบัตรประชาชน'] || '').toString().trim();
+          
+          // จัดการเลขบัตรที่เป็นรูปแบบวิทยาศาสตร์ (E+)
           if (nid.includes('E+') || nid.includes('e+')) {
               nid = Number(nid).toLocaleString('fullwide', {useGrouping:false});
           }
-          const vName = (row['Vendor'] || '').toString().trim();
           
-          // ✅ เรียกใช้ Smart Date Parser เพื่อจัดการ 2/15/2027
-          const rawExpiry = row['Induction Expiry'];
+          const vName = (row['Vendor'] || row['Company'] || row['บริษัท'] || '').toString().trim();
+          
+          // ✅ เรียกใช้ Smart Date Parser
+          const rawExpiry = row['Induction Expiry'] || row['Expiry Date'] || row['วันหมดอายุ'];
           const processedExpiry = processExcelDate(rawExpiry);
 
           if (name && nid) {
+            // หา ID ของ Vendor จากชื่อ
             const vendor = allVendors.find(v => v.name === vName);
-            const { data: exist } = await supabase.from('users').select('id').eq('national_id', nid).maybeSingle();
+            
+            // 2. ตรวจสอบข้อมูลเดิมด้วย National ID (เลขบัตร)
+            const { data: exist } = await supabase
+              .from('users')
+              .select('id')
+              .eq('national_id', nid)
+              .maybeSingle();
 
             const payload: any = {
               name,
@@ -304,20 +318,35 @@ const VendorManager: React.FC = () => {
               pdpa_agreed: true
             };
 
-            payload.id = exist ? exist.id : generateUUID();
+            let error;
+            if (exist) {
+              // 3. ถ้ามีอยู่แล้วให้ใช้ UPDATE (เพื่อเปลี่ยนจาก PROTECTED เป็นเลขจริง หรืออัปเดตข้อมูลอื่น)
+              const { error: updateError } = await supabase
+                .from('users')
+                .update(payload)
+                .eq('id', exist.id);
+              error = updateError;
+            } else {
+              // 4. ถ้ายังไม่มีให้ใช้ INSERT
+              // เพิ่ม ID ใหม่ถ้าไม่มีระบบสร้างให้อัตโนมัติ (หรือใช้ generateUUID() ของคุณ)
+              payload.id = generateUUID(); 
+              const { error: insertError } = await supabase
+                .from('users')
+                .insert([payload]);
+              error = insertError;
+            }
 
-            // ใช้ upsert เพื่ออัปเดตข้อมูลเดิม (เช่นเปลี่ยนจาก PROTECTED เป็นเลขจริง)
-            const { error } = await supabase.from('users').upsert([payload], { 
-              onConflict: 'national_id_hash',
-              ignoreDuplicates: false 
-            });
-
-            if (!error) success++; else fail++;
+            if (!error) success++; else {
+              console.error(`❌ Error for ${nid}:`, error.message);
+              fail++;
+            }
           }
         }
+        
         showToast(`นำเข้าสำเร็จ ${success} รายการ`, fail > 0 ? 'error' : 'success');
         loadData();
       } catch (err) { 
+        console.error("❌ Import Error:", err);
         showToast('รูปแบบไฟล์ไม่ถูกต้อง', 'error'); 
       }
     };
@@ -328,6 +357,7 @@ const VendorManager: React.FC = () => {
   const handleVendorImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
     const reader = new FileReader();
     reader.onload = async (evt) => {
       try {
@@ -335,17 +365,55 @@ const VendorManager: React.FC = () => {
         const wb = XLSX.read(bstr, { type: 'binary' });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const data: any[] = XLSX.utils.sheet_to_json(ws);
+        
         let successCount = 0;
+        let skipCount = 0;
+
         for (const row of data) {
-          const name = row['CompanyName'] || row['Name'];
-          if (name) {
-            const { error } = await supabase.from('vendors').upsert([{ name, status: 'APPROVED' }], { onConflict: 'name' });
-            if (!error) successCount++;
+          // ดึงชื่อจากหัวตาราง 'Company Name' ตามไฟล์จริงของคุณ
+          const rawName = row['Company Name'] || row['CompanyName'] || row['Name'];
+          
+          if (rawName && rawName.toString().trim() !== '') {
+            const trimmedName = rawName.toString().trim();
+
+            // 1. ตรวจสอบก่อนว่ามีชื่อนี้อยู่ในตารางหรือยัง
+            const { data: existingVendor } = await supabase
+              .from('vendors')
+              .select('name')
+              .eq('name', trimmedName)
+              .maybeSingle();
+
+            if (existingVendor) {
+              skipCount++;
+              continue; // ถ้ามีแล้วให้ข้ามไป
+            }
+
+            // 2. ถ้ายังไม่มี ให้ทำการ Insert เข้าไปปกติ
+            const { error: insertError } = await supabase
+              .from('vendors')
+              .insert([{ name: trimmedName, status: 'APPROVED' }]);
+
+            if (!insertError) {
+              successCount++;
+            } else {
+              console.error("❌ Database Error:", insertError.message);
+            }
           }
         }
-        showToast(`Imported ${successCount} vendors`, 'success');
-        loadData();
-      } catch (err) { showToast('Invalid File Format', 'error'); }
+
+        if (successCount > 0) {
+          showToast(`นำเข้าสำเร็จ ${successCount} บริษัท (ซ้ำ ${skipCount} รายการ)`, 'success');
+          loadData(); // โหลดข้อมูลในตารางใหม่
+        } else if (skipCount > 0) {
+          showToast(`ข้อมูลทั้งหมด ${skipCount} รายการมีอยู่ในระบบแล้ว`, 'info');
+        } else {
+          showToast('ไม่พบข้อมูลที่จะนำเข้า', 'error');
+        }
+
+      } catch (err) {
+        console.error("❌ Error:", err);
+        showToast('รูปแบบไฟล์ไม่ถูกต้อง', 'error');
+      }
     };
     reader.readAsBinaryString(file);
     e.target.value = '';
