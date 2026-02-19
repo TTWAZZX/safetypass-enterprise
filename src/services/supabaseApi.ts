@@ -480,8 +480,10 @@ export const api = {
   getAllExamHistory: async () => {
     const { data, error } = await supabase
       .from('exam_history')
-      .select(`*, users (name, national_id, vendors (name))`)
+      // ✅ เพิ่ม age และ nationality เข้าไปในวงเล็บของ users
+      .select(`*, users (name, national_id, age, nationality, vendors (name))`)
       .order('created_at', { ascending: false });
+      
     if (error) throw error;
     return data;
   },

@@ -61,6 +61,10 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
   const [editNationality, setEditNationality] = useState(user.nationality || 'ไทย (Thai)');
   const [isOtherNationality, setIsOtherNationality] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  
+  // ✅ State สำหรับจัดการข้อมูล Vendor ในหน้า Edit Profile
+  const [vendorsList, setVendorsList] = useState<{id: string, name: string}[]>([]);
+  const [editVendorId, setEditVendorId] = useState(user.vendor_id || '');
 
   // ✅ 1. Focus Mode Logic: จัดการการแสดงผล Bottom Nav ในระดับ CSS
   useEffect(() => {
@@ -74,6 +78,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
     return () => bottomNav?.classList.remove('hidden');
   }, [activeStage, showCard, viewingManual, showHistory]);
 
+  // ดึงข้อมูล Work Permit
   useEffect(() => {
     const fetchPermit = async () => {
         try {
@@ -86,8 +91,23 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
     fetchPermit();
   }, [user.id]);
 
+  // ✅ 2. ดึงรายชื่อบริษัททั้งหมดมาเก็บไว้ทำ Dropdown ตอนกด Edit
+  useEffect(() => {
+    const fetchVendorsList = async () => {
+        const { data } = await supabase
+          .from('vendors')
+          .select('id, name')
+          .eq('status', 'APPROVED')
+          .order('name');
+        if (data) setVendorsList(data);
+    };
+    fetchVendorsList();
+  }, []);
+
+  // ซิงค์ข้อมูลตอนเปิดโหมดแก้ไข
   useEffect(() => {
     if (isEditing) {
+      setEditVendorId(user.vendor_id || '');
       const standardList = ['ไทย (Thai)', 'พม่า (Myanmar)', 'กัมพูชา (Cambodian)', 'ลาว (Lao)'];
       if (user.nationality && !standardList.includes(user.nationality)) {
         setIsOtherNationality(true);
@@ -95,26 +115,42 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
         setIsOtherNationality(false);
       }
     }
-  }, [isEditing, user.nationality]);
+  }, [isEditing, user.nationality, user.vendor_id]);
 
   const hasInduction = user.induction_expiry && new Date(user.induction_expiry) > new Date();
   const isNearExpiry = user.induction_expiry && (new Date(user.induction_expiry).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24) < 30;
 
+  // ✅ 3. ฟังก์ชันบันทึกข้อมูล (รวมอัปเดต Vendor ID ลง Database)
   const handleUpdateProfile = async () => {
     if (!editName.trim()) return showToast('กรุณากรอกชื่อ-นามสกุล', 'error');
     setIsSaving(true);
     try {
+      const payload = { 
+        name: editName, 
+        age: Number(editAge) || null, 
+        nationality: editNationality,
+        vendor_id: editVendorId || null
+      };
+
       const { error } = await supabase
         .from('users')
-        .update({ 
-          name: editName, 
-          age: Number(editAge), 
-          nationality: editNationality 
-        })
+        .update(payload)
         .eq('id', user.id);
 
       if (error) throw error;
-      onUserUpdate({ ...user, name: editName, age: Number(editAge), nationality: editNationality });
+
+      // หาชื่อบริษัทที่เพิ่งเลือกมาแสดงแบบ Real-time บน UI โดยไม่ต้องโหลดหน้าใหม่
+      const selectedVendor = vendorsList.find(v => v.id === editVendorId);
+
+      onUserUpdate({ 
+        ...user, 
+        name: editName, 
+        age: Number(editAge), 
+        nationality: editNationality,
+        vendor_id: editVendorId || null,
+        vendors: selectedVendor ? { name: selectedVendor.name } : null
+      });
+
       showToast('อัปเดตข้อมูลส่วนตัวเรียบร้อยแล้ว', 'success');
       setIsEditing(false);
     } catch (err: any) {
@@ -222,6 +258,21 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
                               </select>
                             </div>
                         </div>
+
+                        {/* ✅ เพิ่ม Dropdown สำหรับเลือกบริษัท (Vendor) ในโหมดแก้ไข */}
+                        <div className="mt-1">
+                            <label className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Company / Vendor</label>
+                            <select 
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-bold text-xs outline-none focus:border-blue-500 mt-1" 
+                                value={editVendorId} 
+                                onChange={(e) => setEditVendorId(e.target.value)}
+                            >
+                                <option value="">-- ไม่ระบุสังกัดบริษัท (None) --</option>
+                                {vendorsList.map(v => (
+                                    <option key={v.id} value={v.id}>{v.name}</option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
                   ) : (
                     <div>
@@ -232,7 +283,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
                             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-slate-800 text-white text-[8px] px-2 py-1 rounded whitespace-nowrap z-50">Data Encrypted with pgcrypto</div>
                         </span>
                           <span className="bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 flex items-center gap-1.5">
-                              <ShieldCheck size={12} className="text-blue-500"/> {user.vendors?.name || 'Verifying...'}
+                              <ShieldCheck size={12} className="text-blue-500"/> {user.vendors?.name || 'ไม่มีสังกัดบริษัท'}
                           </span>
                           <span className="bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 flex items-center gap-1.5">
                               <Calendar size={12} className="text-blue-500"/> {user.age ? `${user.age} Years` : '-'}
@@ -244,11 +295,11 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
 
               <div className="flex gap-2 w-full md:w-auto mt-2 md:mt-0 justify-center">
                   {isEditing ? (
-                    <div className="flex gap-2 w-full">
-                        <button onClick={handleUpdateProfile} disabled={isSaving} className="flex-1 bg-emerald-600 text-white py-2.5 px-4 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all">
+                    <div className="flex gap-2 w-full flex-col md:flex-row">
+                        <button onClick={handleUpdateProfile} disabled={isSaving} className="flex-1 w-full bg-emerald-600 text-white py-2.5 px-4 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all">
                           {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save
                         </button>
-                        <button onClick={() => setIsEditing(false)} className="px-4 bg-slate-100 text-slate-500 rounded-xl text-[10px] font-black uppercase hover:bg-slate-200">Cancel</button>
+                        <button onClick={() => setIsEditing(false)} className="w-full md:w-auto px-4 py-2.5 bg-slate-100 text-slate-500 rounded-xl text-[10px] font-black uppercase hover:bg-slate-200">Cancel</button>
                     </div>
                   ) : (
                     <button onClick={() => setIsEditing(true)} className="p-3 bg-slate-50 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all active:scale-90 border border-transparent hover:border-blue-100"><Edit3 size={18} /></button>
@@ -355,6 +406,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
                         target="_blank"
                         rel="noopener noreferrer"
                         className="p-2 md:p-3 hover:bg-blue-50 text-blue-500 rounded-xl transition-all"
+                        title="Open in new tab"
                     >
                         <Globe2 size={20} className="md:w-6 md:h-6" />
                     </a>
@@ -368,7 +420,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
               <div className="flex-grow bg-slate-200 relative">
                 <iframe 
                     src={`https://qdodmxrecioltwdryhec.supabase.co/storage/v1/object/public/manuals/${viewingManual.toLowerCase()}.pdf#toolbar=0&navpanes=0&view=FitH`} 
-                    className="w-full h-full border-none" 
+                    className="w-full h-full border-none absolute inset-0" 
                     title="Manual Viewer" 
                 />
               </div>

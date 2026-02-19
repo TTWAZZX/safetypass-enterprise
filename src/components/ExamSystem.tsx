@@ -122,7 +122,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
     });
   }, [type]);
 
-  // ✅ 4. Submit & Grading Logic (เวอร์ชันแก้ไข: ตรวจคำตอบแม่นยำขึ้น)
+  // ✅ 4. Submit & Grading Logic
   const handleSubmit = async () => {
     if (loading) return;
     setLoading(true);
@@ -159,7 +159,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
             const selectedChoice = q.choices_json[Number(userAns)];
             
             if (selectedChoice) {
-                // ⚠️ จุดแก้สำคัญ: รองรับทั้ง Boolean (true) และ String ("true") และ Case-insensitive
+                // รองรับทั้ง Boolean (true) และ String ("true") และ Case-insensitive
                 const isCorrectFlag = selectedChoice.is_correct;
                 
                 const isReallyCorrect = 
@@ -191,6 +191,25 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
           updatedUser.induction_expiry = nextYear.toISOString();
         }
         setUpdatedUserData(updatedUser);
+
+        // 🔥 NEW: ส่งแจ้งเตือนเข้า LINE หากสอบ Work Permit ผ่าน
+        if (type === 'WORK_PERMIT') {
+          try {
+            // ส่ง HTTP POST ไปยัง Vercel API โดยไม่ต้อง await เพื่อไม่ให้ UI ค้าง
+            fetch('/api/notify-work-permit', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                name: user.name,
+                vendor: user.vendors?.name || 'EXTERNAL (ไม่มีสังกัด)',
+                score: correctCount,
+                maxScore: questions.length
+              })
+            }).catch(e => console.error("LINE Notification Trigger Error:", e));
+          } catch (err) {
+            console.error("Fail to trigger LINE API:", err);
+          }
+        }
       }
       
       setStep('RESULT');
@@ -373,14 +392,12 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
                         ))}
                     </div>
                 ) : (q.pattern === 'TRUE_FALSE' || q.pattern === QuestionPattern.TRUE_FALSE) ? ( 
-                    // ✅ FIXED: กรองเอาเฉพาะตัวเลือกที่มีข้อความเท่านั้น แล้วตัดเหลือ 2 อัน (แก้ปัญหาปุ่มเกินจากข้อมูลเก่า)
                     <div className="grid grid-cols-2 gap-4">
                         {q.choices_json
                             .filter((c: any) => (c.text_th && c.text_th.trim() !== "") || (c.text_en && c.text_en.trim() !== ""))
                             .slice(0, 2)
                             .map((c: any, cIdx: number) => {
                             const isTrue = c.text_en.toLowerCase().includes('true') || c.text_th.includes('ถูก');
-                            // เนื่องจากเรา filter index อาจเลื่อน เราต้องหา index จริงใน array เดิม
                             const realIndex = q.choices_json.findIndex((origin:any) => origin === c);
                             const isSelected = answers[q.id] === realIndex;
                             

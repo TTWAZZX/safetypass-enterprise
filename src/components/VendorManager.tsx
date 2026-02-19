@@ -108,10 +108,16 @@ const VendorManager: React.FC = () => {
   const [allVendors, setAllVendors] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
   
-  // ✅ Modal States
+  // ✅ Modal States (เพิ่ม vendor_id ลงไปใน state)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
-  const [editForm, setEditForm] = useState({ name: '', age: '', nationality: '', induction_expiry: '' });
+  const [editForm, setEditForm] = useState({ 
+    name: '', 
+    age: '', 
+    nationality: '', 
+    induction_expiry: '', 
+    vendor_id: '' // เพิ่ม field สำหรับแก้ไข Vendor
+  });
   const [isOtherNationality, setIsOtherNationality] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -150,7 +156,7 @@ const VendorManager: React.FC = () => {
       if (activeTab === 'LOGS') setLogs(data || []);
       else setDataList(data || []);
 
-      const { data: vData } = await supabase.from('vendors').select('id, name').eq('status', 'APPROVED');
+      const { data: vData } = await supabase.from('vendors').select('id, name').eq('status', 'APPROVED').order('name');
       setAllVendors(vData || []);
 
     } catch (err: any) {
@@ -199,12 +205,14 @@ const VendorManager: React.FC = () => {
       name: user.name || '',
       age: user.age || '',
       nationality: user.nationality || 'ไทย (Thai)',
-      induction_expiry: user.induction_expiry ? new Date(user.induction_expiry).toISOString().split('T')[0] : ''
+      induction_expiry: user.induction_expiry ? new Date(user.induction_expiry).toISOString().split('T')[0] : '',
+      vendor_id: user.vendor_id || '' // เซ็ตค่าเริ่มต้นให้ตรงกับข้อมูลปัจจุบัน
     });
     setIsOtherNationality(isOther);
     setIsEditModalOpen(true);
   };
 
+  // ✅ อัปเดตฟังก์ชันเซฟให้บันทึก vendor_id ด้วย
   const saveUserEdit = async () => {
     if (!editingUser) return;
     setSubmitting(true);
@@ -215,13 +223,14 @@ const VendorManager: React.FC = () => {
         name: editForm.name,
         age: Number(editForm.age),
         nationality: editForm.nationality,
-        induction_expiry: expiryVal 
+        induction_expiry: expiryVal,
+        vendor_id: editForm.vendor_id || null // บันทึก vendor_id ลงฐานข้อมูล
       }).eq('id', editingUser.id);
 
       if (error) throw error;
 
       showToast('อัปเดตข้อมูลพนักงานสำเร็จ', 'success');
-      logAction('EDIT_USER', editingUser.name, `Updated Profile`);
+      logAction('EDIT_USER', editingUser.name, `Updated Profile including Vendor`);
       setIsEditModalOpen(false);
       loadData();
     } catch (err: any) {
@@ -600,7 +609,7 @@ const VendorManager: React.FC = () => {
         </div>
       </div>
 
-      {/* 📝 EDIT USER MODAL */}
+      {/* 📝 EDIT USER MODAL - ✅ เพิ่ม Dropdown เลือกบริษัทที่นี่ */}
       {isEditModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setIsEditModalOpen(false)} />
@@ -610,11 +619,47 @@ const VendorManager: React.FC = () => {
                   <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-red-500 transition-colors"><X size={24}/></button>
               </div>
               <div className="space-y-4">
-                  <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Full Name</label><input className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold shadow-inner" value={editForm.name} onChange={e=>setEditForm({...editForm, name: e.target.value})}/></div>
-                  <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Age / อายุ</label><input type="number" className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold shadow-inner" value={editForm.age} onChange={e=>setEditForm({...editForm, age: e.target.value})}/></div>
-                      <div className="space-y-1"><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nationality</label><input className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold shadow-inner" value={editForm.nationality} onChange={e=>setEditForm({...editForm, nationality: e.target.value})}/></div>
+                  <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Full Name</label>
+                      <input className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold shadow-inner" value={editForm.name} onChange={e=>setEditForm({...editForm, name: e.target.value})}/>
                   </div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Age / อายุ</label>
+                          <input type="number" className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold shadow-inner" value={editForm.age} onChange={e=>setEditForm({...editForm, age: e.target.value})}/>
+                      </div>
+                      <div className="space-y-1">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nationality</label>
+                          <select className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold shadow-inner outline-none focus:border-blue-500" value={isOtherNationality ? 'OTHER' : editForm.nationality} onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === 'OTHER') { setIsOtherNationality(true); setEditForm({...editForm, nationality: ''}); } 
+                              else { setIsOtherNationality(false); setEditForm({...editForm, nationality: val}); }
+                            }}>
+                            <option value="ไทย (Thai)">ไทย (Thai)</option>
+                            <option value="พม่า (Myanmar)">พม่า (Myanmar)</option>
+                            <option value="กัมพูชา (Cambodian)">กัมพูชา (Cambodian)</option>
+                            <option value="ลาว (Lao)">ลาว (Lao)</option>
+                            <option value="OTHER">อื่นๆ / Other</option>
+                          </select>
+                      </div>
+                  </div>
+
+                  {/* ✅ Dropdown เลือกบริษัท (Vendor) */}
+                  <div className="space-y-1 mt-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2"><Building2 size={12}/> Company / Vendor</label>
+                      <select 
+                          className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold shadow-inner outline-none focus:border-blue-500 cursor-pointer" 
+                          value={editForm.vendor_id} 
+                          onChange={(e) => setEditForm({...editForm, vendor_id: e.target.value})}
+                      >
+                          <option value="">-- ไม่ระบุสังกัด (EXTERNAL) --</option>
+                          {allVendors.map(v => (
+                              <option key={v.id} value={v.id}>{v.name}</option>
+                          ))}
+                      </select>
+                  </div>
+
                   <div className="bg-amber-50 p-5 rounded-3xl border border-amber-100 shadow-sm mt-4 text-left">
                       <label className="text-[10px] font-black text-amber-600 uppercase flex items-center gap-2 mb-3"><CalendarClock size={16}/> Induction Expiry (Override)</label>
                       <input type="date" className="w-full bg-white border border-amber-200 p-3 rounded-xl font-bold outline-none focus:border-amber-500 transition-all" value={editForm.induction_expiry} onChange={e=>setEditForm({...editForm, induction_expiry: e.target.value})}/>
