@@ -192,10 +192,9 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
         }
         setUpdatedUserData(updatedUser);
 
-        // 🔥 NEW: ส่งแจ้งเตือนเข้า LINE หากสอบ Work Permit ผ่าน
+        // 🔥 ส่งแจ้งเตือนเข้า LINE หากสอบ Work Permit ผ่าน
         if (type === 'WORK_PERMIT') {
           try {
-            // ส่ง HTTP POST ไปยัง Vercel API โดยไม่ต้อง await เพื่อไม่ให้ UI ค้าง
             fetch('/api/notify-work-permit', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -203,7 +202,8 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
                 name: user.name,
                 vendor: user.vendors?.name || 'EXTERNAL (ไม่มีสังกัด)',
                 score: correctCount,
-                maxScore: questions.length
+                maxScore: questions.length,
+                permitNo: permitNo // ✅ เพิ่มบรรทัดนี้: ส่งเลข Work Permit ไปด้วย
               })
             }).catch(e => console.error("LINE Notification Trigger Error:", e));
           } catch (err) {

@@ -1,12 +1,11 @@
 export default async function handler(req, res) {
-  // รับเฉพาะ Method POST
   if (req.method !== 'POST') {
     return res.status(405).json({ message: 'Method Not Allowed' });
   }
 
-  const { name, vendor, score, maxScore } = req.body;
+  // ✅ รับค่า permitNo เพิ่มเข้ามาจาก Frontend
+  const { name, vendor, score, maxScore, permitNo } = req.body;
 
-  // ดึงค่าความลับจาก Environment Variables ใน Vercel
   const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN;
   const LINE_GROUP_ID = process.env.LINE_GROUP_ID;
 
@@ -14,7 +13,6 @@ export default async function handler(req, res) {
     return res.status(500).json({ message: 'LINE Credentials Missing' });
   }
 
-  // 🎨 ออกแบบ Flex Message (เปลี่ยนสี/ข้อความได้ตามใจชอบ)
   const flexMessage = {
     to: LINE_GROUP_ID,
     messages: [
@@ -47,7 +45,7 @@ export default async function handler(req, res) {
                 type: "text",
                 text: "ผู้รับเหมาผ่านการทดสอบ",
                 weight: "bold",
-                size: "xl",
+                size: "lg",
                 color: "#1e293b",
                 wrap: true
               },
@@ -62,8 +60,8 @@ export default async function handler(req, res) {
                     layout: "baseline",
                     spacing: "sm",
                     contents: [
-                      { type: "text", text: "ชื่อ", color: "#64748b", size: "sm", flex: 2 },
-                      { type: "text", text: name, wrap: true, color: "#0f172a", size: "sm", flex: 5, weight: "bold" }
+                      { type: "text", text: "เลขใบอนุญาต", color: "#64748b", size: "sm", flex: 3 },
+                      { type: "text", text: permitNo || "-", wrap: true, color: "#f59e0b", size: "sm", flex: 6, weight: "bold" } // ✅ โชว์เลขใบอนุญาตสีส้ม
                     ]
                   },
                   {
@@ -71,8 +69,8 @@ export default async function handler(req, res) {
                     layout: "baseline",
                     spacing: "sm",
                     contents: [
-                      { type: "text", text: "บริษัท", color: "#64748b", size: "sm", flex: 2 },
-                      { type: "text", text: vendor || "ไม่มีสังกัด", wrap: true, color: "#0f172a", size: "sm", flex: 5 }
+                      { type: "text", text: "ชื่อ", color: "#64748b", size: "sm", flex: 3 },
+                      { type: "text", text: name, wrap: true, color: "#0f172a", size: "sm", flex: 6, weight: "bold" }
                     ]
                   },
                   {
@@ -80,8 +78,8 @@ export default async function handler(req, res) {
                     layout: "baseline",
                     spacing: "sm",
                     contents: [
-                      { type: "text", text: "คะแนน", color: "#64748b", size: "sm", flex: 2 },
-                      { type: "text", text: `${score} / ${maxScore}`, wrap: true, color: "#3b82f6", size: "sm", flex: 5, weight: "bold" }
+                      { type: "text", text: "บริษัท", color: "#64748b", size: "sm", flex: 3 },
+                      { type: "text", text: vendor || "ไม่มีสังกัด", wrap: true, color: "#0f172a", size: "sm", flex: 6 }
                     ]
                   },
                   {
@@ -89,8 +87,17 @@ export default async function handler(req, res) {
                     layout: "baseline",
                     spacing: "sm",
                     contents: [
-                      { type: "text", text: "อายุบัตร", color: "#64748b", size: "sm", flex: 2 },
-                      { type: "text", text: "5 วัน", wrap: true, color: "#ef4444", size: "sm", flex: 5, weight: "bold" }
+                      { type: "text", text: "คะแนน", color: "#64748b", size: "sm", flex: 3 },
+                      { type: "text", text: `${score} / ${maxScore}`, wrap: true, color: "#3b82f6", size: "sm", flex: 6, weight: "bold" }
+                    ]
+                  },
+                  {
+                    type: "box",
+                    layout: "baseline",
+                    spacing: "sm",
+                    contents: [
+                      { type: "text", text: "อายุบัตร", color: "#64748b", size: "sm", flex: 3 },
+                      { type: "text", text: "5 วัน", wrap: true, color: "#ef4444", size: "sm", flex: 6, weight: "bold" }
                     ]
                   }
                 ]
