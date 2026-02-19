@@ -1,10 +1,14 @@
 export default async function handler(req, res) {
+  // รับเฉพาะ Method POST
   if (req.method !== 'POST') {
     return res.status(405).json({ message: 'Method Not Allowed' });
   }
 
-  // ✅ รับค่า permitNo เพิ่มเข้ามาจาก Frontend
-  const { name, vendor, score, maxScore, permitNo } = req.body;
+  // ✅ รับค่าจาก Frontend (เพิ่ม status เพื่อเช็คว่าผ่านหรือไม่ผ่าน)
+  const { name, vendor, score, maxScore, permitNo, status } = req.body;
+
+  // ตรวจสอบสถานะการสอบ
+  const isPassed = status === 'PASSED';
 
   const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN;
   const LINE_GROUP_ID = process.env.LINE_GROUP_ID;
@@ -13,12 +17,13 @@ export default async function handler(req, res) {
     return res.status(500).json({ message: 'LINE Credentials Missing' });
   }
 
+  // 🎨 ออกแบบ Flex Message (ปรับเปลี่ยนตามสถานะ Passed/Failed)
   const flexMessage = {
     to: LINE_GROUP_ID,
     messages: [
       {
         type: 'flex',
-        altText: `แจ้งเตือน: ${name} สอบ Work Permit ผ่านแล้ว!`,
+        altText: isPassed ? `✅ สอบผ่าน: ${name}` : `❌ สอบไม่ผ่าน: ${name}`,
         contents: {
           type: "bubble",
           size: "kilo",
@@ -28,13 +33,13 @@ export default async function handler(req, res) {
             contents: [
               {
                 type: "text",
-                text: "✅ WORK PERMIT APPROVED",
+                text: isPassed ? "✅ WORK PERMIT APPROVED" : "❌ ASSESSMENT FAILED",
                 color: "#ffffff",
                 weight: "bold",
                 size: "sm"
               }
             ],
-            backgroundColor: "#10b981", // สีเขียว Emerald
+            backgroundColor: isPassed ? "#10b981" : "#ef4444", // สีเขียวถ้าผ่าน สีแดงถ้าไม่ผ่าน
             paddingAll: "12px"
           },
           body: {
@@ -43,7 +48,7 @@ export default async function handler(req, res) {
             contents: [
               {
                 type: "text",
-                text: "ผู้รับเหมาผ่านการทดสอบ",
+                text: isPassed ? "ผู้รับเหมาผ่านการทดสอบ" : "ผู้รับเหมาไม่ผ่านการทดสอบ",
                 weight: "bold",
                 size: "lg",
                 color: "#1e293b",
@@ -61,7 +66,15 @@ export default async function handler(req, res) {
                     spacing: "sm",
                     contents: [
                       { type: "text", text: "เลขใบอนุญาต", color: "#64748b", size: "sm", flex: 3 },
-                      { type: "text", text: permitNo || "-", wrap: true, color: "#f59e0b", size: "sm", flex: 6, weight: "bold" } // ✅ โชว์เลขใบอนุญาตสีส้ม
+                      { 
+                        type: "text", 
+                        text: permitNo || "-", 
+                        wrap: true, 
+                        color: isPassed ? "#f59e0b" : "#1e293b", // สีส้มถ้าผ่านเพื่อให้เด่น
+                        size: "sm", 
+                        flex: 6, 
+                        weight: "bold" 
+                      }
                     ]
                   },
                   {
@@ -88,7 +101,15 @@ export default async function handler(req, res) {
                     spacing: "sm",
                     contents: [
                       { type: "text", text: "คะแนน", color: "#64748b", size: "sm", flex: 3 },
-                      { type: "text", text: `${score} / ${maxScore}`, wrap: true, color: "#3b82f6", size: "sm", flex: 6, weight: "bold" }
+                      { 
+                        type: "text", 
+                        text: `${score} / ${maxScore}`, 
+                        wrap: true, 
+                        color: isPassed ? "#10b981" : "#ef4444", 
+                        size: "sm", 
+                        flex: 6, 
+                        weight: "bold" 
+                      }
                     ]
                   },
                   {
@@ -96,8 +117,16 @@ export default async function handler(req, res) {
                     layout: "baseline",
                     spacing: "sm",
                     contents: [
-                      { type: "text", text: "อายุบัตร", color: "#64748b", size: "sm", flex: 3 },
-                      { type: "text", text: "5 วัน", wrap: true, color: "#ef4444", size: "sm", flex: 6, weight: "bold" }
+                      { type: "text", text: "สถานะ", color: "#64748b", size: "sm", flex: 3 },
+                      { 
+                        type: "text", 
+                        text: isPassed ? "ผ่านเกณฑ์ (บัตร 5 วัน)" : "ไม่ผ่านเกณฑ์ (สอบใหม่)", 
+                        wrap: true, 
+                        color: isPassed ? "#10b981" : "#ef4444", 
+                        size: "sm", 
+                        flex: 6, 
+                        weight: "bold" 
+                      }
                     ]
                   }
                 ]

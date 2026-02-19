@@ -192,7 +192,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
         }
         setUpdatedUserData(updatedUser);
 
-        // 🔥 ส่งแจ้งเตือนเข้า LINE หากสอบ Work Permit ผ่าน
+        // ✅ ส่งแจ้งเตือน LINE สำหรับ Work Permit (ทั้งผ่านและไม่ผ่าน)
         if (type === 'WORK_PERMIT') {
           try {
             fetch('/api/notify-work-permit', {
@@ -203,7 +203,8 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
                 vendor: user.vendors?.name || 'EXTERNAL (ไม่มีสังกัด)',
                 score: correctCount,
                 maxScore: questions.length,
-                permitNo: permitNo // ✅ เพิ่มบรรทัดนี้: ส่งเลข Work Permit ไปด้วย
+                permitNo: permitNo,
+                status: calculatedPassed ? 'PASSED' : 'FAILED' // ✅ เพิ่มสถานะตรงนี้
               })
             }).catch(e => console.error("LINE Notification Trigger Error:", e));
           } catch (err) {
