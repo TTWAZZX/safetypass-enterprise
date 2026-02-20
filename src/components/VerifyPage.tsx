@@ -18,12 +18,20 @@ const VerifyPage: React.FC = () => {
   const [userData, setUserData] = useState<any>(null);
 
   useEffect(() => {
-    // ✅ ดึง ID จาก Query Parameter (เช่น /verify?id=1234567890123)
+    // ✅ 1. รองรับ URL ทั้ง 2 แบบ: /verify?id=123 และ /verify/123
     const urlParams = new URLSearchParams(window.location.search);
-    const userId = urlParams.get('id');
+    let userId = urlParams.get('id');
+
+    if (!userId) {
+      const pathParts = window.location.pathname.split('/');
+      const potentialId = pathParts[pathParts.length - 1];
+      if (potentialId && potentialId !== 'verify') {
+        userId = potentialId;
+      }
+    }
 
     if (userId) {
-      checkUserStatus(userId);
+      checkUserStatus(decodeURIComponent(userId));
     } else {
       setStatus('NOT_FOUND');
     }
@@ -31,44 +39,60 @@ const VerifyPage: React.FC = () => {
 
   const checkUserStatus = async (id: string) => {
     try {
-      // 1. ดึงข้อมูล User (ค้นหาจาก national_id) และประวัติ Work Permit ที่ล่าสุด
-      const { data: user, error } = await supabase
+      // ✅ 2. ค้นหาแบบ 2 สเต็ป (หาด้วยเลขบัตรประชาชนก่อน ถ้าไม่เจอค่อยหาด้วยเลข Permit)
+      let targetUser = null;
+
+      // สเต็ป A: ลองหาจาก National ID
+      const { data: userById } = await supabase
         .from('users')
-        .select(`
-          *,
-          vendors(name),
-          work_permits(permit_no, expire_date)
-        `)
-        .eq('national_id', id) // ✅ ค้นหาด้วย national_id ที่ได้จาก LINE
+        .select(`*, vendors(name), work_permits(permit_no, expire_date)`)
+        .eq('national_id', id)
         .order('created_at', { foreignTable: 'work_permits', ascending: false })
         .limit(1, { foreignTable: 'work_permits' })
-        .single();
+        .maybeSingle();
 
-      if (error || !user) {
+      targetUser = userById;
+
+      // สเต็ป B: ถ้าไม่เจอ ลองหาจาก Work Permit Number (เพราะ QR Code มักจะเป็นเลขนี้)
+      if (!targetUser) {
+        const { data: permitData } = await supabase
+          .from('work_permits')
+          .select('user_id')
+          .eq('permit_no', id)
+          .maybeSingle();
+
+        if (permitData) {
+          const { data: userByPermit } = await supabase
+            .from('users')
+            .select(`*, vendors(name), work_permits(permit_no, expire_date)`)
+            .eq('id', permitData.user_id)
+            .order('created_at', { foreignTable: 'work_permits', ascending: false })
+            .limit(1, { foreignTable: 'work_permits' })
+            .single();
+            
+          targetUser = userByPermit;
+        }
+      }
+
+      if (!targetUser) {
         setStatus('NOT_FOUND');
         return;
       }
 
-      setUserData(user);
+      setUserData(targetUser);
 
-      // 🚨 เช็คว่าโดนแอดมินแบนอยู่หรือไม่ (สมมติว่าคุณมีฟิลด์ is_active ในตาราง)
-      // ถ้าไม่มีฟิลด์นี้ ข้ามบรรทัดนี้ได้ครับ
-      if (user.is_active === false) {
+      // 🚨 เช็คว่าโดนแอดมินแบนอยู่หรือไม่
+      if (targetUser.is_active === false) {
           setStatus('SUSPENDED');
           return;
       }
 
-      // 2. เช็คเงื่อนไขความปลอดภัย
+      // 3. เช็คเงื่อนไขความปลอดภัย
       const today = new Date().getTime();
-      
-      // Induction Valid?
-      const isInductionValid = user.induction_expiry && new Date(user.induction_expiry).getTime() > today;
-      
-      // Permit Valid? (ถ้ามี)
-      const latestPermit = user.work_permits?.[0];
+      const isInductionValid = targetUser.induction_expiry && new Date(targetUser.induction_expiry).getTime() > today;
+      const latestPermit = targetUser.work_permits?.[0];
       const isPermitValid = latestPermit && new Date(latestPermit.expire_date).getTime() > today;
 
-      // ✅ ผ่านเงื่อนไขใดเงื่อนไขหนึ่งถือว่า "อนุญาต" (VALID)
       if (isInductionValid || isPermitValid) {
         setStatus('VALID');
       } else {
@@ -119,7 +143,6 @@ const VerifyPage: React.FC = () => {
     );
   }
 
-  // ตัวแปรสำหรับเช็คว่ามี Work Permit ปัจจุบันไหม
   const activePermit = userData.work_permits?.[0];
 
   return (
@@ -174,7 +197,7 @@ const VerifyPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Work Permit Info (โชว์เฉพาะถ้ามีเลขบัตร) */}
+            {/* Work Permit Info */}
             {activePermit && activePermit.permit_no && (
                <div className="flex items-center gap-4 p-4 bg-blue-50/50 rounded-2xl border border-blue-100">
                   <div className="bg-white p-2.5 rounded-xl shadow-sm border border-blue-100"><FileText className="w-4 h-4 text-blue-500"/></div>
