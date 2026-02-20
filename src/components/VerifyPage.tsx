@@ -47,8 +47,8 @@ const VerifyPage: React.FC = () => {
     try {
       let targetUser = null;
 
-      // สเต็ป A: ค้นหาจาก National ID ก่อน
-      const { data: userById, error: err1 } = await supabase
+      // สเต็ป A: ค้นหาจาก National ID
+      const { data: userById } = await supabase
         .from('users')
         .select(`*, vendors(name), work_permits(permit_no, expire_date)`)
         .eq('national_id', id)
@@ -79,12 +79,26 @@ const VerifyPage: React.FC = () => {
         }
       }
 
+      // ✨ สเต็ป C (เพิ่มใหม่): ถ้ายังไม่เจออีก ให้ลองหาจาก id (UUID) ตรงๆ 
+      // เพราะ URL ที่คุณใช้อยู่คือค่า ID ของตาราง users
+      if (!targetUser) {
+        const { data: userByUUID } = await supabase
+          .from('users')
+          .select(`*, vendors(name), work_permits(permit_no, expire_date)`)
+          .eq('id', id)
+          .order('created_at', { foreignTable: 'work_permits', ascending: false })
+          .limit(1, { foreignTable: 'work_permits' })
+          .maybeSingle();
+          
+        targetUser = userByUUID;
+      }
+
+      // --- ส่วนเช็คผลลัพธ์เหมือนเดิม ---
       if (!targetUser) {
         setStatus('NOT_FOUND');
         return;
       }
 
-      // ✅ บังคับให้เก็บ Data ก่อนค่อยเปลี่ยน Status ป้องกันหน้าขาว
       setUserData(targetUser);
 
       if (targetUser.is_active === false) {
@@ -97,7 +111,6 @@ const VerifyPage: React.FC = () => {
       const latestPermit = targetUser.work_permits?.[0];
       const isPermitValid = latestPermit && new Date(latestPermit.expire_date).getTime() > today;
 
-      // ให้เวลา React อัปเดต State ก่อนเปลี่ยนหน้า (ป้องกันแครช)
       setTimeout(() => {
         if (isInductionValid || isPermitValid) {
           setStatus('VALID');
