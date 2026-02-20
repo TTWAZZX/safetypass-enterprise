@@ -4,8 +4,8 @@ export default async function handler(req, res) {
     return res.status(405).json({ message: 'Method Not Allowed' });
   }
 
-  // ✅ รับค่าจาก Frontend (เพิ่ม status เพื่อเช็คว่าผ่านหรือไม่ผ่าน)
-  const { name, vendor, score, maxScore, permitNo, status } = req.body;
+  // ✅ รับค่าจาก Frontend (เพิ่ม national_id เพื่อใช้ทำลิงก์ปุ่มกด)
+  const { name, vendor, score, maxScore, permitNo, status, national_id } = req.body;
 
   // ตรวจสอบสถานะการสอบ
   const isPassed = status === 'PASSED';
@@ -13,11 +13,14 @@ export default async function handler(req, res) {
   const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN;
   const LINE_GROUP_ID = process.env.LINE_GROUP_ID;
 
+  // 🌐 ตั้งค่า URL ของเว็บคุณ (เปลี่ยนเป็นโดเมนจริงของคุณบน Vercel)
+  const BASE_URL = "https://safetypass-enterprise.vercel.app";
+
   if (!LINE_ACCESS_TOKEN || !LINE_GROUP_ID) {
     return res.status(500).json({ message: 'LINE Credentials Missing' });
   }
 
-  // 🎨 ออกแบบ Flex Message (ปรับเปลี่ยนตามสถานะ Passed/Failed)
+  // 🎨 ออกแบบ Flex Message (รวม Footer พร้อมปุ่ม Quick Action)
   const flexMessage = {
     to: LINE_GROUP_ID,
     messages: [
@@ -39,7 +42,7 @@ export default async function handler(req, res) {
                 size: "sm"
               }
             ],
-            backgroundColor: isPassed ? "#10b981" : "#ef4444", // สีเขียวถ้าผ่าน สีแดงถ้าไม่ผ่าน
+            backgroundColor: isPassed ? "#10b981" : "#ef4444",
             paddingAll: "12px"
           },
           body: {
@@ -70,7 +73,7 @@ export default async function handler(req, res) {
                         type: "text", 
                         text: permitNo || "-", 
                         wrap: true, 
-                        color: isPassed ? "#f59e0b" : "#1e293b", // สีส้มถ้าผ่านเพื่อให้เด่น
+                        color: isPassed ? "#f59e0b" : "#1e293b", 
                         size: "sm", 
                         flex: 6, 
                         weight: "bold" 
@@ -133,6 +136,35 @@ export default async function handler(req, res) {
               }
             ],
             paddingAll: "20px"
+          },
+          // 🔗 ✅ เพิ่มปุ่ม Footer (Quick Actions)
+          footer: {
+            type: "box",
+            layout: "vertical",
+            spacing: "sm",
+            contents: [
+              {
+                type: "button",
+                style: "primary",
+                height: "sm",
+                color: "#3b82f6",
+                action: {
+                  type: "uri",
+                  label: "📄 ดูใบเซอร์ / Digital Pass",
+                  uri: `${BASE_URL}/verify?id=${national_id}`
+                }
+              },
+              {
+                type: "button",
+                style: "secondary",
+                height: "sm",
+                action: {
+                  type: "uri",
+                  label: "🚫 ระงับสิทธิ์สอบ (Admin)",
+                  uri: `${BASE_URL}/admin?search=${national_id}`
+                }
+              }
+            ]
           }
         }
       }

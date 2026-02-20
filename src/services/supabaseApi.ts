@@ -5,7 +5,7 @@ import SHA256 from 'crypto-js/sha256';
 
 export const api = {
 
-  /* =====================================================
+/* =====================================================
       1. AUTH & REGISTRATION (HYBRID SECURITY MODE 🔒)
   ===================================================== */
 
@@ -28,6 +28,13 @@ export const api = {
       .single()
 
     if (userError || !userData) throw new Error('ไม่พบข้อมูลผู้ใช้งานในระบบ')
+
+    // 🔥 บล็อกผู้ใช้ที่โดนแบน (is_active = false)
+    if (userData.is_active === false) {
+      // Sign out ออกจากระบบทันทีเพื่อความปลอดภัย
+      await supabase.auth.signOut();
+      throw new Error('บัญชีของคุณถูกระงับสิทธิ์ชั่วคราว โปรดติดต่อเจ้าหน้าที่ Safety');
+    }
     
     // 2. 🔐 SECURE DECRYPT: เรียก RPC เพื่อถอดรหัสเลขบัตรจริงมาแสดงผล
     const { data: realId, error: decryptError } = await supabase.rpc('get_my_decrypted_id');
@@ -74,27 +81,32 @@ export const api = {
     nationality: string,
     otherVendorName?: string
   ): Promise<User> => {
-
-    let finalVendorId = vendorId
+    let finalVendorId = vendorId;
     if (otherVendorName) {
       const { data: newVendor, error: vError } = await supabase
-        .from('vendors').insert({ name: otherVendorName, status: 'PENDING' }).select().single()
-      if (vError) throw new Error('สร้างบริษัทไม่สำเร็จ: ' + vError.message)
-      finalVendorId = newVendor.id
+        .from('vendors').insert({ name: otherVendorName, status: 'PENDING' }).select().single();
+      if (vError) throw new Error('สร้างบริษัทไม่สำเร็จ: ' + vError.message);
+      finalVendorId = newVendor.id;
     }
 
-    // ---------------------------------------------------------
-    // ✅ 1. ตรวจสอบข้อมูลที่ Admin Import ไว้ก่อนหน้า (Conflict Check)
-    // ---------------------------------------------------------
-    // ใช้ checkUser ของเราเองที่รองรับทั้ง Hash และเลขจริง
-    const existingUser = await api.checkUser(nationalId);
+    const nationalIdHash = SHA256(nationalId).toString();
+    const email = `${nationalId}@safetypass.com`;
+    const password = nationalId; 
 
-    const email = `${nationalId}@safetypass.com`
-    const password = nationalId 
+    // 1. ตรวจสอบข้อมูลในตาราง users ก่อน (เผื่อแอดมิน Import ไว้)
+    const { data: existingUserInDB } = await supabase
+      .from('users')
+      .select('id, is_active')
+      .eq('national_id_hash', nationalIdHash)
+      .maybeSingle();
+
+    if (existingUserInDB && existingUserInDB.is_active === false) {
+      throw new Error('บัญชีของคุณถูกระงับสิทธิ์ชั่วคราว โปรดติดต่อเจ้าหน้าที่ Safety');
+    }
 
     let authUser = null;
-    
-    // 2. ลองสมัครบัญชี Auth
+
+    // 2. พยายาม SignUp (สร้างบัญชี Auth)
     const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
@@ -102,61 +114,57 @@ export const api = {
     });
 
     if (signUpError) {
-        // ถ้าบัญชีมีอยู่แล้ว (เช่น Admin เคยลงทะเบียนให้ หรือเคยกดสมัครแล้ว) ให้ทำการ Sign In แทน
-        if (signUpError.status === 422 || signUpError.message.includes('already registered')) {
-            const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-                email,
-                password
-            });
-            if (signInError) throw new Error('บัญชีนี้ถูกใช้งานแล้ว แต่รหัสผ่านไม่ถูกต้อง');
-            authUser = signInData.user;
-        } else {
-            throw new Error(signUpError.message);
-        }
+      // กรณีที่ 422: เคยลงทะเบียน Auth ไปแล้ว ให้ดักเพื่อเปลี่ยนเป็นการ SignIn
+      if (signUpError.status === 422 || signUpError.message.includes('already registered')) {
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password
+        });
+        if (signInError) throw new Error('already registered'); 
+        authUser = signInData.user;
+      } else {
+        throw signUpError;
+      }
     } else {
-        authUser = signUpData.user;
+      authUser = signUpData.user;
     }
 
     if (!authUser) throw new Error('ไม่สามารถเชื่อมต่อระบบยืนยันตัวตนได้');
 
-    // ---------------------------------------------------------
-    // ✅ 3. ใช้ upsert โดยอ้างอิงจาก national_id_hash (Fix Duplicate Key)
-    // ---------------------------------------------------------
-    
-    // ✅ แก้ไขการเรียกใช้ Hash เป็น SHA256
-    const nationalIdHash = SHA256(nationalId).toString();
-
+    // 3. เตรียม Payload สำหรับการ Upsert
     const payload: any = {
+      id: authUser.id, // 🌟 สำคัญ: บังคับใช้ ID จากระบบ Auth เพื่อให้ Login ได้
       name,
       national_id: nationalId,
-      national_id_hash: nationalIdHash, // เพิ่ม Hash ลงไปใน Payload ด้วย
-      age,            
-      nationality,    
+      national_id_hash: nationalIdHash,
+      age,
+      nationality,
       vendor_id: finalVendorId,
       role: 'USER',
       pdpa_agreed: true,
-      pdpa_agreed_at: new Date().toISOString()
+      pdpa_agreed_at: new Date().toISOString(),
+      is_active: true
     };
 
-    // ถ้า Admin Import ข้อมูลไว้แล้ว ให้ใช้ ID เดิมของพนักงานคนนั้นเพื่อ Update ทับ
-    if (existingUser && (existingUser as any).id) {
-        payload.id = (existingUser as any).id;
-    } else {
-        payload.id = authUser.id;
+    // 4. ทำการ Upsert (ถ้ามีข้อมูลเก่าจากการ Import ระบบจะลบแถวเก่าที่มี national_id_hash ตรงกัน แล้วแทนที่ด้วยแถวใหม่ที่ ID ตรงกับ Auth)
+    // แต่เนื่องจาก users_pkey (id) จะชน เราจึงต้องลบแถวเก่าทิ้งก่อนถ้า ID ไม่ตรงกัน
+    if (existingUserInDB && existingUserInDB.id !== authUser.id) {
+      // ลบข้อมูลเก่าที่แอดมิน Import เพื่อเตรียมใส่ข้อมูลใหม่ที่ผูกกับ Auth ID
+      await supabase.from('users').delete().eq('id', existingUserInDB.id);
     }
 
     const { data: newUser, error: dbError } = await supabase
       .from('users')
       .upsert(payload, { onConflict: 'national_id_hash' }) 
       .select('*, vendors(*)')
-      .single()
+      .single();
 
     if (dbError) {
-        console.error("Database Upsert Error:", dbError);
-        throw new Error('ลงทะเบียนไม่สำเร็จ: ' + dbError.message);
+      console.error("Database Upsert Error:", dbError);
+      throw new Error('ลงทะเบียนไม่สำเร็จ: ' + dbError.message);
     }
     
-    return { ...newUser, national_id: nationalId } as unknown as User
+    return { ...newUser, national_id: nationalId } as unknown as User;
   },
 
   /* =====================================================

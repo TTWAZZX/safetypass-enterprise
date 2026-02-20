@@ -19,8 +19,11 @@ const AdminPanel: React.FC = () => {
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activePage, setActivePage] = useState<'DASHBOARD' | 'QUESTIONS' | 'VENDORS' | 'SETTINGS'>('DASHBOARD');
+  
+  // ✅ สร้าง State เพื่อเก็บคำค้นหาที่อาจส่งมาจาก LINE
+  const [searchQuery, setSearchQuery] = useState<string | null>(null);
 
-  // ดึงข้อมูลแค่ Stats เบื้องต้น เพื่อเอามาแสดง "ตัวเลขแจ้งเตือน (Badge)" ที่เมนู Vendor
+  // ดึงข้อมูลแค่ Stats เบื้องต้น
   const fetchData = async () => {
     try {
       setLoading(true);
@@ -34,8 +37,21 @@ const AdminPanel: React.FC = () => {
   };
 
   useEffect(() => {
+    // ✅ เช็ค URL Parameter ทันทีที่โหลดหน้า
+    const params = new URLSearchParams(window.location.search);
+    const searchParam = params.get('search');
+    
+    if (searchParam) {
+      setSearchQuery(searchParam);
+      // ✅ บังคับเปิดหน้า VENDORS (หรือหน้าที่คุณเอาไว้จัดการแบน/ผู้ใช้) ทันที
+      setActivePage('VENDORS');
+      
+      // (Optional) ล้าง URL ให้สะอาดหลังจากดึงค่ามาแล้วเพื่อไม่ให้เกะกะ
+      window.history.replaceState({}, '', '/admin');
+    }
+
     fetchData();
-  }, [activePage]);
+  }, []); // Run only once on mount
 
   if (loading) {
     return (
@@ -49,7 +65,7 @@ const AdminPanel: React.FC = () => {
   return (
     <div className="flex flex-col md:flex-row min-h-[calc(100vh-64px)] bg-slate-50 text-left">
       
-      {/* 🧭 SIDE NAVIGATION (เมนูด้านซ้ายสำหรับ Desktop) */}
+      {/* 🧭 SIDE NAVIGATION */}
       <aside className="w-64 bg-white border-r border-slate-200 hidden md:flex flex-col sticky top-0 h-[calc(100vh-64px)] z-10">
         <div className="p-6 border-b border-slate-50">
           <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-1">Control Center</p>
@@ -58,40 +74,39 @@ const AdminPanel: React.FC = () => {
         <nav className="flex-1 p-3 space-y-1">
           <SidebarButton icon={<LayoutGrid size={18} />} label="Overview" active={activePage === 'DASHBOARD'} onClick={() => setActivePage('DASHBOARD')} />
           <SidebarButton icon={<ClipboardList size={18} />} label="Questions" active={activePage === 'QUESTIONS'} onClick={() => setActivePage('QUESTIONS')} />
-          <SidebarButton icon={<Building2 size={18} />} label="Vendors" badge={stats?.pendingVendors} active={activePage === 'VENDORS'} onClick={() => setActivePage('VENDORS')} />
+          <SidebarButton icon={<Building2 size={18} />} label="Vendors & Users" badge={stats?.pendingVendors} active={activePage === 'VENDORS'} onClick={() => setActivePage('VENDORS')} />
           <SidebarButton icon={<Settings size={18} />} label="Settings" active={activePage === 'SETTINGS'} onClick={() => setActivePage('SETTINGS')} />
         </nav>
       </aside>
 
-      {/* 📱 BOTTOM NAVIGATION (เมนูด้านล่างสำหรับ Mobile) */}
+      {/* 📱 BOTTOM NAVIGATION */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-2 py-2.5 z-[100] flex justify-around items-center shadow-[0_-10px_25px_rgba(0,0,0,0.05)]">
         <MobileTab icon={<LayoutGrid size={20} />} label="Home" active={activePage === 'DASHBOARD'} onClick={() => setActivePage('DASHBOARD')} />
         <MobileTab icon={<ClipboardList size={20} />} label="Exam" active={activePage === 'QUESTIONS'} onClick={() => setActivePage('QUESTIONS')} />
-        <MobileTab icon={<Building2 size={20} />} label="Vendor" badge={stats?.pendingVendors} active={activePage === 'VENDORS'} onClick={() => setActivePage('VENDORS')} />
+        <MobileTab icon={<Building2 size={20} />} label="Users" badge={stats?.pendingVendors} active={activePage === 'VENDORS'} onClick={() => setActivePage('VENDORS')} />
         <MobileTab icon={<Settings size={20} />} label="Config" active={activePage === 'SETTINGS'} onClick={() => setActivePage('SETTINGS')} />
       </nav>
 
-      {/* 🖥️ MAIN CONTENT AREA (พื้นที่แสดงเนื้อหาหลัก) */}
+      {/* 🖥️ MAIN CONTENT AREA */}
       <main className="flex-1 p-0 md:p-4 lg:p-8 overflow-y-auto pb-24 md:pb-8 w-full max-w-full overflow-x-hidden">
         
-        {/* ซ่อน Header ของ AdminPanel เมื่ออยู่หน้า Dashboard เพราะ AdminDashboard มี Header ของตัวเองแล้ว */}
         {activePage !== 'DASHBOARD' && (
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 p-4 md:p-0 mb-4 md:mb-8">
                 <div className="space-y-1">
                     <h1 className="text-xl md:text-3xl font-black text-slate-900 tracking-tight uppercase leading-none">
                         {activePage === 'QUESTIONS' ? 'Assessment Manager' : 
-                         activePage === 'VENDORS' ? 'Vendor Compliance' : 'System Configuration'}
+                         activePage === 'VENDORS' ? 'User & Vendor Compliance' : 'System Configuration'}
                     </h1>
                     <p className="text-[10px] md:text-sm text-slate-400 font-bold tracking-tight uppercase">Management Access • Secure Node</p>
                 </div>
             </div>
         )}
 
-        {/* ✅ แสดง Component ตามเมนูที่เลือก (เชื่อมกัน 100%) */}
+        {/* ✅ ส่ง searchQuery ต่อไปยัง Component ย่อย (เผื่อไว้ให้มันเอาไปกรองตารางต่อ) */}
         <div className="animate-in fade-in duration-500">
             {activePage === 'DASHBOARD' && <AdminDashboard />}
             {activePage === 'QUESTIONS' && <QuestionManager />}
-            {activePage === 'VENDORS' && <VendorManager />}
+            {activePage === 'VENDORS' && <VendorManager initialSearch={searchQuery} />} {/* ✅ ส่ง prop ไปที่นี่ */}
             {activePage === 'SETTINGS' && <SettingsManager />}
         </div>
       </main>
@@ -99,8 +114,7 @@ const AdminPanel: React.FC = () => {
   );
 };
 
-/* --- SHARED COMPONENTS (ปุ่มเมนู) --- */
-
+/* --- SHARED COMPONENTS --- */
 const SidebarButton = ({ icon, label, active, onClick, badge }: any) => (
   <button onClick={onClick} className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all duration-300 active:scale-95 group ${active ? 'bg-slate-900 text-white shadow-xl shadow-slate-900/10 translate-x-1' : 'text-slate-500 hover:bg-slate-50'}`}>
     <div className="flex items-center gap-3">{icon} {label}</div>

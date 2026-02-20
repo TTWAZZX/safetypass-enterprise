@@ -79,7 +79,8 @@ const AppContent: React.FC = () => {
     }, 100);
   };
 
-  if (currentPath.startsWith('/verify/')) {
+  // ✅ แก้ให้รองรับ Query Parameter เช่น /verify?id=1234
+  if (currentPath.startsWith('/verify')) {
     return <VerifyPage />;
   }
 

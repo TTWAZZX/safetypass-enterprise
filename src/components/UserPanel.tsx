@@ -27,7 +27,8 @@ import {
   CheckCircle2,
   AlertTriangle,
   ArrowRightCircle,
-  Maximize2
+  Maximize2,
+  Ban // ✅ เพิ่มไอคอน Ban
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useToastContext } from './ToastProvider';
@@ -65,6 +66,10 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
   // ✅ State สำหรับจัดการข้อมูล Vendor ในหน้า Edit Profile
   const [vendorsList, setVendorsList] = useState<{id: string, name: string}[]>([]);
   const [editVendorId, setEditVendorId] = useState(user.vendor_id || '');
+
+  // 🔥 เช็คสถานะการโดนแบน (ดึงจาก user.is_active ที่เราเพิ่งเพิ่มในฐานข้อมูล)
+  // ใช้ (user as any) ป้องกัน TypeScript error เผื่อใน types.ts ยังไม่ได้เพิ่ม
+  const isBanned = (user as any).is_active === false;
 
   // ✅ 1. Focus Mode Logic: จัดการการแสดงผล Bottom Nav ในระดับ CSS
   useEffect(() => {
@@ -179,7 +184,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
   if (showCard) return <DigitalCard user={user} onBack={() => setShowCard(false)} type={cardType} permit={activePermit} />;
   if (showHistory) return <ExamHistory userId={user.id} onBack={() => setShowHistory(false)} />;
   
-  if (activeStage !== 'IDLE') {
+  if (activeStage !== 'IDLE' && !isBanned) {
     return (
       <div className="animate-in fade-in zoom-in-95 duration-300">
         <ExamSystem
@@ -215,22 +220,38 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
 
       <div className="relative z-10 max-w-2xl mx-auto p-4 space-y-6 md:space-y-8 animate-in fade-in duration-500">
         
+        {/* 🚨 BANNED ALERT BANNER (แสดงเมื่อถูกระงับสิทธิ์) */}
+        {isBanned && (
+          <div className="bg-red-500 rounded-[2rem] p-5 shadow-lg shadow-red-500/20 flex items-start md:items-center gap-4 animate-in slide-in-from-top-4 border-2 border-red-400 mt-4 mx-1">
+             <div className="bg-white/20 p-3 rounded-full shrink-0">
+                <Ban className="text-white w-8 h-8" />
+             </div>
+             <div className="text-white text-left flex-1">
+                <h3 className="font-black text-lg md:text-xl uppercase tracking-wider leading-tight">Account Suspended</h3>
+                <p className="text-[10px] md:text-xs font-bold opacity-90 mt-1 leading-relaxed">
+                  สิทธิ์การใช้งานของคุณถูกระงับชั่วคราว คุณไม่สามารถทำแบบทดสอบหรือเข้าปฏิบัติงานในพื้นที่ได้ โปรดติดต่อเจ้าหน้าที่ Safety
+                </p>
+             </div>
+          </div>
+        )}
+
         {/* 🟢 Hero Section: Floating Identity Card */}
-        <div className="relative pt-4">
+        <div className={`relative ${!isBanned ? 'pt-4' : 'pt-2'}`}>
           <div className="absolute top-20 left-1/2 -translate-x-1/2 w-3/4 h-20 bg-blue-500/20 blur-[60px] rounded-full pointer-events-none"></div>
-          <div className="absolute top-0 left-0 right-0 h-36 bg-gradient-to-r from-blue-600 to-indigo-800 rounded-[2.5rem] shadow-sm overflow-hidden">
+          <div className={`absolute top-0 left-0 right-0 h-36 rounded-[2.5rem] shadow-sm overflow-hidden ${isBanned ? 'bg-gradient-to-r from-red-600 to-rose-900' : 'bg-gradient-to-r from-blue-600 to-indigo-800'}`}>
                <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]"></div>
           </div>
 
-          <div className="relative z-10 mx-2 md:mx-6 bg-white rounded-[2rem] p-5 md:p-6 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.1)] border border-slate-100 mt-16 flex flex-col md:flex-row gap-5 items-start md:items-center">
+          <div className={`relative z-10 mx-2 md:mx-6 bg-white rounded-[2rem] p-5 md:p-6 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.1)] border mt-16 flex flex-col md:flex-row gap-5 items-start md:items-center ${isBanned ? 'border-red-200' : 'border-slate-100'}`}>
               <div className="relative self-center md:self-start">
                   <div className="w-24 h-24 rounded-[1.5rem] bg-white p-1.5 shadow-lg -mt-16 md:mt-0 relative z-20">
-                      <div className="w-full h-full rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center text-blue-600 text-4xl font-black border border-slate-200 uppercase shadow-inner">
+                      <div className={`w-full h-full rounded-2xl flex items-center justify-center text-4xl font-black border uppercase shadow-inner ${isBanned ? 'bg-red-50 text-red-600 border-red-100' : 'bg-gradient-to-br from-slate-50 to-slate-100 text-blue-600 border-slate-200'}`}>
                           {user.name ? user.name.charAt(0) : '?'}
                       </div>
                   </div>
-                  <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[9px] font-black px-3 py-1.5 rounded-full uppercase tracking-widest border-4 border-white shadow-md flex items-center gap-1 whitespace-nowrap z-30">
-                      <ShieldCheck size={10} /> {user.role === 'ADMIN' ? 'Admin' : 'User'}
+                  {/* ✅ Badge เปลี่ยนสีตามสถานะแบน */}
+                  <div className={`absolute -bottom-3 left-1/2 -translate-x-1/2 text-white text-[9px] font-black px-3 py-1.5 rounded-full uppercase tracking-widest border-4 border-white shadow-md flex items-center gap-1 whitespace-nowrap z-30 ${isBanned ? 'bg-red-600' : 'bg-slate-900'}`}>
+                      {isBanned ? <><Ban size={10} /> Suspended</> : <><ShieldCheck size={10} /> {user.role === 'ADMIN' ? 'Admin' : 'User'}</>}
                   </div>
               </div>
 
@@ -259,7 +280,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
                             </div>
                         </div>
 
-                        {/* ✅ เพิ่ม Dropdown สำหรับเลือกบริษัท (Vendor) ในโหมดแก้ไข */}
+                        {/* ✅ Dropdown สำหรับเลือกบริษัท (Vendor) ในโหมดแก้ไข */}
                         <div className="mt-1">
                             <label className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Company / Vendor</label>
                             <select 
@@ -278,8 +299,8 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
                     <div>
                         <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight uppercase leading-none mb-3">{user.name}</h2>
                         <div className="flex flex-wrap justify-center md:justify-start gap-2 text-[10px] md:text-xs font-bold text-slate-500">
-                          <span className="bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 flex items-center gap-1.5 group relative">
-                            <Ticket size={12} className="text-blue-500"/> {maskNationalID(user.national_id)} <Lock size={10} className="text-emerald-500 ml-1" />
+                          <span className={`px-3 py-1.5 rounded-lg border flex items-center gap-1.5 group relative ${isBanned ? 'bg-red-50 border-red-100 text-red-500' : 'bg-slate-50 border-slate-100'}`}>
+                            <Ticket size={12} className={isBanned ? 'text-red-500' : 'text-blue-500'}/> {maskNationalID(user.national_id)} <Lock size={10} className={isBanned ? 'text-red-400' : 'text-emerald-500 ml-1'} />
                             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-slate-800 text-white text-[8px] px-2 py-1 rounded whitespace-nowrap z-50">Data Encrypted with pgcrypto</div>
                         </span>
                           <span className="bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 flex items-center gap-1.5">
@@ -312,7 +333,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
         <div className="space-y-5 px-1">
           <div className="flex items-center justify-between">
              <div className="flex items-center gap-3">
-               <div className="w-1.5 h-6 bg-blue-600 rounded-full shadow-sm"></div>
+               <div className={`w-1.5 h-6 rounded-full shadow-sm ${isBanned ? 'bg-red-500' : 'bg-blue-600'}`}></div>
                <h3 className="text-xs font-black text-slate-500 uppercase tracking-[0.2em]">Safety Journey</h3>
              </div>
              <button onClick={() => setShowHistory(true)} className="text-[10px] font-bold text-blue-500 flex items-center gap-1 hover:text-blue-700 uppercase bg-blue-50 px-3 py-1.5 rounded-full">
@@ -321,6 +342,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
           </div>
 
           <div className="grid grid-cols-1 gap-4">
+            {/* ส่ง isBanned ไปให้ StageCard ล็อกการทำงาน */}
             <StageCard
               title={t('user.stage1')} 
               isActive={hasInduction}
@@ -329,7 +351,8 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
               icon={<BookOpen size={24} />}
               onClick={() => { if (hasInduction && !isNearExpiry) { setCardType('INDUCTION'); setShowCard(true); } else setActiveStage('INDUCTION'); }}
               onRetake={() => { if(window.confirm("คุณต้องการเริ่มสอบ Induction ใหม่ใช่หรือไม่?")) setActiveStage('INDUCTION'); }}
-              canAction={true}
+              disabled={isBanned} // ✅ ล็อกปุ่มถ้าโดนแบน
+              isBanned={isBanned}
               buttonText={hasInduction && !isNearExpiry ? (language === 'th' ? "แสดงบัตรดิจิทัล" : "Show Digital ID") : (language === 'th' ? "เริ่มการอบรม" : "Start Induction Exam")}
               color="blue"
             />
@@ -341,14 +364,14 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
               icon={!hasInduction ? <Lock size={24} /> : <Ticket size={24} />}
               onClick={() => { if (activePermit) { setCardType('WORK_PERMIT'); setShowCard(true); } else if (hasInduction) setActiveStage('WORK_PERMIT'); }}
               onRetake={() => { if(window.confirm("คุณต้องการเริ่มสอบ Work Permit ใหม่ใช่หรือไม่?")) setActiveStage('WORK_PERMIT'); }}
-              disabled={!hasInduction} 
+              disabled={!hasInduction || isBanned} // ✅ ล็อกปุ่มถ้าโดนแบน หรือยังไม่ผ่าน Induction
+              isBanned={isBanned}
               permitNo={activePermit?.permit_no}
-              canAction={hasInduction}
               buttonText={!!activePermit ? (language === 'th' ? "ดูใบอนุญาต" : "View Permit") : (language === 'th' ? "ขอใบอนุญาตทำงาน" : "Get Work Permit")}
               color="indigo"
             />
 
-            {!hasInduction && !activePermit && (
+            {!hasInduction && !activePermit && !isBanned && (
               <div className="bg-blue-50/50 border-2 border-dashed border-blue-200 rounded-[2rem] p-8 text-center animate-in zoom-in">
                 <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm">
                   <ArrowRightCircle size={32} className="text-blue-500 animate-soft-pulse" />
@@ -369,9 +392,9 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
            </div>
         </div>
 
-        {/* Active Permit Visual */}
-        {activePermit && (
-          <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-[2rem] p-6 text-white shadow-2xl relative overflow-hidden group mx-1">
+        {/* Active Permit Visual - 🚫 ซ่อนถ้าโดนแบน */}
+        {activePermit && !isBanned && (
+          <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-[2rem] p-6 text-white shadow-2xl relative overflow-hidden group mx-1 animate-in zoom-in-95">
             <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition-transform duration-500"><QrCode size={120} /></div>
             <div className="relative z-10 flex items-center gap-6">
               <div className="bg-white p-2.5 rounded-2xl shadow-lg active:scale-95 transition-all cursor-pointer" onClick={() => setShowQRFullScreen(true)}><QRCodeSVG value={activePermit.permit_no} size={80} /></div>
@@ -430,7 +453,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
         )}
 
         {/* QR Fullscreen Overlay */}
-        {showQRFullScreen && activePermit && (
+        {showQRFullScreen && activePermit && !isBanned && (
           <div className="fixed inset-0 bg-slate-950 z-[200] flex flex-col items-center justify-center text-white p-6 animate-in fade-in duration-300 backdrop-blur-xl" onClick={() => setShowQRFullScreen(false)}>
             <button className="absolute top-8 right-8 p-4 text-white/50 hover:text-white transition-all"><X size={32} /></button>
             <div className="bg-white p-10 rounded-[3rem] shadow-[0_0_80px_rgba(59,130,246,0.4)] animate-in zoom-in duration-500"><QRCodeSVG value={activePermit.permit_no} size={300} /></div>
@@ -454,43 +477,66 @@ const ResourceCard = ({ icon, title, desc, onClick }: any) => (
   </button>
 );
 
-// ✅ StageCard ฉบับแก้ไข: เพิ่มปุ่มสอบใหม่ (RotateCcw) เมื่อสอบผ่านแล้ว
-const StageCard = ({ title, isActive, isNearExpiry, expiryDate, icon, onClick, onRetake, disabled, permitNo, buttonText, color = 'blue' }: any) => {
+// ✅ StageCard ฉบับแก้ไข: รองรับสถานะถูกแบน (BANNED) อย่างสมบูรณ์แบบ
+const StageCard = ({ title, isActive, isNearExpiry, expiryDate, icon, onClick, onRetake, disabled, permitNo, buttonText, color = 'blue', isBanned }: any) => {
     const { language } = useTranslation();
-    const statusType = disabled ? 'LOCKED' : isActive && !isNearExpiry ? 'PASSED' : isNearExpiry ? 'WARNING' : 'READY';
+    
+    // คำนวณสถานะของการ์ด
+    const statusType = isBanned ? 'BANNED' : disabled ? 'LOCKED' : isActive && !isNearExpiry ? 'PASSED' : isNearExpiry ? 'WARNING' : 'READY';
+    
+    // เช็คว่าควร Disable การกระทำไหม
+    const isActionDisabled = disabled || isBanned;
     
     return (
-        <div className={`group p-0.5 rounded-[2rem] transition-all duration-500 ${!disabled ? 'hover:-translate-y-1' : ''}`}>
+        <div className={`group p-0.5 rounded-[2rem] transition-all duration-500 ${!isActionDisabled ? 'hover:-translate-y-1' : ''}`}>
             <div className={`bg-white p-5 rounded-[1.8rem] border-2 transition-all relative overflow-hidden shadow-sm h-full flex flex-col justify-between ${
-                disabled ? 'border-slate-100 opacity-60 grayscale cursor-not-allowed' 
+                statusType === 'BANNED' ? 'border-red-100 bg-red-50/30 opacity-80' 
+                : disabled ? 'border-slate-100 opacity-60 grayscale cursor-not-allowed' 
                 : statusType === 'PASSED' ? 'border-emerald-100 glow-emerald' 
                 : statusType === 'WARNING' ? 'border-amber-100 glow-amber'
                 : `border-slate-100 hover:border-${color}-200 hover:shadow-lg`
             }`}>
-                {!disabled && (
-                  <div className={`absolute top-4 right-4 flex items-center gap-1.5 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ${
-                    statusType === 'PASSED' ? 'bg-emerald-50 text-emerald-600' :
-                    statusType === 'WARNING' ? 'bg-amber-50 text-amber-600 animate-soft-pulse' :
-                    'bg-slate-50 text-slate-400'
-                  }`}>
-                    {statusType === 'PASSED' && <CheckCircle2 size={10} />}
-                    {statusType === 'WARNING' && <AlertTriangle size={10} />}
-                    {statusType}
-                  </div>
-                )}
+                
+                {/* 🏷️ Badge มุมขวาบน */}
+                <div className={`absolute top-4 right-4 flex items-center gap-1.5 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ${
+                  statusType === 'PASSED' ? 'bg-emerald-50 text-emerald-600' :
+                  statusType === 'WARNING' ? 'bg-amber-50 text-amber-600 animate-soft-pulse' :
+                  statusType === 'BANNED' ? 'bg-red-100 text-red-600' :
+                  'bg-slate-50 text-slate-400'
+                }`}>
+                  {statusType === 'PASSED' && <CheckCircle2 size={10} />}
+                  {statusType === 'WARNING' && <AlertTriangle size={10} />}
+                  {statusType === 'BANNED' && <Ban size={10} />}
+                  {statusType === 'LOCKED' && <Lock size={10} />}
+                  {statusType !== 'LOCKED' && statusType}
+                </div>
                 
                 <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-4">
                         <div className={`p-3.5 rounded-2xl shadow-sm transition-all duration-500 ${
-                            statusType === 'PASSED' ? 'bg-emerald-50 text-emerald-600 shadow-emerald-200' : disabled ? 'bg-slate-100 text-slate-400' : `bg-${color}-50 text-${color}-600 group-hover:bg-${color}-600 group-hover:text-white`
+                            statusType === 'BANNED' ? 'bg-red-50 text-red-500' :
+                            statusType === 'PASSED' ? 'bg-emerald-50 text-emerald-600 shadow-emerald-200' : 
+                            disabled ? 'bg-slate-100 text-slate-400' : 
+                            `bg-${color}-50 text-${color}-600 group-hover:bg-${color}-600 group-hover:text-white`
                         }`}>
                             {icon}
                         </div>
                         <div className="text-left">
                             <h4 className="font-black text-slate-800 text-sm leading-tight mb-1 uppercase tracking-tight">{title}</h4>
-                            <div className={`text-[9px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${statusType === 'PASSED' ? 'text-emerald-500' : disabled ? 'text-slate-400' : `text-${color}-500`}`}>
-                                {statusType === 'PASSED' ? <CheckCircle2 size={10} /> : disabled ? <Lock size={10} /> : <div className={`w-2 h-2 rounded-full bg-${color}-500 animate-pulse`}></div>}
-                                {statusType === 'PASSED' ? 'Training Passed' : disabled ? 'Locked Content' : 'Ready to Start'}
+                            <div className={`text-[9px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${
+                                statusType === 'BANNED' ? 'text-red-500' :
+                                statusType === 'PASSED' ? 'text-emerald-500' : 
+                                disabled ? 'text-slate-400' : 
+                                `text-${color}-500`
+                            }`}>
+                                {statusType === 'PASSED' ? <CheckCircle2 size={10} /> : 
+                                 statusType === 'BANNED' ? <AlertTriangle size={10} /> : 
+                                 disabled ? <Lock size={10} /> : 
+                                 <div className={`w-2 h-2 rounded-full bg-${color}-500 animate-pulse`}></div>}
+                                 
+                                {statusType === 'PASSED' ? 'Training Passed' : 
+                                 statusType === 'BANNED' ? 'Access Revoked' : 
+                                 disabled ? 'Locked Content' : 'Ready to Start'}
                             </div>
                         </div>
                     </div>
@@ -498,7 +544,12 @@ const StageCard = ({ title, isActive, isNearExpiry, expiryDate, icon, onClick, o
 
                 <div className="flex items-end justify-between border-t border-slate-50 pt-4 mt-auto">
                     <div className="text-left">
-                        {expiryDate ? (
+                        {statusType === 'BANNED' ? (
+                             <div className="flex flex-col">
+                                 <span className="text-[8px] font-black text-red-400 uppercase tracking-widest">Status</span>
+                                 <span className="text-[10px] font-bold text-red-600">Suspended</span>
+                             </div>
+                        ) : expiryDate ? (
                             <div className="flex flex-col">
                                 <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest">Valid Until</span>
                                 <span className={`text-[10px] font-bold ${isNearExpiry ? 'text-amber-500' : 'text-slate-600'}`}>{new Date(expiryDate).toLocaleDateString(language === 'th' ? 'th-TH' : 'en-US')}</span>
@@ -512,8 +563,8 @@ const StageCard = ({ title, isActive, isNearExpiry, expiryDate, icon, onClick, o
                     </div>
                     
                     <div className="flex gap-2">
-                        {/* ✅ ปุ่มสอบใหม่ (RotateCcw) - แสดงเมื่อสอบผ่านแล้วเพื่อให้ผู้ใช้กดสอบซ้ำเองได้ */}
-                        {isActive && !disabled && onRetake && (
+                        {/* ปุ่มสอบใหม่ - ซ่อนถ้าถูกแบน */}
+                        {isActive && !isActionDisabled && onRetake && (
                             <button 
                               onClick={(e) => { e.stopPropagation(); onRetake(); }} 
                               className="p-2.5 rounded-xl bg-slate-50 text-slate-400 hover:text-blue-600 hover:bg-blue-50 border border-slate-100 transition-all active:scale-90"
@@ -522,13 +573,18 @@ const StageCard = ({ title, isActive, isNearExpiry, expiryDate, icon, onClick, o
                                 <RotateCcw size={16} />
                             </button>
                         )}
+                        
                         <button 
+                          disabled={isActionDisabled}
                           onClick={(e) => { e.stopPropagation(); onClick(); }} 
                           className={`px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-2 transition-all shadow-md active:scale-95 ${
-                            statusType === 'PASSED' ? 'bg-slate-900 text-white hover:bg-slate-800 shadow-slate-200' : disabled ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : `bg-${color}-600 text-white hover:bg-${color}-700 shadow-${color}-200`
+                            statusType === 'BANNED' ? 'bg-red-100 text-red-400 cursor-not-allowed shadow-none' :
+                            statusType === 'PASSED' ? 'bg-slate-900 text-white hover:bg-slate-800 shadow-slate-200' : 
+                            disabled ? 'bg-slate-100 text-slate-400 cursor-not-allowed shadow-none' : 
+                            `bg-${color}-600 text-white hover:bg-${color}-700 shadow-${color}-200`
                           }`}
                         >
-                            {buttonText} {!isActive && !disabled && <ChevronRight size={12} />}
+                            {statusType === 'BANNED' ? 'Suspended' : buttonText} {!isActive && !isActionDisabled && <ChevronRight size={12} />}
                         </button>
                     </div>
                 </div>
@@ -537,7 +593,7 @@ const StageCard = ({ title, isActive, isNearExpiry, expiryDate, icon, onClick, o
     );
 };
 
-// 💀 Skeleton Loader Component (ใช้สำหรับแสดงตอน Loading)
+// 💀 Skeleton Loader Component
 export const UserPanelSkeleton = () => {
   return (
     <div className="max-w-2xl mx-auto p-4 space-y-8 animate-pulse text-left">

@@ -2,7 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../services/supabaseApi';
 import { User, Vendor } from '../types';
 import { useTranslation } from '../context/LanguageContext';
-import { UserPlus, LogIn, ChevronRight, AlertCircle, Loader2, ShieldCheck, Globe2 } from 'lucide-react';
+import { 
+  UserPlus, LogIn, ChevronRight, AlertCircle, Loader2, 
+  ShieldCheck, Globe2, BookOpen, HelpCircle,
+  Search, CheckCircle // ✅ เพิ่มไอคอนสำหรับปุ่มค้นหาและแจ้งเตือนสำเร็จ
+} from 'lucide-react';
 import PrivacyPolicyModal from './PrivacyPolicyModal';
 
 interface AuthProps {
@@ -31,6 +35,11 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [fetchingUser, setFetchingUser] = useState(false);
+  const [dataFoundMsg, setDataFoundMsg] = useState(false); // ✅ State สำหรับโชว์ข้อความดึงข้อมูลสำเร็จ
+
+  // Support Links State
+  const [manualUrl, setManualUrl] = useState<string>('');
+  const [supportUrl, setSupportUrl] = useState<string>('');
 
   useEffect(() => {
     if (mode === 'REGISTER') {
@@ -38,12 +47,27 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     }
   }, [mode]);
 
-  const handleIdBlur = async () => {
-    if (!regId || regId.length < 13) return; 
+  useEffect(() => {
+    const loadSupportLinks = async () => {
+      try {
+        const config = await api.getSystemSettings();
+        if (config['manual_url']) setManualUrl(config['manual_url']);
+        if (config['support_url']) setSupportUrl(config['support_url']);
+      } catch (err) {
+        console.error("Failed to load support links", err);
+      }
+    };
+    loadSupportLinks();
+  }, []);
+
+  // ✅ เปลี่ยนชื่อและปรับ Logic ให้ดึงข้อมูลแบบฉลาดขึ้น
+  const handleCheckID = async (idToCheck = regId) => {
+    if (!idToCheck || idToCheck.length < 13) return; 
     
     setFetchingUser(true);
+    setDataFoundMsg(false);
     try {
-      const userData = await api.checkUser(regId);
+      const userData = await api.checkUser(idToCheck);
       if (userData) {
         setName(userData.name || '');
         setAge(userData.age ? String(userData.age) : '');
@@ -62,6 +86,10 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               setNationality(userData.nationality);
            }
         }
+        
+        // โชว์ข้อความว่าดึงข้อมูลสำเร็จ 5 วินาที
+        setDataFoundMsg(true);
+        setTimeout(() => setDataFoundMsg(false), 5000);
       }
     } catch (err) {
       console.error("Error auto-filling user data", err);
@@ -109,18 +137,32 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       );
       onLogin(user);
     } catch (err: any) {
-      setError(err.message || 'Registration failed');
+      const errorMsg = err.message || '';
+      
+      // ✅ ดักจับ Error 422 กรณีเคยลงทะเบียนสร้างบัญชีไปแล้ว ให้เด้งกลับไปหน้า Login 
+      if (errorMsg.toLowerCase().includes('already registered') || errorMsg.toLowerCase().includes('already exists')) {
+         setError('เลขบัตรประชาชนนี้เคยลงทะเบียนไว้แล้ว ระบบกำลังสลับไปยังหน้าเข้าสู่ระบบ...');
+         
+         // สลับไปหน้า Login อัตโนมัติพร้อมกรอกเลขบัตรให้
+         setLoginId(regId);
+         setTimeout(() => {
+             setMode('LOGIN');
+             setError('');
+         }, 3000);
+      } else {
+         setError('Registration failed: ' + errorMsg);
+      }
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-[calc(100vh-80px)] flex items-center justify-center p-4 animate-in fade-in duration-500">
-      <div className="bg-white p-6 md:p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 w-full max-w-md border border-slate-100">
+    <div className="min-h-[calc(100vh-80px)] flex items-center justify-center p-4 animate-in fade-in duration-500 py-10">
+      <div className="bg-white p-6 md:p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 w-full max-w-md border border-slate-100 relative overflow-hidden">
         
         {/* Toggle Switcher */}
-        <div className="flex bg-slate-100 p-1.5 rounded-[1.2rem] mb-6">
+        <div className="flex bg-slate-100 p-1.5 rounded-[1.2rem] mb-6 relative z-10">
           <button 
             type="button"
             onClick={() => { setMode('LOGIN'); setError(''); }}
@@ -137,7 +179,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           </button>
         </div>
 
-        <div className="mb-6 text-center">
+        <div className="mb-6 text-center relative z-10">
           <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-blue-100 shadow-inner">
             {mode === 'LOGIN' ? <LogIn size={24} /> : <UserPlus size={24} />}
           </div>
@@ -151,7 +193,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
         {/* LOGIN FORM */}
         {mode === 'LOGIN' && (
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-4 relative z-10">
             <div className="space-y-1.5 text-left">
               <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('auth.national_id')}</label>
               <input 
@@ -177,28 +219,59 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
         {/* REGISTER FORM */}
         {mode === 'REGISTER' && (
-          <form onSubmit={handleRegister} className="space-y-3.5 text-left">
+          <form onSubmit={handleRegister} className="space-y-3.5 text-left relative z-10">
             <div className="grid grid-cols-2 gap-3">
+                
+                {/* ✅ ช่องกรอกเลขบัตรที่อัปเกรดใหม่ (Smart Auto-Fetch + Button) */}
                 <div className="col-span-2 space-y-1">
                     <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex justify-between">
                         {t('auth.national_id')}
-                        {fetchingUser && <span className="text-blue-500 animate-pulse">Checking...</span>}
+                        {fetchingUser && <span className="text-blue-500 animate-pulse">กำลังค้นหาข้อมูล...</span>}
                     </label>
-                    <input 
-                        required 
-                        value={regId} 
-                        onChange={e => setRegId(e.target.value)} 
-                        onBlur={handleIdBlur}
-                        className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-xs shadow-inner" 
-                        placeholder="National ID Number" 
-                    />
-                    <div className="flex items-center gap-1.5 mt-1.5 ml-1 opacity-80">
-                      <ShieldCheck size={10} className="text-emerald-500" />
-                      <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest leading-none">
-                        Protected by military-grade encryption (pgcrypto)
-                      </span>
+                    <div className="relative flex items-center">
+                        <input 
+                            required 
+                            value={regId} 
+                            onChange={e => {
+                                // บังคับกรอกเฉพาะตัวเลขและตัดให้เหลือ 13 หลัก
+                                const val = e.target.value.replace(/\D/g, '').slice(0, 13);
+                                setRegId(val);
+                                // ดึงข้อมูลอัตโนมัติเมื่อครบ 13 หลัก
+                                if (val.length === 13) handleCheckID(val);
+                            }} 
+                            onBlur={() => handleCheckID()} // เผื่อเหนียวให้ดึงตอนคลิกออกด้วย
+                            className="w-full pl-4 pr-24 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-xs shadow-inner transition-all" 
+                            placeholder="เลขบัตรประจำตัวประชาชน 13 หลัก" 
+                        />
+                        <button 
+                            type="button"
+                            onClick={() => handleCheckID()}
+                            disabled={regId.length < 13 || fetchingUser}
+                            className="absolute right-2 bg-slate-900 text-white px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-blue-600 disabled:opacity-50 disabled:bg-slate-200 transition-all flex items-center gap-1 active:scale-95"
+                        >
+                            {fetchingUser ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}
+                            ตรวจสอบ
+                        </button>
                     </div>
+                    
+                    {/* แจ้งเตือนเมื่อดึงข้อมูลสำเร็จ */}
+                    {dataFoundMsg ? (
+                        <div className="flex items-center gap-1.5 mt-2 ml-1 text-emerald-600 animate-in fade-in slide-in-from-top-1">
+                          <CheckCircle size={12} />
+                          <span className="text-[9px] font-bold uppercase tracking-widest">
+                            พบข้อมูลเดิมในระบบ ดึงข้อมูลสำเร็จ!
+                          </span>
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-1.5 mt-1.5 ml-1 opacity-80">
+                          <ShieldCheck size={10} className="text-emerald-500" />
+                          <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest leading-none">
+                            Protected by military-grade encryption (pgcrypto)
+                          </span>
+                        </div>
+                    )}
                 </div>
+
                 <div className="col-span-2 space-y-1">
                     <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('auth.full_name')}</label>
                     <input required value={name} onChange={e => setName(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-xs shadow-inner" placeholder="Full Name (EN/TH)" />
@@ -288,10 +361,45 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         )}
 
         {error && (
-          <div className="mt-4 flex items-center gap-2 text-red-600 bg-red-50 p-3.5 rounded-2xl text-[10px] font-bold border border-red-100 animate-shake">
+          <div className="mt-4 flex items-center gap-2 text-red-600 bg-red-50 p-3.5 rounded-2xl text-[10px] font-bold border border-red-100 animate-shake relative z-10">
             <AlertCircle size={14} /> {error}
           </div>
         )}
+
+        {/* ✅ ส่วน Help & Resources ที่ดึงข้อมูลจากการตั้งค่าแอดมิน */}
+        {(manualUrl || supportUrl) && (
+          <div className="mt-8 pt-5 border-t border-slate-100 relative z-10">
+            <p className="text-center text-[9px] font-black text-slate-300 uppercase tracking-[0.2em] mb-3">
+                Help & Resources
+            </p>
+            <div className="flex flex-col gap-2">
+                {manualUrl && (
+                  <a 
+                    href={manualUrl} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 p-3 rounded-xl bg-slate-50 text-slate-500 hover:bg-blue-50 hover:text-blue-600 transition-colors border border-slate-100 font-bold text-[10px] uppercase tracking-wide group"
+                  >
+                    <BookOpen size={14} className="group-hover:scale-110 transition-transform" /> 
+                    คู่มือการใช้งานระบบ (User Guide)
+                  </a>
+                )}
+                
+                {supportUrl && (
+                  <a 
+                    href={supportUrl} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 p-3 rounded-xl bg-slate-50 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600 transition-colors border border-slate-100 font-bold text-[10px] uppercase tracking-wide group"
+                  >
+                    <HelpCircle size={14} className="group-hover:scale-110 transition-transform" />
+                    แจ้งปัญหาการใช้งาน (Support)
+                  </a>
+                )}
+            </div>
+          </div>
+        )}
+
       </div>
 
       {showPolicyModal && <PrivacyPolicyModal onClose={() => setShowPolicyModal(false)} />}

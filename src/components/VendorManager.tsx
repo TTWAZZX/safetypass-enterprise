@@ -24,16 +24,15 @@ import {
   CalendarClock,
   Ban,
   Clock,
-  CheckCircle2
+  CheckCircle2,
+  ShieldAlert
 } from 'lucide-react';
 
-// ✅ Helper Function: UI Masking (สำหรับปิดบังเลขบัตรในหน้าจอ)
 const maskNationalID = (id: string | null | undefined) => {
   if (!id || id.length < 13) return '-------------';
   return `${id.substring(0, 3)}••••••${id.substring(9)}`;
 };
 
-// ✅ ฟังก์ชันช่วยสร้าง UUID
 function generateUUID() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
     var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
@@ -41,55 +40,33 @@ function generateUUID() {
   });
 }
 
-// ✅ 1. SMART DATE PARSER: ฉลาดที่สุด รับได้ทุกรูปแบบ (รองรับ 2/15/2027 จากไฟล์คุณ)
 const processExcelDate = (excelDate: any): string | null => {
     if (!excelDate) return null;
-    
     try {
         let date: Date | null = null;
-
-        // 1.1 กรณีเป็น Excel Serial Number
         if (typeof excelDate === 'number') {
             date = new Date(Math.round((excelDate - 25569) * 86400 * 1000));
-        } 
-        // 1.2 กรณีเป็น String (จัดการ 2/15/2027, 15/02/2027, 2027-02-15)
-        else if (typeof excelDate === 'string') {
+        } else if (typeof excelDate === 'string') {
             const cleanStr = excelDate.trim().replace(/[-.]/g, '/');
-            
-            // ลอง parse แบบปกติก่อน (ISO Format)
             const tryDirect = new Date(cleanStr);
             if (!isNaN(tryDirect.getTime()) && cleanStr.includes('-')) {
                 date = tryDirect;
             } else {
-                // แยกส่วนเพื่อวิเคราะห์ตำแหน่ง วัน/เดือน/ปี
                 const parts = cleanStr.split('/');
                 if (parts.length === 3) {
                     const p0 = parseInt(parts[0]);
                     const p1 = parseInt(parts[1]);
                     const p2 = parseInt(parts[2]);
                     const year = p2 < 100 ? 2000 + p2 : p2;
-
-                    // 💡 Smart Logic: ตรวจสอบตำแหน่งวัน/เดือน
-                    if (p0 > 12) { 
-                        // เช่น 15/02/2027 -> ตัวแรกคือวัน
-                        date = new Date(year, p1 - 1, p0);
-                    } else if (p1 > 12) {
-                        // เช่น 02/15/2027 -> ตัวกลางคือวัน (เหมือนไฟล์ของคุณ)
-                        date = new Date(year, p0 - 1, p1);
-                    } else {
-                        // ถ้าไม่ชัดเจน (เช่น 01/05/2027) ให้ยึด เดือน/วัน/ปี ตามมาตรฐาน Excel
-                        date = new Date(year, p0 - 1, p1);
-                    }
+                    if (p0 > 12) { date = new Date(year, p1 - 1, p0); } 
+                    else if (p1 > 12) { date = new Date(year, p0 - 1, p1); } 
+                    else { date = new Date(year, p0 - 1, p1); }
                 }
             }
-        } 
-        // 1.3 กรณีเป็น Date Object
-        else if (excelDate instanceof Date) {
-            date = excelDate;
-        }
+        } else if (excelDate instanceof Date) { date = excelDate; }
 
         if (date && !isNaN(date.getTime())) {
-            date.setHours(12, 0, 0, 0); // กัน Timezone เลื่อนวัน
+            date.setHours(12, 0, 0, 0); 
             return date.toISOString();
         }
         return null;
@@ -99,24 +76,25 @@ const processExcelDate = (excelDate: any): string | null => {
     }
 };
 
-const VendorManager: React.FC = () => {
+const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSearch }) => {
   const { showToast } = useToastContext();
-  const [activeTab, setActiveTab] = useState<'USERS' | 'VENDORS' | 'LOGS'>('VENDORS');
+  
+  const [activeTab, setActiveTab] = useState<'USERS' | 'VENDORS' | 'LOGS'>(initialSearch ? 'USERS' : 'VENDORS');
+  const [searchQuery, setSearchQuery] = useState(initialSearch || ''); 
+  
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
   const [dataList, setDataList] = useState<any[]>([]);
   const [allVendors, setAllVendors] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
   
-  // ✅ Modal States (เพิ่ม vendor_id ลงไปใน state)
+  // ✅ สถานะการอัปโหลด (Loading States สำหรับ Excel)
+  const [importingUsers, setImportingUsers] = useState(false);
+  const [importingVendors, setImportingVendors] = useState(false);
+  
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
   const [editForm, setEditForm] = useState({ 
-    name: '', 
-    age: '', 
-    nationality: '', 
-    induction_expiry: '', 
-    vendor_id: '' // เพิ่ม field สำหรับแก้ไข Vendor
+    name: '', age: '', nationality: '', induction_expiry: '', vendor_id: '' 
   });
   const [isOtherNationality, setIsOtherNationality] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -128,14 +106,9 @@ const VendorManager: React.FC = () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       await supabase.from('audit_logs').insert([{
-        admin_email: user?.email || 'System Admin',
-        action,
-        target,
-        details
+        admin_email: user?.email || 'System Admin', action, target, details
       }]);
-    } catch (err) {
-      console.error('Audit log failure:', err);
-    }
+    } catch (err) { console.error('Audit log failure:', err); }
   };
 
   const loadData = async () => {
@@ -171,17 +144,13 @@ const VendorManager: React.FC = () => {
   const handleUpdateVendorStatus = async (id: string, name: string, newStatus: 'APPROVED' | 'REJECTED') => {
     const confirmMsg = newStatus === 'APPROVED' ? `ยืนยันการอนุมัติบริษัท ${name}?` : `ยืนยันการปฏิเสธบริษัท ${name}?`;
     if (!window.confirm(confirmMsg)) return;
-
     try {
       const { error } = await supabase.from('vendors').update({ status: newStatus }).eq('id', id);
       if (error) throw error;
-      
       showToast(`ปรับสถานะบริษัท ${name} เป็น ${newStatus} สำเร็จ`, 'success');
       logAction(`VENDOR_${newStatus}`, name, `Status updated to ${newStatus}`);
       loadData();
-    } catch (err: any) {
-      showToast(err.message, 'error');
-    }
+    } catch (err: any) { showToast(err.message, 'error'); }
   };
 
   const handleEditVendor = async (id: string, currentName: string) => {
@@ -206,38 +175,47 @@ const VendorManager: React.FC = () => {
       age: user.age || '',
       nationality: user.nationality || 'ไทย (Thai)',
       induction_expiry: user.induction_expiry ? new Date(user.induction_expiry).toISOString().split('T')[0] : '',
-      vendor_id: user.vendor_id || '' // เซ็ตค่าเริ่มต้นให้ตรงกับข้อมูลปัจจุบัน
+      vendor_id: user.vendor_id || '' 
     });
     setIsOtherNationality(isOther);
     setIsEditModalOpen(true);
   };
 
-  // ✅ อัปเดตฟังก์ชันเซฟให้บันทึก vendor_id ด้วย
   const saveUserEdit = async () => {
     if (!editingUser) return;
     setSubmitting(true);
     try {
       const expiryVal = editForm.induction_expiry ? new Date(editForm.induction_expiry).toISOString() : null;
-
       const { error } = await supabase.from('users').update({
         name: editForm.name,
         age: Number(editForm.age),
         nationality: editForm.nationality,
         induction_expiry: expiryVal,
-        vendor_id: editForm.vendor_id || null // บันทึก vendor_id ลงฐานข้อมูล
+        vendor_id: editForm.vendor_id || null
       }).eq('id', editingUser.id);
 
       if (error) throw error;
-
       showToast('อัปเดตข้อมูลพนักงานสำเร็จ', 'success');
       logAction('EDIT_USER', editingUser.name, `Updated Profile including Vendor`);
       setIsEditModalOpen(false);
       loadData();
-    } catch (err: any) {
-      showToast(err.message, 'error');
-    } finally {
-      setSubmitting(false);
-    }
+    } catch (err: any) { showToast(err.message, 'error'); } 
+    finally { setSubmitting(false); }
+  };
+
+  const handleToggleUserBan = async (id: string, name: string, currentStatus: boolean) => {
+      const actionText = currentStatus ? "ระงับสิทธิ์ (Ban)" : "ปลดแบน (Unban)";
+      if (!window.confirm(`คุณต้องการ ${actionText} พนักงาน "${name}" ใช่หรือไม่?`)) return;
+
+      try {
+          const { error } = await supabase.from('users').update({ is_active: !currentStatus }).eq('id', id);
+          if (error) throw error;
+          showToast(`${actionText} สำเร็จ`, 'success');
+          logAction(currentStatus ? 'BAN_USER' : 'UNBAN_USER', name, `Status changed to ${!currentStatus}`);
+          loadData();
+      } catch (err: any) {
+          showToast(`ไม่สามารถ ${actionText} ได้: ` + err.message, 'error');
+      }
   };
 
   const handleExport = () => {
@@ -247,12 +225,12 @@ const VendorManager: React.FC = () => {
     if (activeTab === 'USERS') {
       exportData = dataList.map(user => ({
         'Name': user.name,
-        'National ID': user.national_id ? "'" + user.national_id : '-', // ใส่ ' นำหน้า
+        'National ID': user.national_id ? "'" + user.national_id : '-',
         'Vendor': user.vendors?.name || 'N/A',
         'Role': user.role,
         'Age': user.age || '',
         'Nationality': user.nationality || '',
-        'Status': user.induction_expiry ? 'Certified' : 'Pending',
+        'Status': user.is_active === false ? 'BANNED' : (user.induction_expiry ? 'Certified' : 'Pending'),
         'Induction Expiry': user.induction_expiry ? new Date(user.induction_expiry).toLocaleDateString() : '-'
       }));
       fileName = `Personnel_List_${new Date().toISOString().split('T')[0]}.xlsx`;
@@ -272,10 +250,13 @@ const VendorManager: React.FC = () => {
     showToast('Exported Successfully', 'success');
   };
 
-  // ✅ 2. IMPORT LOGIC: แก้ปัญหาเรื่องการอ่านวันที่ (ใช้ Smart Date Parsing)
+  // ✅ ฟังก์ชันนำเข้าพนักงาน (อัปเดตให้แสดง Loading และตรงกับคอลัมน์ Excel)
   const handleUserImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    
+    setImportingUsers(true); // เริ่มหมุน
+    
     const reader = new FileReader();
     reader.onload = async (evt) => {
       try {
@@ -284,89 +265,74 @@ const VendorManager: React.FC = () => {
         const ws = wb.Sheets[wb.SheetNames[0]];
         const data: any[] = XLSX.utils.sheet_to_json(ws);
         
-        let success = 0;
-        let fail = 0;
-        
-        console.log("📦 User Data from Excel:", data);
+        let success = 0; let fail = 0;
 
         for (const row of data) {
-          // 1. ดึงข้อมูลพื้นฐาน (รองรับชื่อหัวตารางหลายแบบ)
-          const name = (row['Name'] || row['Full Name'] || row['ชื่อ-นามสกุล'] || '').toString().trim();
-          let nid = (row['National ID'] || row['ID Card'] || row['เลขบัตรประชาชน'] || '').toString().trim();
+          // ดึงข้อมูลตามชื่อคอลัมน์ Excel แบบเป๊ะๆ
+          const name = (row['Name'] || row['Full Name'] || '').toString().trim();
+          let nid = (row['National ID'] || row['ID Card'] || '').toString().trim();
           
-          // จัดการเลขบัตรที่เป็นรูปแบบวิทยาศาสตร์ (E+)
-          if (nid.includes('E+') || nid.includes('e+')) {
-              nid = Number(nid).toLocaleString('fullwide', {useGrouping:false});
-          }
+          // จัดการเลขบัตรที่เป็น E+
+          if (nid.includes('E+') || nid.includes('e+')) nid = Number(nid).toLocaleString('fullwide', {useGrouping:false});
           
-          const vName = (row['Vendor'] || row['Company'] || row['บริษัท'] || '').toString().trim();
-          
-          // ✅ เรียกใช้ Smart Date Parser
-          const rawExpiry = row['Induction Expiry'] || row['Expiry Date'] || row['วันหมดอายุ'];
+          const vName = (row['Vendor'] || row['Company'] || '').toString().trim();
+          const role = (row['Role'] || 'USER').toString().trim();
+          const age = row['Age'] ? Number(row['Age']) : null;
+          const nationality = (row['Nationality'] || 'ไทย (Thai)').toString().trim();
+          const rawExpiry = row['Induction Expiry'] || row['Expiry Date'];
           const processedExpiry = processExcelDate(rawExpiry);
 
           if (name && nid) {
-            // หา ID ของ Vendor จากชื่อ
-            const vendor = allVendors.find(v => v.name === vName);
+            // ค้นหาบริษัทจากชื่อ
+            const vendor = allVendors.find(v => v.name.toLowerCase() === vName.toLowerCase());
             
-            // 2. ตรวจสอบข้อมูลเดิมด้วย National ID (เลขบัตร)
-            const { data: exist } = await supabase
-              .from('users')
-              .select('id')
-              .eq('national_id', nid)
-              .maybeSingle();
+            // ตรวจสอบข้อมูลเดิม
+            const { data: exist } = await supabase.from('users').select('id').eq('national_id', nid).maybeSingle();
 
             const payload: any = {
-              name,
-              national_id: nid,
-              vendor_id: vendor?.id || null,
-              role: row['Role'] || 'USER',
-              age: row['Age'] ? Number(row['Age']) : null,
-              nationality: row['Nationality'] || 'ไทย (Thai)',
-              induction_expiry: processedExpiry,
-              pdpa_agreed: true
+              name, 
+              national_id: nid, 
+              vendor_id: vendor?.id || null, 
+              role: role,
+              age: age, 
+              nationality: nationality,
+              induction_expiry: processedExpiry, 
+              pdpa_agreed: true,
+              is_active: true
             };
 
             let error;
             if (exist) {
-              // 3. ถ้ามีอยู่แล้วให้ใช้ UPDATE (เพื่อเปลี่ยนจาก PROTECTED เป็นเลขจริง หรืออัปเดตข้อมูลอื่น)
-              const { error: updateError } = await supabase
-                .from('users')
-                .update(payload)
-                .eq('id', exist.id);
+              const { error: updateError } = await supabase.from('users').update(payload).eq('id', exist.id);
               error = updateError;
             } else {
-              // 4. ถ้ายังไม่มีให้ใช้ INSERT
-              // เพิ่ม ID ใหม่ถ้าไม่มีระบบสร้างให้อัตโนมัติ (หรือใช้ generateUUID() ของคุณ)
               payload.id = generateUUID(); 
-              const { error: insertError } = await supabase
-                .from('users')
-                .insert([payload]);
+              const { error: insertError } = await supabase.from('users').insert([payload]);
               error = insertError;
             }
-
-            if (!error) success++; else {
-              console.error(`❌ Error for ${nid}:`, error.message);
-              fail++;
-            }
+            if (!error) success++; else { console.error(`❌ Error for ${nid}:`, error.message); fail++; }
           }
         }
-        
-        showToast(`นำเข้าสำเร็จ ${success} รายการ`, fail > 0 ? 'error' : 'success');
+        showToast(`นำเข้าพนักงานสำเร็จ ${success} รายการ`, fail > 0 ? 'error' : 'success');
         loadData();
       } catch (err) { 
-        console.error("❌ Import Error:", err);
+        console.error("❌ Import Error:", err); 
         showToast('รูปแบบไฟล์ไม่ถูกต้อง', 'error'); 
+      } finally {
+        setImportingUsers(false); // หยุดหมุน
       }
     };
     reader.readAsBinaryString(file);
-    e.target.value = '';
+    e.target.value = ''; // รีเซ็ต input
   };
 
+  // ✅ ฟังก์ชันนำเข้าบริษัท (เพิ่ม Loading)
   const handleVendorImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
+    
+    setImportingVendors(true); // เริ่มหมุน
+    
     const reader = new FileReader();
     reader.onload = async (evt) => {
       try {
@@ -375,53 +341,26 @@ const VendorManager: React.FC = () => {
         const ws = wb.Sheets[wb.SheetNames[0]];
         const data: any[] = XLSX.utils.sheet_to_json(ws);
         
-        let successCount = 0;
-        let skipCount = 0;
+        let successCount = 0; let skipCount = 0;
 
         for (const row of data) {
-          // ดึงชื่อจากหัวตาราง 'Company Name' ตามไฟล์จริงของคุณ
-          const rawName = row['Company Name'] || row['CompanyName'] || row['Name'];
-          
+          const rawName = row['Company Name'] || row['Vendor'] || row['Name'];
           if (rawName && rawName.toString().trim() !== '') {
             const trimmedName = rawName.toString().trim();
-
-            // 1. ตรวจสอบก่อนว่ามีชื่อนี้อยู่ในตารางหรือยัง
-            const { data: existingVendor } = await supabase
-              .from('vendors')
-              .select('name')
-              .eq('name', trimmedName)
-              .maybeSingle();
-
-            if (existingVendor) {
-              skipCount++;
-              continue; // ถ้ามีแล้วให้ข้ามไป
-            }
-
-            // 2. ถ้ายังไม่มี ให้ทำการ Insert เข้าไปปกติ
-            const { error: insertError } = await supabase
-              .from('vendors')
-              .insert([{ name: trimmedName, status: 'APPROVED' }]);
-
-            if (!insertError) {
-              successCount++;
-            } else {
-              console.error("❌ Database Error:", insertError.message);
-            }
+            const { data: existingVendor } = await supabase.from('vendors').select('name').eq('name', trimmedName).maybeSingle();
+            if (existingVendor) { skipCount++; continue; }
+            const { error: insertError } = await supabase.from('vendors').insert([{ name: trimmedName, status: 'APPROVED' }]);
+            if (!insertError) successCount++;
           }
         }
-
-        if (successCount > 0) {
-          showToast(`นำเข้าสำเร็จ ${successCount} บริษัท (ซ้ำ ${skipCount} รายการ)`, 'success');
-          loadData(); // โหลดข้อมูลในตารางใหม่
-        } else if (skipCount > 0) {
-          showToast(`ข้อมูลทั้งหมด ${skipCount} รายการมีอยู่ในระบบแล้ว`, 'info');
-        } else {
-          showToast('ไม่พบข้อมูลที่จะนำเข้า', 'error');
-        }
-
-      } catch (err) {
-        console.error("❌ Error:", err);
-        showToast('รูปแบบไฟล์ไม่ถูกต้อง', 'error');
+        if (successCount > 0) { showToast(`นำเข้าบริษัทสำเร็จ ${successCount} บริษัท (ซ้ำ ${skipCount} รายการ)`, 'success'); loadData(); } 
+        else if (skipCount > 0) { showToast(`ข้อมูลทั้งหมด ${skipCount} รายการมีอยู่ในระบบแล้ว`, 'info'); } 
+        else { showToast('ไม่พบข้อมูลที่จะนำเข้า', 'error'); }
+      } catch (err) { 
+        console.error("❌ Error:", err); 
+        showToast('รูปแบบไฟล์ไม่ถูกต้อง', 'error'); 
+      } finally {
+        setImportingVendors(false); // หยุดหมุน
       }
     };
     reader.readAsBinaryString(file);
@@ -451,37 +390,20 @@ const VendorManager: React.FC = () => {
     if (error) showToast(error.message, 'error'); else { showToast('Success', 'success'); loadData(); }
   };
 
-  // ✅✅✅ 3. FORCE DELETE: แก้ไขจุดลบที่ทำให้ติด 409 Conflict (Cascade Delete ทั้งหมด)
   const handleDeleteUser = async (id: string, name: string) => {
     if (!window.confirm(`⚠️ คำเตือน: คุณกำลังจะลบพนักงาน "${name}"\nประวัติการสอบ ใบอนุญาต และข้อมูล Log ทั้งหมดจะถูกลบถาวร ยืนยันการลบ?`)) return;
-
     setLoading(true);
     try {
-      // 💡 ลบข้อมูลในตารางลูกทั้งหมดที่เชื่อมกับ User ID นี้ออกก่อนเรียงตามลำดับ
-      
-      // 1. ลบประวัติการสอบ
       await supabase.from('exam_history').delete().eq('user_id', id);
-      
-      // 2. ลบ Log การสอบ (จุดที่ทำให้คุณลบไม่ได้ตาม Error Log)
       await supabase.from('exam_logs').delete().eq('user_id', id);
-      
-      // 3. ลบใบอนุญาตทำงาน
       await supabase.from('work_permits').delete().eq('user_id', id);
-
-      // 4. ขั้นตอนสุดท้าย: ลบตัวพนักงานในตาราง users
       const { error } = await supabase.from('users').delete().eq('id', id);
-      
       if (error) throw error;
-
       showToast(`ลบข้อมูลพนักงาน ${name} สำเร็จ`, 'success');
       logAction('DELETE_USER', name, 'Full Cascade Delete Done');
       loadData();
-    } catch (err: any) {
-      console.error("Delete Error Detail:", err);
-      showToast('ไม่สามารถลบได้: ' + err.message, 'error');
-    } finally {
-      setLoading(false);
-    }
+    } catch (err: any) { showToast('ไม่สามารถลบได้: ' + err.message, 'error'); } 
+    finally { setLoading(false); }
   };
 
   const handleResetTraining = async (id: string, name: string) => {
@@ -505,9 +427,9 @@ const VendorManager: React.FC = () => {
           </div>
         </div>
         <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200 shadow-inner overflow-x-auto no-scrollbar">
-          <TabButton active={activeTab === 'VENDORS'} onClick={() => setActiveTab('VENDORS')} icon={<Building2 size={14}/>} label="Vendors" />
-          <TabButton active={activeTab === 'USERS'} onClick={() => setActiveTab('USERS')} icon={<Users size={14}/>} label="Personnel" />
-          <TabButton active={activeTab === 'LOGS'} onClick={() => setActiveTab('LOGS')} icon={<History size={14}/>} label="Audit" />
+          <TabButton active={activeTab === 'VENDORS'} onClick={() => {setActiveTab('VENDORS'); setSearchQuery('');}} icon={<Building2 size={14}/>} label="Vendors" />
+          <TabButton active={activeTab === 'USERS'} onClick={() => {setActiveTab('USERS'); setSearchQuery('');}} icon={<Users size={14}/>} label="Personnel" />
+          <TabButton active={activeTab === 'LOGS'} onClick={() => {setActiveTab('LOGS'); setSearchQuery('');}} icon={<History size={14}/>} label="Audit" />
         </div>
       </div>
 
@@ -524,7 +446,17 @@ const VendorManager: React.FC = () => {
             {activeTab !== 'LOGS' && (
               <>
                 <input type="file" ref={activeTab === 'USERS' ? userFileInputRef : vendorFileInputRef} className="hidden" accept=".xlsx, .xls" onChange={activeTab === 'USERS' ? handleUserImport : handleVendorImport} />
-                <button onClick={() => (activeTab === 'USERS' ? userFileInputRef : vendorFileInputRef).current?.click()} className="bg-emerald-50 text-emerald-600 border border-emerald-100 px-4 py-3 rounded-xl font-black text-[10px] uppercase hover:bg-emerald-100 transition-all flex items-center justify-center gap-2 shadow-sm"><Upload size={14}/> Import Excel</button>
+                
+                {/* ✅ เปลี่ยนปุ่ม Import ให้มี Loading State */}
+                <button 
+                  onClick={() => (activeTab === 'USERS' ? userFileInputRef : vendorFileInputRef).current?.click()} 
+                  disabled={activeTab === 'USERS' ? importingUsers : importingVendors}
+                  className="bg-emerald-50 text-emerald-600 border border-emerald-100 px-4 py-3 rounded-xl font-black text-[10px] uppercase hover:bg-emerald-100 transition-all flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {(activeTab === 'USERS' ? importingUsers : importingVendors) ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14}/>} 
+                  {(activeTab === 'USERS' ? importingUsers : importingVendors) ? 'กำลังนำเข้าข้อมูล...' : 'Import Excel'}
+                </button>
+                
                 <button onClick={handleExport} className="bg-white text-slate-600 border border-slate-200 px-4 py-3 rounded-xl font-black text-[10px] uppercase hover:bg-slate-50 transition-all flex items-center justify-center gap-2 shadow-sm"><Download size={14}/> Export</button>
                 <button onClick={loadData} className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:text-blue-600 transition-all active:scale-95 shadow-sm"><RotateCcw size={18}/></button>
                 <button onClick={activeTab === 'USERS' ? handleAddUser : handleAddVendor} className="bg-blue-600 text-white px-6 py-3 rounded-xl font-black text-[10px] uppercase hover:bg-slate-900 transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2"><Plus size={14}/> New Entry</button>
@@ -555,12 +487,17 @@ const VendorManager: React.FC = () => {
                   ))
                 ) : (
                   filtered.map(item => (
-                    <tr key={item.id} className="hover:bg-slate-50/30 transition-colors group text-left">
+                    <tr key={item.id} className={`hover:bg-slate-50/30 transition-colors group text-left ${item.is_active === false ? 'bg-red-50/50' : ''}`}>
                       <td className="px-8 py-5">
                         <div className="flex items-center gap-3">
-                           <div className="w-10 h-10 rounded-2xl bg-slate-100 text-slate-400 group-hover:bg-blue-600 group-hover:text-white transition-all flex items-center justify-center font-black text-xs shadow-inner uppercase">{item.name?.charAt(0)}</div>
+                           <div className={`w-10 h-10 rounded-2xl text-white transition-all flex items-center justify-center font-black text-xs shadow-inner uppercase ${item.is_active === false ? 'bg-red-400' : 'bg-slate-200 text-slate-500 group-hover:bg-blue-600'}`}>
+                             {item.name?.charAt(0)}
+                           </div>
                            <div>
-                             <div className="font-black text-slate-800 uppercase text-xs truncate max-w-[200px]">{item.name}</div>
+                             <div className="font-black text-slate-800 uppercase text-xs truncate max-w-[200px] flex items-center gap-2">
+                                {item.name} 
+                                {item.is_active === false && <span className="bg-red-500 text-white px-1.5 py-0.5 rounded text-[8px] tracking-widest">BANNED</span>}
+                             </div>
                              {activeTab === 'USERS' && <div className="text-[10px] text-slate-400 font-mono mt-0.5 tracking-tighter">ID: {maskNationalID(item.national_id)}</div>}
                            </div>
                         </div>
@@ -573,7 +510,9 @@ const VendorManager: React.FC = () => {
                         ) : (
                           <div className="flex flex-col gap-1 text-left">
                             <span className="text-slate-500 font-black text-[10px] uppercase bg-slate-50 px-3 py-1 rounded-xl border w-fit shadow-sm">{item.vendors?.name || 'EXTERNAL'}</span>
-                            {item.induction_expiry ? (
+                            {item.is_active === false ? (
+                                <span className="text-[9px] font-black text-red-500 flex items-center gap-1 ml-1"><Ban size={10}/> Account Suspended</span>
+                            ) : item.induction_expiry ? (
                                 <span className="text-[9px] font-black text-emerald-600 flex items-center gap-1 ml-1">
                                     <CheckCircle size={10}/> Certified Exp: {new Date(item.induction_expiry).toLocaleDateString('th-TH')}
                                 </span>
@@ -593,10 +532,23 @@ const VendorManager: React.FC = () => {
                           {activeTab === 'VENDORS' && item.status === 'PENDING' && (
                             <button onClick={() => handleUpdateVendorStatus(item.id, item.name, 'REJECTED')} title="Reject" className="p-2.5 rounded-xl border text-red-500 hover:bg-red-50 active:scale-90 transition-all"><Ban size={16} /></button>
                           )}
+                          
                           <button onClick={() => activeTab === 'VENDORS' ? handleEditVendor(item.id, item.name) : handleEditUser(item)} className="p-2.5 rounded-xl border border-slate-100 text-slate-400 hover:text-blue-600 hover:bg-blue-50 active:scale-90 transition-all shadow-sm"><Edit3 size={16} /></button>
+                          
                           {activeTab === 'USERS' && (
-                            <button onClick={() => handleResetTraining(item.id, item.name)} title="Reset Compliance" className="p-2.5 rounded-xl border border-amber-100 text-amber-500 hover:bg-amber-50 transition-all active:scale-90 shadow-sm"><RotateCcw size={16} /></button>
+                            <>
+                              <button onClick={() => handleResetTraining(item.id, item.name)} title="Reset Compliance" className="p-2.5 rounded-xl border border-amber-100 text-amber-500 hover:bg-amber-50 transition-all active:scale-90 shadow-sm"><RotateCcw size={16} /></button>
+                              
+                              <button 
+                                  onClick={() => handleToggleUserBan(item.id, item.name, item.is_active !== false)} 
+                                  title={item.is_active !== false ? "Suspend Account" : "Unban Account"} 
+                                  className={`p-2.5 rounded-xl border transition-all active:scale-90 shadow-sm ${item.is_active !== false ? 'border-red-100 text-red-500 hover:bg-red-50' : 'bg-red-500 text-white hover:bg-red-600 shadow-red-200 shadow-lg'}`}
+                              >
+                                  {item.is_active !== false ? <ShieldAlert size={16} /> : <CheckCircle2 size={16} />}
+                              </button>
+                            </>
                           )}
+
                           <button onClick={() => activeTab === 'VENDORS' ? handleDeleteVendor(item.id, item.name) : handleDeleteUser(item.id, item.name)} className="p-2.5 rounded-xl border border-slate-100 text-slate-300 hover:text-red-600 hover:bg-red-50 active:scale-90 transition-all shadow-sm"><Trash2 size={16} /></button>
                         </div>
                       </td>
@@ -609,7 +561,7 @@ const VendorManager: React.FC = () => {
         </div>
       </div>
 
-      {/* 📝 EDIT USER MODAL - ✅ เพิ่ม Dropdown เลือกบริษัทที่นี่ */}
+      {/* 📝 EDIT USER MODAL */}
       {isEditModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setIsEditModalOpen(false)} />
@@ -623,7 +575,6 @@ const VendorManager: React.FC = () => {
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Full Name</label>
                       <input className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold shadow-inner" value={editForm.name} onChange={e=>setEditForm({...editForm, name: e.target.value})}/>
                   </div>
-                  
                   <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Age / อายุ</label>
@@ -644,8 +595,6 @@ const VendorManager: React.FC = () => {
                           </select>
                       </div>
                   </div>
-
-                  {/* ✅ Dropdown เลือกบริษัท (Vendor) */}
                   <div className="space-y-1 mt-2">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2"><Building2 size={12}/> Company / Vendor</label>
                       <select 
@@ -659,7 +608,6 @@ const VendorManager: React.FC = () => {
                           ))}
                       </select>
                   </div>
-
                   <div className="bg-amber-50 p-5 rounded-3xl border border-amber-100 shadow-sm mt-4 text-left">
                       <label className="text-[10px] font-black text-amber-600 uppercase flex items-center gap-2 mb-3"><CalendarClock size={16}/> Induction Expiry (Override)</label>
                       <input type="date" className="w-full bg-white border border-amber-200 p-3 rounded-xl font-bold outline-none focus:border-amber-500 transition-all" value={editForm.induction_expiry} onChange={e=>setEditForm({...editForm, induction_expiry: e.target.value})}/>

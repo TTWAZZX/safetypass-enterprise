@@ -190,6 +190,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               name: user.name,
+              national_id: user.national_id, // ✅ เพิ่มบรรทัดนี้ เพื่อให้ปุ่มดูใบเซอร์ทำงานได้
               vendor: user.vendors?.name || 'EXTERNAL (ไม่มีสังกัด)',
               score: correctCount,
               maxScore: questions.length,

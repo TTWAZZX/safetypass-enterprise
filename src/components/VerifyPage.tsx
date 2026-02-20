@@ -9,19 +9,20 @@ import {
   Loader2,
   AlertTriangle,
   Clock,
-  Fingerprint
+  Fingerprint,
+  FileText
 } from 'lucide-react';
 
 const VerifyPage: React.FC = () => {
-  const [status, setStatus] = useState<'LOADING' | 'VALID' | 'EXPIRED' | 'NOT_FOUND'>('LOADING');
+  const [status, setStatus] = useState<'LOADING' | 'VALID' | 'EXPIRED' | 'NOT_FOUND' | 'SUSPENDED'>('LOADING');
   const [userData, setUserData] = useState<any>(null);
 
   useEffect(() => {
-    // ดึง User ID จาก URL
-    const path = window.location.pathname;
-    const userId = path.split('/').pop();
+    // ✅ ดึง ID จาก Query Parameter (เช่น /verify?id=1234567890123)
+    const urlParams = new URLSearchParams(window.location.search);
+    const userId = urlParams.get('id');
 
-    if (userId && userId !== 'verify') {
+    if (userId) {
       checkUserStatus(userId);
     } else {
       setStatus('NOT_FOUND');
@@ -30,7 +31,7 @@ const VerifyPage: React.FC = () => {
 
   const checkUserStatus = async (id: string) => {
     try {
-      // 1. ดึงข้อมูล User และประวัติใบอนุญาตล่าสุด
+      // 1. ดึงข้อมูล User (ค้นหาจาก national_id) และประวัติ Work Permit ที่ล่าสุด
       const { data: user, error } = await supabase
         .from('users')
         .select(`
@@ -38,7 +39,7 @@ const VerifyPage: React.FC = () => {
           vendors(name),
           work_permits(permit_no, expire_date)
         `)
-        .eq('id', id)
+        .eq('national_id', id) // ✅ ค้นหาด้วย national_id ที่ได้จาก LINE
         .order('created_at', { foreignTable: 'work_permits', ascending: false })
         .limit(1, { foreignTable: 'work_permits' })
         .single();
@@ -50,6 +51,13 @@ const VerifyPage: React.FC = () => {
 
       setUserData(user);
 
+      // 🚨 เช็คว่าโดนแอดมินแบนอยู่หรือไม่ (สมมติว่าคุณมีฟิลด์ is_active ในตาราง)
+      // ถ้าไม่มีฟิลด์นี้ ข้ามบรรทัดนี้ได้ครับ
+      if (user.is_active === false) {
+          setStatus('SUSPENDED');
+          return;
+      }
+
       // 2. เช็คเงื่อนไขความปลอดภัย
       const today = new Date().getTime();
       
@@ -60,8 +68,7 @@ const VerifyPage: React.FC = () => {
       const latestPermit = user.work_permits?.[0];
       const isPermitValid = latestPermit && new Date(latestPermit.expire_date).getTime() > today;
 
-      // ✅ LOGIC UPDATE: ผ่านเงื่อนไขใดเงื่อนไขหนึ่งถือว่า "อนุญาต" (VALID)
-      // (เพราะบางคนอาจเข้ามาแค่ Induction ไม่ต้องมี Work Permit ก็ได้)
+      // ✅ ผ่านเงื่อนไขใดเงื่อนไขหนึ่งถือว่า "อนุญาต" (VALID)
       if (isInductionValid || isPermitValid) {
         setStatus('VALID');
       } else {
@@ -88,16 +95,18 @@ const VerifyPage: React.FC = () => {
     );
   }
 
-  if (status === 'NOT_FOUND') {
+  if (status === 'NOT_FOUND' || status === 'SUSPENDED') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#f8fafc] p-8 text-center">
         <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-100 max-w-sm w-full">
           <div className="bg-red-50 w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6">
             <AlertTriangle className="w-10 h-10 text-red-500" />
           </div>
-          <h1 className="text-xl font-black text-slate-800 uppercase tracking-tight">Record Not Found</h1>
+          <h1 className="text-xl font-black text-slate-800 uppercase tracking-tight">
+              {status === 'SUSPENDED' ? 'Account Suspended' : 'Record Not Found'}
+          </h1>
           <p className="text-sm text-slate-400 font-bold mt-2 leading-relaxed">
-            ข้อมูลไม่ถูกต้อง หรือรหัสพนักงานนี้ไม่มีอยู่ในระบบความปลอดภัย
+            {status === 'SUSPENDED' ? 'สิทธิ์ของคุณถูกระงับชั่วคราว โปรดติดต่อเจ้าหน้าที่' : 'ข้อมูลไม่ถูกต้อง หรือไม่มีรหัสพนักงานนี้อยู่ในระบบ'}
           </p>
           <button 
             onClick={() => window.location.href = '/'}
@@ -109,6 +118,9 @@ const VerifyPage: React.FC = () => {
       </div>
     );
   }
+
+  // ตัวแปรสำหรับเช็คว่ามี Work Permit ปัจจุบันไหม
+  const activePermit = userData.work_permits?.[0];
 
   return (
     <div className={`min-h-screen p-4 md:p-6 flex flex-col items-center justify-center transition-colors duration-700 ${status === 'VALID' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
@@ -142,8 +154,8 @@ const VerifyPage: React.FC = () => {
         </div>
 
         {/* User Details Section */}
-        <div className="p-8 space-y-6">
-          <div className="text-center relative">
+        <div className="p-8 space-y-4">
+          <div className="text-center relative mb-6">
             <div className="w-20 h-20 bg-slate-50 rounded-[1.5rem] mx-auto mb-4 flex items-center justify-center border border-slate-100 shadow-inner relative overflow-hidden group">
                <User className="w-8 h-8 text-slate-300" />
                <div className="absolute inset-0 bg-blue-600/5 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -161,6 +173,17 @@ const VerifyPage: React.FC = () => {
                 <p className="font-bold text-slate-700 text-sm truncate">{userData.vendors?.name || 'Authorized Personnel'}</p>
               </div>
             </div>
+
+            {/* Work Permit Info (โชว์เฉพาะถ้ามีเลขบัตร) */}
+            {activePermit && activePermit.permit_no && (
+               <div className="flex items-center gap-4 p-4 bg-blue-50/50 rounded-2xl border border-blue-100">
+                  <div className="bg-white p-2.5 rounded-xl shadow-sm border border-blue-100"><FileText className="w-4 h-4 text-blue-500"/></div>
+                  <div className="min-w-0">
+                    <p className="text-[8px] uppercase text-blue-400 font-black tracking-widest">Work Permit Number</p>
+                    <p className="font-bold text-blue-700 text-sm truncate">{activePermit.permit_no}</p>
+                  </div>
+               </div>
+            )}
 
             {/* Expiry Info */}
             <div className={`flex items-center gap-4 p-4 rounded-2xl border transition-all ${status === 'VALID' ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'}`}>
