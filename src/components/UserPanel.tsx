@@ -397,7 +397,12 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
           <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-[2rem] p-6 text-white shadow-2xl relative overflow-hidden group mx-1 animate-in zoom-in-95">
             <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition-transform duration-500"><QrCode size={120} /></div>
             <div className="relative z-10 flex items-center gap-6">
-              <div className="bg-white p-2.5 rounded-2xl shadow-lg active:scale-95 transition-all cursor-pointer" onClick={() => setShowQRFullScreen(true)}><QRCodeSVG value={activePermit.permit_no} size={80} /></div>
+              
+              {/* ✅ จุดที่ 1: แก้ value ให้เป็น URL เต็ม */}
+              <div className="bg-white p-2.5 rounded-2xl shadow-lg active:scale-95 transition-all cursor-pointer" onClick={() => setShowQRFullScreen(true)}>
+                <QRCodeSVG value={`${window.location.origin}/verify/${activePermit.permit_no}`} size={80} />
+              </div>
+
               <div className="text-left">
                 <div className="flex items-center gap-2 mb-2"><span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_#10b981]"></span><div className="text-slate-400 font-bold uppercase tracking-widest text-[9px]">Active Permit</div></div>
                 <h4 className="text-2xl font-black mb-3 tracking-tight text-white">{activePermit.permit_no}</h4>
@@ -456,7 +461,10 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
         {showQRFullScreen && activePermit && !isBanned && (
           <div className="fixed inset-0 bg-slate-950 z-[200] flex flex-col items-center justify-center text-white p-6 animate-in fade-in duration-300 backdrop-blur-xl" onClick={() => setShowQRFullScreen(false)}>
             <button className="absolute top-8 right-8 p-4 text-white/50 hover:text-white transition-all"><X size={32} /></button>
-            <div className="bg-white p-10 rounded-[3rem] shadow-[0_0_80px_rgba(59,130,246,0.4)] animate-in zoom-in duration-500"><QRCodeSVG value={activePermit.permit_no} size={300} /></div>
+            <div className="bg-white p-10 rounded-[3rem] shadow-[0_0_80px_rgba(59,130,246,0.4)] animate-in zoom-in duration-500">
+              {/* ✅ แก้ไข value ตรงนี้ให้เป็น URL เต็มเหมือนกัน */}
+              <QRCodeSVG value={`${window.location.origin}/verify/${activePermit.permit_no}`} size={300} />
+            </div>
             <div className="mt-10 text-3xl font-black tracking-[0.3em] uppercase border-b-2 border-blue-500 pb-4">{activePermit.permit_no}</div>
             <div className="mt-6 text-blue-400 font-bold text-xs uppercase tracking-[0.3em] flex items-center gap-2"><ShieldCheck size={16} /> Authenticated Access</div>
           </div>
