@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { api } from '../services/supabaseApi'; 
-import { supabase } from '../services/supabaseClient'; // ✅ นำเข้า supabase สำหรับดึงยอดแบน
+import { supabase } from '../services/supabaseClient'; 
 import { 
   Users, CheckCircle, XCircle, FileSpreadsheet, 
   Search, Calendar, TrendingUp,
-  Loader2, AlertCircle, RotateCcw, Filter, ChevronRight,
+  Loader2, AlertCircle, RotateCcw, Filter, ChevronRight, ChevronLeft,
   ShieldCheck, AlertTriangle, UserX, Activity, PieChart as PieChartIcon,
   LineChart as LineChartIcon, Building2
 } from 'lucide-react';
@@ -18,7 +18,7 @@ import {
 
 const AdminDashboard: React.FC = () => {
   const [history, setHistory] = useState<any[]>([]);
-  const [stats, setStats] = useState({ total: 0, passed: 0, failed: 0, suspended: 0 }); // ✅ เพิ่ม state suspended
+  const [stats, setStats] = useState({ total: 0, passed: 0, failed: 0, suspended: 0 });
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -28,22 +28,26 @@ const AdminDashboard: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState('ALL');
   const [filterType, setFilterType] = useState('ALL');
 
+  // ✅ Pagination States
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10); // จำนวนต่อหน้า (เริ่มที่ 10)
+
   useEffect(() => {
     fetchData();
   }, []);
+
+  // ✅ รีเซ็ตหน้ากลับไปที่ 1 เสมอเวลาเปลี่ยนตัวกรอง ค้นหา หรือเปลี่ยนจำนวนแสดง
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterDate, filterStatus, filterType, itemsPerPage]);
 
   const fetchData = async () => {
     try {
       setLoading(true);
       setError(null);
       
-      // ดึงข้อมูลประวัติการสอบและสถิติรายวัน
-      const [historyData, statsData] = await Promise.all([
-        api.getAllExamHistory(),
-        api.getDailyStats()
-      ]);
+      const historyData = await api.getAllExamHistory();
 
-      // ✅ ดึงจำนวนพนักงานที่ถูกระงับสิทธิ์ (is_active = false)
       let suspendedCount = 0;
       try {
          const { count } = await supabase
@@ -55,12 +59,18 @@ const AdminDashboard: React.FC = () => {
          console.warn("Table users might not have is_active column yet", e);
       }
 
-      setHistory(historyData || []);
+      const validHistory = historyData || [];
+      
+      const totalExams = validHistory.length;
+      const passedExams = validHistory.filter(h => h.status === 'PASSED').length;
+      const failedExams = validHistory.filter(h => h.status !== 'PASSED').length;
+
+      setHistory(validHistory);
       setStats({ 
-        total: statsData.total || 0, 
-        passed: statsData.passed || 0, 
-        failed: statsData.failed || 0, 
-        suspended: suspendedCount // ✅ อัปเดตตัวเลขแบน
+        total: totalExams, 
+        passed: passedExams, 
+        failed: failedExams, 
+        suspended: suspendedCount
       });
 
     } catch (err: any) {
@@ -74,7 +84,6 @@ const AdminDashboard: React.FC = () => {
   const chartData = useMemo(() => {
     if (!history.length) return { pieData: [], barData: [], trendData: [], vendorData: [] };
 
-    // 1. Pie Chart
     const passCount = history.filter(h => h.status === 'PASSED').length;
     const failCount = history.filter(h => h.status !== 'PASSED').length;
     const pieData = [
@@ -82,7 +91,6 @@ const AdminDashboard: React.FC = () => {
       { name: 'ไม่ผ่าน (Failed)', value: failCount, color: '#ef4444' }
     ];
 
-    // 2. Bar Chart
     const typeStats = history.reduce((acc: any, curr: any) => {
       const type = curr.exam_type || 'UNKNOWN';
       if (!acc[type]) acc[type] = { name: type.replace('_', ' '), Passed: 0, Failed: 0 };
@@ -92,7 +100,6 @@ const AdminDashboard: React.FC = () => {
     }, {});
     const barData = Object.values(typeStats);
 
-    // 3. Line Chart
     const dateMap: any = {};
     history.forEach(h => {
       const d = new Date(h.created_at);
@@ -105,7 +112,6 @@ const AdminDashboard: React.FC = () => {
       .sort((a: any, b: any) => a.dateKey.localeCompare(b.dateKey))
       .slice(-14);
 
-    // 4. Top Vendors
     const vendorMap: any = {};
     history.forEach(h => {
       const vName = h.users?.vendors?.name || 'EXTERNAL (ไม่มีสังกัด)';
@@ -121,6 +127,7 @@ const AdminDashboard: React.FC = () => {
     return { pieData, barData, trendData, vendorData };
   }, [history]);
 
+  // ✅ การกรองข้อมูล
   const filteredHistory = history.filter(item => {
     const matchesSearch = 
       item.users?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -134,11 +141,18 @@ const AdminDashboard: React.FC = () => {
     return matchesSearch && matchesDate && matchesStatus && matchesType;
   });
 
+  // ✅ การแบ่งหน้า (Pagination)
+  const totalItems = filteredHistory.length;
+  const totalPages = itemsPerPage === -1 ? 1 : Math.ceil(totalItems / itemsPerPage);
+  const paginatedData = itemsPerPage === -1 
+    ? filteredHistory 
+    : filteredHistory.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
   const exportToExcel = () => {
     if (filteredHistory.length === 0) return;
 
+    // ส่งออกข้อมูลทั้งหมดตามตัวกรอง (ไม่จำกัดเฉพาะหน้าปัจจุบัน)
     const reportData = filteredHistory.map(item => {
-      // ✅ จัดการรูปแบบวันที่ให้เป็น วัน/เดือน/ปี โดยไม่เอาเวลา
       const d = new Date(item.created_at);
       const formattedDate = `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
 
@@ -157,17 +171,9 @@ const AdminDashboard: React.FC = () => {
 
     const ws = XLSX.utils.json_to_sheet(reportData);
     
-    // ตั้งค่าความกว้างคอลัมน์ให้พอดี
     const wscols = [
-        { wch: 15 }, // วันที่ทำแบบทดสอบ
-        { wch: 15 }, // ผลการสอบ
-        { wch: 10 }, // คะแนน
-        { wch: 25 }, // ชื่อ-นามสกุล
-        { wch: 8 },  // อายุ
-        { wch: 15 }, // สัญชาติ
-        { wch: 20 }, // เลขบัตรประชาชน
-        { wch: 30 }, // สังกัดบริษัท
-        { wch: 15 }  // ประเภทการสอบ
+        { wch: 15 }, { wch: 15 }, { wch: 10 }, { wch: 25 }, { wch: 8 },  
+        { wch: 15 }, { wch: 20 }, { wch: 30 }, { wch: 15 }  
     ];
     ws['!cols'] = wscols;
 
@@ -175,6 +181,55 @@ const AdminDashboard: React.FC = () => {
     XLSX.utils.book_append_sheet(wb, ws, "Safety_Report");
     const dateSuffix = filterDate || new Date().toISOString().split('T')[0];
     XLSX.writeFile(wb, `Safety_Report_${filterType}_${filterStatus}_${dateSuffix}.xlsx`);
+  };
+
+  // ✅ ฟังก์ชันสำหรับแสดงแถบ Pagination (ใช้ซ้ำได้ทั้งข้างบนและข้างล่าง)
+  const renderPagination = (position: 'top' | 'bottom') => {
+    if (filteredHistory.length === 0) return null;
+    return (
+      <div className={`bg-slate-50/50 p-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4 ${position === 'top' ? 'border-b border-slate-100' : 'mt-auto border-t border-slate-200'}`}>
+         {/* Page Size Selector */}
+         <div className="flex items-center gap-2 text-[10px] md:text-xs font-bold text-slate-500 w-full sm:w-auto justify-center sm:justify-start">
+            <span>แสดง</span>
+            <select 
+                value={itemsPerPage} 
+                onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                className="bg-white border border-slate-200 rounded-lg px-2 py-1 outline-none focus:border-blue-500 shadow-sm font-black text-slate-700"
+            >
+                <option value={10}>10</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={500}>500</option>
+                <option value={1000}>1,000</option>
+                <option value={-1}>ทั้งหมด (All)</option>
+            </select>
+            <span>รายการ</span>
+            <span className="ml-2 hidden sm:inline text-slate-400 font-medium">| จากทั้งหมด {totalItems} รายการ</span>
+         </div>
+
+         {/* Prev / Next Buttons */}
+         <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+            <button 
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="flex items-center gap-1 p-2 md:px-3 md:py-1.5 rounded-xl border border-slate-200 bg-white text-slate-600 disabled:opacity-50 disabled:bg-slate-50 hover:bg-slate-100 hover:text-blue-600 transition-all shadow-sm font-bold text-xs"
+            >
+                <ChevronLeft size={16} /> <span className="hidden md:inline">ก่อนหน้า</span>
+            </button>
+            <span className="text-[10px] md:text-xs font-black text-slate-600 bg-white px-4 py-1.5 rounded-xl border border-slate-200 shadow-sm">
+                {currentPage} <span className="text-slate-400 mx-1">/</span> {totalPages}
+            </span>
+            <button 
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages || totalPages === 0}
+                className="flex items-center gap-1 p-2 md:px-3 md:py-1.5 rounded-xl border border-slate-200 bg-white text-slate-600 disabled:opacity-50 disabled:bg-slate-50 hover:bg-slate-100 hover:text-blue-600 transition-all shadow-sm font-bold text-xs"
+            >
+                <span className="hidden md:inline">ถัดไป</span> <ChevronRight size={16} />
+            </button>
+         </div>
+         <span className="sm:hidden text-slate-400 font-bold text-[9px] uppercase mt-1">รวมทั้งหมด {totalItems} รายการ</span>
+      </div>
+    );
   };
 
   if (loading) {
@@ -235,8 +290,8 @@ const AdminDashboard: React.FC = () => {
           label="Total Exams / สอบทั้งหมด" 
           value={stats.total} 
           color="blue" 
-          trend="Today's Activity"
-          description="จำนวนการทดสอบในวันนี้"
+          trend="All-time Activity"
+          description="จำนวนการทดสอบในระบบ"
         />
         <StatCard 
           icon={<ShieldCheck />} 
@@ -256,7 +311,6 @@ const AdminDashboard: React.FC = () => {
           description="ผู้ที่ต้องรับการอบรมและสอบใหม่"
           glow="glow-amber"
         />
-        {/* ✅ การ์ดที่ 4 แสดงผู้ใช้ที่ถูกแบน */}
         <StatCard 
           icon={<UserX />} 
           label="Suspended / ถูกระงับสิทธิ์" 
@@ -403,8 +457,12 @@ const AdminDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* 5. Activity Logs Table */}
-      <div className="bg-white rounded-[2rem] sm:rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden mb-12 relative z-10">
+      {/* 5. Activity Logs Table with Pagination */}
+      <div className="bg-white rounded-[2rem] sm:rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden mb-12 relative z-10 flex flex-col">
+        
+        {/* ✅ Pagination Top */}
+        {renderPagination('top')}
+
         <div className="overflow-x-auto no-scrollbar">
           <table className="w-full text-left min-w-[800px]">
             <thead>
@@ -418,7 +476,7 @@ const AdminDashboard: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {filteredHistory.length > 0 ? filteredHistory.map((item) => (
+              {paginatedData.length > 0 ? paginatedData.map((item) => (
                 <tr key={item.id} className="hover:bg-blue-50/30 transition-colors group">
                   <td className="px-6 sm:px-8 py-4 sm:py-6">
                     <div className="flex items-center gap-3 sm:gap-4">
@@ -478,32 +536,47 @@ const AdminDashboard: React.FC = () => {
             </tbody>
           </table>
         </div>
+
+        {/* ✅ Pagination Bottom */}
+        {renderPagination('bottom')}
+        
       </div>
     </div>
   );
 };
 
-const StatCard = ({ icon, label, value, color, trend, description, glow }: any) => (
-  <div className={`bg-white p-4 sm:p-6 rounded-[2rem] sm:rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col gap-3 sm:gap-4 group hover:border-blue-500 hover:shadow-2xl transition-all duration-500 cursor-default relative overflow-hidden ${glow}`}>
-    <div className={`absolute -right-4 -top-4 sm:-right-6 sm:-top-6 opacity-[0.03] group-hover:scale-150 group-hover:rotate-12 transition-transform duration-1000`}>
-        {React.cloneElement(icon as React.ReactElement, { size: 120, className: "sm:w-[160px] sm:h-[160px]" })}
-    </div>
-    
-    <div className="flex justify-between items-start relative z-10">
-      <div className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-${color}-50 text-${color}-600 group-hover:bg-${color}-600 group-hover:text-white transition-all duration-500 shadow-inner`}>
-        {React.cloneElement(icon as React.ReactElement, { className: "w-5 h-5 sm:w-6 sm:h-6", strokeWidth: 2.5 })}
-      </div>
-      <span className={`text-[7px] sm:text-[8px] font-black px-2 py-1 sm:px-2.5 rounded-md sm:rounded-lg bg-${color}-50 text-${color}-600 border border-${color}-100 uppercase tracking-tighter max-w-[50%] truncate text-right`}>
-          {trend}
-      </span>
-    </div>
+const StatCard = ({ icon, label, value, color, trend, description, glow }: any) => {
+  const styles: any = {
+    blue: { box: 'bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white', badge: 'bg-blue-50 text-blue-600 border-blue-100' },
+    emerald: { box: 'bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white', badge: 'bg-emerald-50 text-emerald-600 border-emerald-100' },
+    amber: { box: 'bg-amber-50 text-amber-600 group-hover:bg-amber-600 group-hover:text-white', badge: 'bg-amber-50 text-amber-600 border-amber-100' },
+    red: { box: 'bg-red-50 text-red-600 group-hover:bg-red-600 group-hover:text-white', badge: 'bg-red-50 text-red-600 border-red-100' },
+  };
 
-    <div className="space-y-1 relative z-10">
-      <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest truncate">{label}</p>
-      <h4 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tighter tabular-nums">{value}</h4>
-      <p className="text-[8px] sm:text-[9px] text-slate-400 font-bold uppercase tracking-tight opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-500 truncate">{description}</p>
+  const c = styles[color] || styles.blue;
+
+  return (
+    <div className={`bg-white p-4 sm:p-6 rounded-[2rem] sm:rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col gap-3 sm:gap-4 group hover:border-blue-500 hover:shadow-2xl transition-all duration-500 cursor-default relative overflow-hidden ${glow}`}>
+      <div className={`absolute -right-4 -top-4 sm:-right-6 sm:-top-6 opacity-[0.03] group-hover:scale-150 group-hover:rotate-12 transition-transform duration-1000`}>
+          {React.cloneElement(icon as React.ReactElement, { size: 120, className: "sm:w-[160px] sm:h-[160px]" })}
+      </div>
+      
+      <div className="flex justify-between items-start relative z-10">
+        <div className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl transition-all duration-500 shadow-inner ${c.box}`}>
+          {React.cloneElement(icon as React.ReactElement, { className: "w-5 h-5 sm:w-6 sm:h-6", strokeWidth: 2.5 })}
+        </div>
+        <span className={`text-[7px] sm:text-[8px] font-black px-2 py-1 sm:px-2.5 rounded-md sm:rounded-lg border uppercase tracking-tighter max-w-[50%] truncate text-right ${c.badge}`}>
+            {trend}
+        </span>
+      </div>
+
+      <div className="space-y-1 relative z-10">
+        <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest truncate">{label}</p>
+        <h4 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tighter tabular-nums">{value}</h4>
+        <p className="text-[8px] sm:text-[9px] text-slate-400 font-bold uppercase tracking-tight opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-500 truncate">{description}</p>
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 export default AdminDashboard;

@@ -25,7 +25,9 @@ import {
   Ban,
   Clock,
   CheckCircle2,
-  ShieldAlert
+  ShieldAlert,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 
 const maskNationalID = (id: string | null | undefined) => {
@@ -87,7 +89,10 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
   const [allVendors, setAllVendors] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
   
-  // ✅ สถานะการอัปโหลด (Loading States สำหรับ Excel)
+  // ✅ Pagination States
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10); // จำนวนรายการต่อหน้า
+  
   const [importingUsers, setImportingUsers] = useState(false);
   const [importingVendors, setImportingVendors] = useState(false);
   
@@ -101,6 +106,11 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
 
   const userFileInputRef = useRef<HTMLInputElement>(null);
   const vendorFileInputRef = useRef<HTMLInputElement>(null);
+
+  // ✅ รีเซ็ตหน้ากลับไปที่ 1 เสมอเวลาค้นหาหรือเปลี่ยนหน้าแท็บ
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, searchQuery, itemsPerPage]);
 
   const logAction = async (action: string, target: string, details: string = '') => {
     try {
@@ -120,7 +130,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
       } else if (activeTab === 'USERS') {
         query = supabase.from('users').select('*, vendors(name)').order('created_at', { ascending: false });
       } else {
-        query = supabase.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(100);
+        query = supabase.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(2000);
       }
 
       const { data, error } = await query;
@@ -223,7 +233,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     let fileName = '';
 
     if (activeTab === 'USERS') {
-      exportData = dataList.map(user => ({
+      exportData = filtered.map(user => ({
         'Name': user.name,
         'National ID': user.national_id ? "'" + user.national_id : '-',
         'Vendor': user.vendors?.name || 'N/A',
@@ -235,13 +245,15 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
       }));
       fileName = `Personnel_List_${new Date().toISOString().split('T')[0]}.xlsx`;
     } else if (activeTab === 'VENDORS') {
-      exportData = dataList.map(vendor => ({
+      exportData = filtered.map(vendor => ({
         'Company Name': vendor.name,
         'Status': vendor.status,
         'Registry Date': new Date(vendor.created_at).toLocaleDateString()
       }));
       fileName = `Vendor_List_${new Date().toISOString().split('T')[0]}.xlsx`;
     }
+
+    if(exportData.length === 0) return showToast('ไม่พบข้อมูลที่จะส่งออก', 'error');
 
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
@@ -250,12 +262,11 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     showToast('Exported Successfully', 'success');
   };
 
-  // ✅ ฟังก์ชันนำเข้าพนักงาน (อัปเดตให้แสดง Loading และตรงกับคอลัมน์ Excel)
   const handleUserImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     
-    setImportingUsers(true); // เริ่มหมุน
+    setImportingUsers(true); 
     
     const reader = new FileReader();
     reader.onload = async (evt) => {
@@ -268,11 +279,9 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
         let success = 0; let fail = 0;
 
         for (const row of data) {
-          // ดึงข้อมูลตามชื่อคอลัมน์ Excel แบบเป๊ะๆ
           const name = (row['Name'] || row['Full Name'] || '').toString().trim();
           let nid = (row['National ID'] || row['ID Card'] || '').toString().trim();
           
-          // จัดการเลขบัตรที่เป็น E+
           if (nid.includes('E+') || nid.includes('e+')) nid = Number(nid).toLocaleString('fullwide', {useGrouping:false});
           
           const vName = (row['Vendor'] || row['Company'] || '').toString().trim();
@@ -283,10 +292,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
           const processedExpiry = processExcelDate(rawExpiry);
 
           if (name && nid) {
-            // ค้นหาบริษัทจากชื่อ
             const vendor = allVendors.find(v => v.name.toLowerCase() === vName.toLowerCase());
-            
-            // ตรวจสอบข้อมูลเดิม
             const { data: exist } = await supabase.from('users').select('id').eq('national_id', nid).maybeSingle();
 
             const payload: any = {
@@ -319,19 +325,18 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
         console.error("❌ Import Error:", err); 
         showToast('รูปแบบไฟล์ไม่ถูกต้อง', 'error'); 
       } finally {
-        setImportingUsers(false); // หยุดหมุน
+        setImportingUsers(false); 
       }
     };
     reader.readAsBinaryString(file);
-    e.target.value = ''; // รีเซ็ต input
+    e.target.value = ''; 
   };
 
-  // ✅ ฟังก์ชันนำเข้าบริษัท (เพิ่ม Loading)
   const handleVendorImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     
-    setImportingVendors(true); // เริ่มหมุน
+    setImportingVendors(true); 
     
     const reader = new FileReader();
     reader.onload = async (evt) => {
@@ -360,7 +365,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
         console.error("❌ Error:", err); 
         showToast('รูปแบบไฟล์ไม่ถูกต้อง', 'error'); 
       } finally {
-        setImportingVendors(false); // หยุดหมุน
+        setImportingVendors(false); 
       }
     };
     reader.readAsBinaryString(file);
@@ -412,151 +417,324 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     if (error) showToast(error.message, 'error'); else { showToast('Reset Complete', 'success'); logAction('RESET_TRAINING', name); loadData(); }
   };
 
+  // ✅ ระบบค้นหาและเตรียมข้อมูลแบ่งหน้า (Pagination Logic)
   const filtered = activeTab === 'LOGS' ? logs : dataList.filter(item => 
     (item.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
     (item.national_id || '').includes(searchQuery)
   );
 
+  const totalItems = filtered.length;
+  const totalPages = itemsPerPage === -1 ? 1 : Math.ceil(totalItems / itemsPerPage);
+  
+  // ตัดข้อมูลเฉพาะหน้าปัจจุบัน
+  const paginatedData = itemsPerPage === -1 
+    ? filtered 
+    : filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  // ✅ ฟังก์ชันสำหรับแสดงแถบ Pagination (ใช้ซ้ำได้ทั้งข้างบนและข้างล่าง)
+  const renderPagination = (position: 'top' | 'bottom') => {
+    if (filtered.length === 0) return null;
+    return (
+      <div className={`bg-slate-50/50 p-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4 ${position === 'top' ? 'border-b border-slate-100' : 'mt-auto border-t border-slate-200 rounded-b-[1.5rem] md:rounded-b-[2.5rem]'}`}>
+         {/* Page Size Selector */}
+         <div className="flex items-center gap-2 text-[10px] md:text-xs font-bold text-slate-500 w-full sm:w-auto justify-center sm:justify-start">
+            <span>แสดง</span>
+            <select 
+                value={itemsPerPage} 
+                onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                className="bg-white border border-slate-200 rounded-lg px-2 py-1 outline-none focus:border-blue-500 shadow-sm font-black text-slate-700"
+            >
+                <option value={10}>10</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={500}>500</option>
+                <option value={1000}>1,000</option>
+                <option value={-1}>ทั้งหมด (All)</option>
+            </select>
+            <span>รายการ</span>
+            <span className="ml-2 hidden sm:inline text-slate-400 font-medium">| จากทั้งหมด {totalItems} รายการ</span>
+         </div>
+
+         {/* Prev / Next Buttons */}
+         <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+            <button 
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="flex items-center gap-1 p-2 md:px-3 md:py-1.5 rounded-xl border border-slate-200 bg-white text-slate-600 disabled:opacity-50 disabled:bg-slate-50 hover:bg-slate-100 hover:text-blue-600 transition-all shadow-sm font-bold text-xs"
+            >
+                <ChevronLeft size={16} /> <span className="hidden md:inline">ก่อนหน้า</span>
+            </button>
+            <span className="text-[10px] md:text-xs font-black text-slate-600 bg-white px-4 py-1.5 rounded-xl border border-slate-200 shadow-sm">
+                {currentPage} <span className="text-slate-400 mx-1">/</span> {totalPages}
+            </span>
+            <button 
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages || totalPages === 0}
+                className="flex items-center gap-1 p-2 md:px-3 md:py-1.5 rounded-xl border border-slate-200 bg-white text-slate-600 disabled:opacity-50 disabled:bg-slate-50 hover:bg-slate-100 hover:text-blue-600 transition-all shadow-sm font-bold text-xs"
+            >
+                <span className="hidden md:inline">ถัดไป</span> <ChevronRight size={16} />
+            </button>
+         </div>
+         <span className="sm:hidden text-slate-400 font-bold text-[9px] uppercase mt-1">รวมทั้งหมด {totalItems} รายการ</span>
+      </div>
+    );
+  };
+
   return (
-    <div className="space-y-6 text-left animate-in fade-in duration-500 pb-10 relative">
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 border-b border-slate-200 pb-6">
+    <div className="space-y-4 md:space-y-6 text-left animate-in fade-in duration-500 pb-10 relative px-2 md:px-0">
+      
+      {/* 🟢 Header Section */}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 lg:gap-6 border-b border-slate-200 pb-4 lg:pb-6">
         <div>
           <h2 className="text-2xl md:text-3xl font-black text-slate-900 uppercase">Directory Control</h2>
           <div className="text-slate-400 font-bold text-[10px] uppercase tracking-[0.2em] mt-2 flex items-center gap-2">
             <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" /> Security Compliance Node
           </div>
         </div>
-        <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200 shadow-inner overflow-x-auto no-scrollbar">
+        <div className="flex w-full lg:w-auto bg-slate-100 p-1 rounded-2xl border border-slate-200 shadow-inner overflow-x-auto no-scrollbar">
           <TabButton active={activeTab === 'VENDORS'} onClick={() => {setActiveTab('VENDORS'); setSearchQuery('');}} icon={<Building2 size={14}/>} label="Vendors" />
           <TabButton active={activeTab === 'USERS'} onClick={() => {setActiveTab('USERS'); setSearchQuery('');}} icon={<Users size={14}/>} label="Personnel" />
           <TabButton active={activeTab === 'LOGS'} onClick={() => {setActiveTab('LOGS'); setSearchQuery('');}} icon={<History size={14}/>} label="Audit" />
         </div>
       </div>
 
-      <div className="bg-white rounded-[2rem] md:rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden min-h-[600px]">
-        <div className="p-5 md:p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between gap-4 bg-slate-50/50">
+      {/* 🟢 Main Content Box */}
+      <div className="bg-white rounded-[1.5rem] md:rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden min-h-[600px] flex flex-col">
+        
+        {/* Toolbar */}
+        <div className="p-4 md:p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between gap-4 bg-slate-50/50">
           {activeTab !== 'LOGS' ? (
-            <div className="relative flex-1 group">
+            <div className="relative flex-1 group w-full">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
               <input className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all shadow-sm" placeholder={`Search ${activeTab.toLowerCase()}...`} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
             </div>
-          ) : <div className="text-slate-400 font-black text-[10px] uppercase px-2 flex items-center gap-2"><ShieldCheck size={14} /> System Access History</div>}
+          ) : <div className="text-slate-400 font-black text-[10px] uppercase px-2 flex items-center gap-2 w-full"><ShieldCheck size={14} /> System Access History</div>}
           
-          <div className="flex flex-wrap gap-2 md:ml-auto">
+          <div className="flex flex-wrap gap-2 w-full md:w-auto md:ml-auto">
             {activeTab !== 'LOGS' && (
               <>
                 <input type="file" ref={activeTab === 'USERS' ? userFileInputRef : vendorFileInputRef} className="hidden" accept=".xlsx, .xls" onChange={activeTab === 'USERS' ? handleUserImport : handleVendorImport} />
                 
-                {/* ✅ เปลี่ยนปุ่ม Import ให้มี Loading State */}
                 <button 
                   onClick={() => (activeTab === 'USERS' ? userFileInputRef : vendorFileInputRef).current?.click()} 
                   disabled={activeTab === 'USERS' ? importingUsers : importingVendors}
-                  className="bg-emerald-50 text-emerald-600 border border-emerald-100 px-4 py-3 rounded-xl font-black text-[10px] uppercase hover:bg-emerald-100 transition-all flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 md:flex-none bg-emerald-50 text-emerald-600 border border-emerald-100 px-4 py-3 rounded-xl font-black text-[10px] uppercase hover:bg-emerald-100 transition-all flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {(activeTab === 'USERS' ? importingUsers : importingVendors) ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14}/>} 
-                  {(activeTab === 'USERS' ? importingUsers : importingVendors) ? 'กำลังนำเข้าข้อมูล...' : 'Import Excel'}
+                  {(activeTab === 'USERS' ? importingUsers : importingVendors) ? 'นำเข้า...' : 'Import'}
                 </button>
                 
-                <button onClick={handleExport} className="bg-white text-slate-600 border border-slate-200 px-4 py-3 rounded-xl font-black text-[10px] uppercase hover:bg-slate-50 transition-all flex items-center justify-center gap-2 shadow-sm"><Download size={14}/> Export</button>
-                <button onClick={loadData} className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:text-blue-600 transition-all active:scale-95 shadow-sm"><RotateCcw size={18}/></button>
-                <button onClick={activeTab === 'USERS' ? handleAddUser : handleAddVendor} className="bg-blue-600 text-white px-6 py-3 rounded-xl font-black text-[10px] uppercase hover:bg-slate-900 transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2"><Plus size={14}/> New Entry</button>
+                <button onClick={handleExport} className="flex-1 md:flex-none bg-white text-slate-600 border border-slate-200 px-4 py-3 rounded-xl font-black text-[10px] uppercase hover:bg-slate-50 transition-all flex items-center justify-center gap-2 shadow-sm"><Download size={14}/> Export</button>
+                <button onClick={loadData} className="flex-none p-3 bg-slate-50 text-slate-400 rounded-xl hover:text-blue-600 transition-all active:scale-95 shadow-sm"><RotateCcw size={18}/></button>
+                <button onClick={activeTab === 'USERS' ? handleAddUser : handleAddVendor} className="w-full sm:w-auto bg-blue-600 text-white px-6 py-3 rounded-xl font-black text-[10px] uppercase hover:bg-slate-900 transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2"><Plus size={14}/> New Entry</button>
               </>
             )}
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          {loading ? <div className="p-32 text-center"><Loader2 className="animate-spin text-blue-500 mx-auto" size={32}/></div> : (
-            <table className="w-full text-left min-w-[900px]">
-              <thead className="bg-slate-50/50 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100">
-                <tr>
-                  <th className="px-8 py-5 text-left">Profile / Identity</th>
-                  <th className="px-8 py-5 text-left">Compliance / Status</th>
-                  <th className="px-8 py-5 text-center">Protocol Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {activeTab === 'LOGS' ? (
-                  logs.map((log: any) => (
-                    <tr key={log.id} className="hover:bg-slate-50/30 transition-colors">
-                      <td className="px-8 py-5 text-[11px] font-black text-slate-500 font-mono tracking-tighter">{new Date(log.created_at).toLocaleString('th-TH')}</td>
-                      <td className="px-8 py-5 text-xs font-bold text-slate-700">{log.admin_email}</td>
-                      <td className="px-8 py-5 text-xs font-black text-slate-600 uppercase">{log.action}</td>
-                      <td className="px-8 py-5 text-xs text-slate-600 font-bold uppercase">{log.target}</td>
-                    </tr>
-                  ))
-                ) : (
-                  filtered.map(item => (
-                    <tr key={item.id} className={`hover:bg-slate-50/30 transition-colors group text-left ${item.is_active === false ? 'bg-red-50/50' : ''}`}>
-                      <td className="px-8 py-5">
-                        <div className="flex items-center gap-3">
-                           <div className={`w-10 h-10 rounded-2xl text-white transition-all flex items-center justify-center font-black text-xs shadow-inner uppercase ${item.is_active === false ? 'bg-red-400' : 'bg-slate-200 text-slate-500 group-hover:bg-blue-600'}`}>
-                             {item.name?.charAt(0)}
-                           </div>
-                           <div>
-                             <div className="font-black text-slate-800 uppercase text-xs truncate max-w-[200px] flex items-center gap-2">
-                                {item.name} 
-                                {item.is_active === false && <span className="bg-red-500 text-white px-1.5 py-0.5 rounded text-[8px] tracking-widest">BANNED</span>}
-                             </div>
-                             {activeTab === 'USERS' && <div className="text-[10px] text-slate-400 font-mono mt-0.5 tracking-tighter">ID: {maskNationalID(item.national_id)}</div>}
-                           </div>
-                        </div>
-                      </td>
-                      <td className="px-8 py-5">
-                        {activeTab === 'VENDORS' ? (
-                          <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[9px] font-black border uppercase shadow-sm ${item.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : item.status === 'REJECTED' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>
-                            {item.status || 'PENDING'}
-                          </div>
-                        ) : (
-                          <div className="flex flex-col gap-1 text-left">
-                            <span className="text-slate-500 font-black text-[10px] uppercase bg-slate-50 px-3 py-1 rounded-xl border w-fit shadow-sm">{item.vendors?.name || 'EXTERNAL'}</span>
-                            {item.is_active === false ? (
-                                <span className="text-[9px] font-black text-red-500 flex items-center gap-1 ml-1"><Ban size={10}/> Account Suspended</span>
-                            ) : item.induction_expiry ? (
-                                <span className="text-[9px] font-black text-emerald-600 flex items-center gap-1 ml-1">
-                                    <CheckCircle size={10}/> Certified Exp: {new Date(item.induction_expiry).toLocaleDateString('th-TH')}
-                                </span>
-                            ) : (
-                                <span className="text-[9px] font-black text-rose-400 flex items-center gap-1 ml-1">
-                                    <Ban size={10}/> No Certification
-                                </span>
-                            )}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-8 py-5 text-center">
-                        <div className="flex justify-center gap-2">
-                          {activeTab === 'VENDORS' && item.status !== 'APPROVED' && (
-                            <button onClick={() => handleUpdateVendorStatus(item.id, item.name, 'APPROVED')} className="p-2.5 rounded-xl bg-emerald-500 text-white hover:bg-emerald-600 shadow-lg active:scale-90 transition-all"><CheckCircle size={16} /></button>
-                          )}
-                          {activeTab === 'VENDORS' && item.status === 'PENDING' && (
-                            <button onClick={() => handleUpdateVendorStatus(item.id, item.name, 'REJECTED')} title="Reject" className="p-2.5 rounded-xl border text-red-500 hover:bg-red-50 active:scale-90 transition-all"><Ban size={16} /></button>
-                          )}
-                          
-                          <button onClick={() => activeTab === 'VENDORS' ? handleEditVendor(item.id, item.name) : handleEditUser(item)} className="p-2.5 rounded-xl border border-slate-100 text-slate-400 hover:text-blue-600 hover:bg-blue-50 active:scale-90 transition-all shadow-sm"><Edit3 size={16} /></button>
-                          
-                          {activeTab === 'USERS' && (
-                            <>
-                              <button onClick={() => handleResetTraining(item.id, item.name)} title="Reset Compliance" className="p-2.5 rounded-xl border border-amber-100 text-amber-500 hover:bg-amber-50 transition-all active:scale-90 shadow-sm"><RotateCcw size={16} /></button>
-                              
-                              <button 
-                                  onClick={() => handleToggleUserBan(item.id, item.name, item.is_active !== false)} 
-                                  title={item.is_active !== false ? "Suspend Account" : "Unban Account"} 
-                                  className={`p-2.5 rounded-xl border transition-all active:scale-90 shadow-sm ${item.is_active !== false ? 'border-red-100 text-red-500 hover:bg-red-50' : 'bg-red-500 text-white hover:bg-red-600 shadow-red-200 shadow-lg'}`}
-                              >
-                                  {item.is_active !== false ? <ShieldAlert size={16} /> : <CheckCircle2 size={16} />}
-                              </button>
-                            </>
-                          )}
+        {/* 🟢 Data Presentation Area */}
+        <div className="flex-1 p-2 md:p-0 bg-slate-50 md:bg-white flex flex-col">
+          {loading ? (
+            <div className="p-32 text-center flex-1"><Loader2 className="animate-spin text-blue-500 mx-auto" size={32}/></div>
+          ) : paginatedData.length === 0 ? (
+             <div className="p-20 text-center text-slate-400 font-bold text-sm flex-1">ไม่พบข้อมูล (No Data Found)</div>
+          ) : (
+            <div className="flex-1 flex flex-col">
+              
+              {/* ✅ แถบ Pagination ด้านบน (แสดงทั้งในคอมและมือถือ) */}
+              {renderPagination('top')}
 
-                          <button onClick={() => activeTab === 'VENDORS' ? handleDeleteVendor(item.id, item.name) : handleDeleteUser(item.id, item.name)} className="p-2.5 rounded-xl border border-slate-100 text-slate-300 hover:text-red-600 hover:bg-red-50 active:scale-90 transition-all shadow-sm"><Trash2 size={16} /></button>
-                        </div>
-                      </td>
+              {/* 🖥️ DESKTOP VIEW (TABLE) */}
+              <div className="hidden lg:block overflow-x-auto w-full flex-1">
+                <table className="w-full text-left min-w-[900px]">
+                  <thead className="bg-slate-50/50 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100 sticky top-0 z-10">
+                    <tr>
+                      <th className="px-8 py-5 text-left whitespace-nowrap">Profile / Identity</th>
+                      <th className="px-8 py-5 text-left whitespace-nowrap">Compliance / Status</th>
+                      <th className="px-8 py-5 text-center whitespace-nowrap">Protocol Actions</th>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50 bg-white">
+                    {activeTab === 'LOGS' ? (
+                      paginatedData.map((log: any) => (
+                        <tr key={log.id} className="hover:bg-slate-50/30 transition-colors">
+                          <td className="px-8 py-5 text-[11px] font-black text-slate-500 font-mono tracking-tighter whitespace-nowrap">{new Date(log.created_at).toLocaleString('th-TH')}</td>
+                          <td className="px-8 py-5 text-xs font-bold text-slate-700">{log.admin_email}</td>
+                          <td className="px-8 py-5 text-xs font-black text-slate-600 uppercase whitespace-nowrap">{log.action}</td>
+                          <td className="px-8 py-5 text-xs text-slate-600 font-bold uppercase">{log.target}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      paginatedData.map(item => (
+                        <tr key={item.id} className={`hover:bg-slate-50/30 transition-colors group text-left ${item.is_active === false ? 'bg-red-50/50' : ''}`}>
+                          <td className="px-8 py-5">
+                            <div className="flex items-center gap-3">
+                               <div className={`w-10 h-10 shrink-0 rounded-2xl text-white transition-all flex items-center justify-center font-black text-xs shadow-inner uppercase ${item.is_active === false ? 'bg-red-400' : 'bg-slate-200 text-slate-500 group-hover:bg-blue-600'}`}>
+                                 {item.name?.charAt(0)}
+                               </div>
+                               <div className="min-w-0">
+                                 <div className="font-black text-slate-800 uppercase text-xs truncate max-w-[200px] flex items-center gap-2">
+                                    {item.name} 
+                                    {item.is_active === false && <span className="bg-red-500 text-white px-1.5 py-0.5 rounded text-[8px] tracking-widest shrink-0">BANNED</span>}
+                                 </div>
+                                 {activeTab === 'USERS' && <div className="text-[10px] text-slate-400 font-mono mt-0.5 tracking-tighter">ID: {maskNationalID(item.national_id)}</div>}
+                               </div>
+                            </div>
+                          </td>
+                          <td className="px-8 py-5">
+                            {activeTab === 'VENDORS' ? (
+                              <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[9px] font-black border uppercase shadow-sm whitespace-nowrap ${item.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : item.status === 'REJECTED' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>
+                                {item.status || 'PENDING'}
+                              </div>
+                            ) : (
+                              <div className="flex flex-col gap-1 text-left">
+                                <span className="text-slate-500 font-black text-[10px] uppercase bg-slate-50 px-3 py-1 rounded-xl border w-fit shadow-sm truncate max-w-[180px]">{item.vendors?.name || 'EXTERNAL'}</span>
+                                {item.is_active === false ? (
+                                    <span className="text-[9px] font-black text-red-500 flex items-center gap-1 ml-1 whitespace-nowrap"><Ban size={10}/> Account Suspended</span>
+                                ) : item.induction_expiry ? (
+                                    <span className="text-[9px] font-black text-emerald-600 flex items-center gap-1 ml-1 whitespace-nowrap">
+                                        <CheckCircle size={10}/> Certified Exp: {new Date(item.induction_expiry).toLocaleDateString('th-TH')}
+                                    </span>
+                                ) : (
+                                    <span className="text-[9px] font-black text-rose-400 flex items-center gap-1 ml-1 whitespace-nowrap">
+                                        <Ban size={10}/> No Certification
+                                    </span>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-8 py-5 text-center">
+                            <div className="flex justify-center gap-2 flex-wrap">
+                              {activeTab === 'VENDORS' && item.status !== 'APPROVED' && (
+                                <button onClick={() => handleUpdateVendorStatus(item.id, item.name, 'APPROVED')} className="p-2.5 rounded-xl bg-emerald-500 text-white hover:bg-emerald-600 shadow-lg active:scale-90 transition-all"><CheckCircle size={16} /></button>
+                              )}
+                              {activeTab === 'VENDORS' && item.status === 'PENDING' && (
+                                <button onClick={() => handleUpdateVendorStatus(item.id, item.name, 'REJECTED')} title="Reject" className="p-2.5 rounded-xl border text-red-500 hover:bg-red-50 active:scale-90 transition-all"><Ban size={16} /></button>
+                              )}
+                              
+                              <button onClick={() => activeTab === 'VENDORS' ? handleEditVendor(item.id, item.name) : handleEditUser(item)} className="p-2.5 rounded-xl border border-slate-100 text-slate-400 hover:text-blue-600 hover:bg-blue-50 active:scale-90 transition-all shadow-sm"><Edit3 size={16} /></button>
+                              
+                              {activeTab === 'USERS' && (
+                                <>
+                                  <button onClick={() => handleResetTraining(item.id, item.name)} title="Reset Compliance" className="p-2.5 rounded-xl border border-amber-100 text-amber-500 hover:bg-amber-50 transition-all active:scale-90 shadow-sm"><RotateCcw size={16} /></button>
+                                  
+                                  <button 
+                                      onClick={() => handleToggleUserBan(item.id, item.name, item.is_active !== false)} 
+                                      title={item.is_active !== false ? "Suspend Account" : "Unban Account"} 
+                                      className={`p-2.5 rounded-xl border transition-all active:scale-90 shadow-sm ${item.is_active !== false ? 'border-red-100 text-red-500 hover:bg-red-50' : 'bg-red-500 text-white hover:bg-red-600 shadow-red-200 shadow-lg'}`}
+                                  >
+                                      {item.is_active !== false ? <ShieldAlert size={16} /> : <CheckCircle2 size={16} />}
+                                  </button>
+                                </>
+                              )}
+                              <button onClick={() => activeTab === 'VENDORS' ? handleDeleteVendor(item.id, item.name) : handleDeleteUser(item.id, item.name)} className="p-2.5 rounded-xl border border-slate-100 text-slate-300 hover:text-red-600 hover:bg-red-50 active:scale-90 transition-all shadow-sm"><Trash2 size={16} /></button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* 📱 MOBILE VIEW (CARDS) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 lg:hidden flex-1 pb-4 pt-3">
+                 {activeTab === 'LOGS' ? (
+                    paginatedData.map((log: any) => (
+                      <div key={log.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                         <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                            <span className="text-[10px] font-mono text-slate-400">{new Date(log.created_at).toLocaleString('th-TH')}</span>
+                            <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-lg uppercase">{log.action}</span>
+                         </div>
+                         <div>
+                            <p className="text-[9px] font-black text-slate-400 uppercase">Admin</p>
+                            <p className="text-xs font-bold text-slate-700 truncate">{log.admin_email}</p>
+                         </div>
+                         <div>
+                            <p className="text-[9px] font-black text-slate-400 uppercase">Target</p>
+                            <p className="text-xs font-bold text-slate-700 truncate">{log.target}</p>
+                         </div>
+                      </div>
+                    ))
+                 ) : (
+                    paginatedData.map((item: any) => (
+                      <div key={item.id} className={`bg-white p-4 rounded-2xl border shadow-sm flex flex-col gap-4 relative overflow-hidden ${item.is_active === false ? 'border-red-200 bg-red-50/30' : 'border-slate-200'}`}>
+                         {/* Card Header */}
+                         <div className="flex items-center gap-3">
+                            <div className={`w-12 h-12 shrink-0 rounded-[1rem] text-white flex items-center justify-center font-black text-lg shadow-inner uppercase ${item.is_active === false ? 'bg-red-400' : 'bg-blue-600'}`}>
+                               {item.name?.charAt(0)}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                               <div className="flex items-center gap-2">
+                                 <h4 className="font-black text-slate-800 uppercase text-sm truncate">{item.name}</h4>
+                                 {item.is_active === false && <span className="bg-red-500 text-white px-1.5 py-0.5 rounded text-[8px] tracking-widest shrink-0">BANNED</span>}
+                               </div>
+                               {activeTab === 'USERS' && <p className="text-[10px] text-slate-400 font-mono mt-0.5 truncate">ID: {maskNationalID(item.national_id)}</p>}
+                               {activeTab === 'VENDORS' && <p className="text-[10px] text-slate-400 font-mono mt-0.5 truncate">Reg: {new Date(item.created_at).toLocaleDateString()}</p>}
+                            </div>
+                         </div>
+
+                         {/* Card Body */}
+                         <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex flex-col gap-2">
+                           {activeTab === 'USERS' ? (
+                             <>
+                               <div className="flex justify-between items-center">
+                                 <span className="text-[9px] font-black text-slate-400 uppercase">Vendor</span>
+                                 <span className="text-[10px] font-black text-slate-700 truncate max-w-[60%] text-right">{item.vendors?.name || 'EXTERNAL'}</span>
+                               </div>
+                               <div className="flex justify-between items-center">
+                                 <span className="text-[9px] font-black text-slate-400 uppercase">Status</span>
+                                 {item.is_active === false ? (
+                                    <span className="text-[9px] font-black text-red-500 flex items-center gap-1"><Ban size={10}/> Suspended</span>
+                                 ) : item.induction_expiry ? (
+                                    <span className="text-[9px] font-black text-emerald-600 flex items-center gap-1"><CheckCircle size={10}/> Certified</span>
+                                 ) : (
+                                    <span className="text-[9px] font-black text-rose-400 flex items-center gap-1"><Ban size={10}/> No Cert</span>
+                                 )}
+                               </div>
+                             </>
+                           ) : (
+                             <div className="flex justify-between items-center">
+                               <span className="text-[9px] font-black text-slate-400 uppercase">Status</span>
+                               <div className={`px-2 py-1 rounded-md text-[9px] font-black border uppercase ${item.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : item.status === 'REJECTED' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>
+                                  {item.status || 'PENDING'}
+                               </div>
+                             </div>
+                           )}
+                         </div>
+
+                         {/* Card Actions */}
+                         <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                            {activeTab === 'VENDORS' && item.status !== 'APPROVED' && (
+                              <button onClick={() => handleUpdateVendorStatus(item.id, item.name, 'APPROVED')} className="p-2.5 rounded-xl bg-emerald-500 text-white hover:bg-emerald-600 active:scale-90 transition-all"><CheckCircle size={14} /></button>
+                            )}
+                            {activeTab === 'VENDORS' && item.status === 'PENDING' && (
+                              <button onClick={() => handleUpdateVendorStatus(item.id, item.name, 'REJECTED')} className="p-2.5 rounded-xl border border-red-200 text-red-500 bg-red-50 active:scale-90 transition-all"><Ban size={14} /></button>
+                            )}
+                            
+                            <button onClick={() => activeTab === 'VENDORS' ? handleEditVendor(item.id, item.name) : handleEditUser(item)} className="p-2.5 rounded-xl border border-slate-200 text-slate-500 bg-white active:scale-90 transition-all"><Edit3 size={14} /></button>
+                            
+                            {activeTab === 'USERS' && (
+                              <>
+                                <button onClick={() => handleResetTraining(item.id, item.name)} className="p-2.5 rounded-xl border border-amber-200 text-amber-500 bg-amber-50 active:scale-90 transition-all"><RotateCcw size={14} /></button>
+                                <button 
+                                    onClick={() => handleToggleUserBan(item.id, item.name, item.is_active !== false)} 
+                                    className={`p-2.5 rounded-xl border transition-all active:scale-90 ${item.is_active !== false ? 'border-red-200 text-red-500 bg-red-50' : 'bg-red-500 text-white'}`}
+                                >
+                                    {item.is_active !== false ? <ShieldAlert size={14} /> : <CheckCircle2 size={14} />}
+                                </button>
+                              </>
+                            )}
+                            <button onClick={() => activeTab === 'VENDORS' ? handleDeleteVendor(item.id, item.name) : handleDeleteUser(item.id, item.name)} className="p-2.5 rounded-xl border border-slate-200 text-slate-400 bg-slate-50 active:scale-90 transition-all"><Trash2 size={14} /></button>
+                         </div>
+                      </div>
+                    ))
+                 )}
+              </div>
+              
+              {/* ✅ แถบ Pagination ด้านล่าง */}
+              {renderPagination('bottom')}
+            </div>
           )}
         </div>
       </div>
@@ -565,20 +743,23 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
       {isEditModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setIsEditModalOpen(false)} />
-          <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl border relative z-10 p-8 text-left animate-in zoom-in-95 duration-300">
-              <div className="flex justify-between items-center mb-6 border-b pb-4">
-                  <div><h3 className="text-xl font-black text-slate-900 uppercase">Edit Profile</h3><p className="text-[10px] text-blue-500 font-bold uppercase tracking-widest mt-1">ID: {maskNationalID(editingUser?.national_id)}</p></div>
-                  <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-red-500 transition-colors"><X size={24}/></button>
+          <div className="bg-white w-full max-w-lg rounded-[2rem] md:rounded-[2.5rem] shadow-2xl border relative z-10 p-6 md:p-8 text-left animate-in zoom-in-95 duration-300 max-h-[95vh] overflow-y-auto mx-4 md:mx-0">
+              <div className="flex justify-between items-center mb-6 border-b pb-4 sticky top-0 bg-white z-20">
+                  <div>
+                    <h3 className="text-lg md:text-xl font-black text-slate-900 uppercase">Edit Profile</h3>
+                    <p className="text-[10px] text-blue-500 font-bold uppercase tracking-widest mt-1">ID: {maskNationalID(editingUser?.national_id)}</p>
+                  </div>
+                  <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-red-500 transition-colors bg-slate-50 p-2 rounded-full"><X size={20}/></button>
               </div>
               <div className="space-y-4">
                   <div className="space-y-1">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Full Name</label>
-                      <input className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold shadow-inner" value={editForm.name} onChange={e=>setEditForm({...editForm, name: e.target.value})}/>
+                      <input className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold shadow-inner outline-none focus:border-blue-500" value={editForm.name} onChange={e=>setEditForm({...editForm, name: e.target.value})}/>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-1">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Age / อายุ</label>
-                          <input type="number" className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold shadow-inner" value={editForm.age} onChange={e=>setEditForm({...editForm, age: e.target.value})}/>
+                          <input type="number" className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold shadow-inner outline-none focus:border-blue-500" value={editForm.age} onChange={e=>setEditForm({...editForm, age: e.target.value})}/>
                       </div>
                       <div className="space-y-1">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nationality</label>
@@ -598,7 +779,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                   <div className="space-y-1 mt-2">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2"><Building2 size={12}/> Company / Vendor</label>
                       <select 
-                          className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold shadow-inner outline-none focus:border-blue-500 cursor-pointer" 
+                          className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold shadow-inner outline-none focus:border-blue-500 cursor-pointer text-sm md:text-base truncate" 
                           value={editForm.vendor_id} 
                           onChange={(e) => setEditForm({...editForm, vendor_id: e.target.value})}
                       >
@@ -608,12 +789,12 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                           ))}
                       </select>
                   </div>
-                  <div className="bg-amber-50 p-5 rounded-3xl border border-amber-100 shadow-sm mt-4 text-left">
+                  <div className="bg-amber-50 p-4 md:p-5 rounded-3xl border border-amber-100 shadow-sm mt-4 text-left">
                       <label className="text-[10px] font-black text-amber-600 uppercase flex items-center gap-2 mb-3"><CalendarClock size={16}/> Induction Expiry (Override)</label>
                       <input type="date" className="w-full bg-white border border-amber-200 p-3 rounded-xl font-bold outline-none focus:border-amber-500 transition-all" value={editForm.induction_expiry} onChange={e=>setEditForm({...editForm, induction_expiry: e.target.value})}/>
                   </div>
               </div>
-              <div className="flex gap-3 mt-8">
+              <div className="flex gap-3 mt-6 md:mt-8">
                   <button onClick={()=>setIsEditModalOpen(false)} className="flex-1 py-4 bg-slate-50 text-slate-400 font-black rounded-2xl text-[10px] uppercase border border-slate-200 hover:bg-slate-100 transition-all active:scale-95">Cancel</button>
                   <button onClick={saveUserEdit} disabled={submitting} className="flex-1 py-4 bg-blue-600 text-white font-black rounded-2xl text-[10px] uppercase shadow-lg shadow-blue-200 hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
                     {submitting ? <Loader2 className="animate-spin" size={16} /> : 'Save Protocol'}
@@ -627,7 +808,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
 };
 
 const TabButton = ({ active, onClick, icon, label }: any) => (
-  <button onClick={onClick} className={`px-5 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all whitespace-nowrap active:scale-95 ${active ? 'bg-white text-blue-600 shadow-md border-b-2 border-blue-500' : 'text-slate-400 hover:text-slate-600 hover:bg-white/50'}`}>{icon} {label}</button>
+  <button onClick={onClick} className={`shrink-0 px-4 md:px-5 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all whitespace-nowrap active:scale-95 ${active ? 'bg-white text-blue-600 shadow-md border-b-2 border-blue-500' : 'text-slate-400 hover:text-slate-600 hover:bg-white/50'}`}>{icon} {label}</button>
 );
 
 export default VendorManager;

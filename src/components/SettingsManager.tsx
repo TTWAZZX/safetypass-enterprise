@@ -107,50 +107,50 @@ const SettingsManager: React.FC = () => {
     }
   };
 
-  if (loading) return <div className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-blue-600" /></div>;
+  if (loading) return <div className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-blue-600" size={32} /></div>;
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500 max-w-4xl mx-auto pb-10">
+    <div className="space-y-6 animate-in fade-in duration-500 max-w-4xl mx-auto pb-10 px-4 md:px-0">
       
       {/* Header */}
-      <div className="flex items-center gap-4 border-b border-slate-200 pb-6">
-        <div className="p-3 bg-slate-900 text-white rounded-2xl shadow-lg">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 border-b border-slate-200 pb-4 md:pb-6">
+        <div className="p-3 bg-slate-900 text-white rounded-2xl shadow-lg shrink-0">
            <ServerCog size={24} />
         </div>
         <div>
-           <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">System Configuration</h2>
-           <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">ตั้งค่าระบบและเกณฑ์การทดสอบ (Global Parameters)</p>
+           <h2 className="text-xl md:text-2xl font-black text-slate-900 uppercase tracking-tight">System Configuration</h2>
+           <p className="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">ตั้งค่าระบบและเกณฑ์การทดสอบ (Global Parameters)</p>
         </div>
       </div>
 
-      {/* ⚙️ Threshold Settings (UI แบบเดิมของคุณ) */}
-      <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden relative">
+      {/* ⚙️ Threshold Settings */}
+      <div className="bg-white rounded-[2rem] md:rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden relative">
          <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-blue-500 via-purple-500 to-emerald-500" />
          
-         <div className="p-8 pb-4">
-            <div className="flex items-start gap-4 mb-8">
-                <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl border border-blue-100">
+         <div className="p-5 md:p-8 pb-4">
+            <div className="flex flex-col sm:flex-row items-start gap-3 md:gap-4 mb-6 md:mb-8">
+                <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl border border-blue-100 shrink-0">
                     <ShieldAlert size={24} />
                 </div>
                 <div>
-                    <h3 className="text-lg font-black text-slate-800 uppercase">Threshold Settings <span className="text-sm font-bold text-slate-400 normal-case">| เกณฑ์การทดสอบ</span></h3>
-                    <p className="text-xs text-slate-400 font-bold mt-1">กำหนดเกณฑ์คะแนนขั้นต่ำสำหรับการผ่านการทดสอบ (Passing Score)</p>
+                    <h3 className="text-base md:text-lg font-black text-slate-800 uppercase">Threshold Settings <span className="text-xs md:text-sm font-bold text-slate-400 normal-case">| เกณฑ์การทดสอบ</span></h3>
+                    <p className="text-[10px] md:text-xs text-slate-400 font-bold mt-1">กำหนดเกณฑ์คะแนนขั้นต่ำสำหรับการผ่านการทดสอบ (Passing Score)</p>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8 mb-8">
                 {/* Induction Score */}
-                <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 hover:border-blue-300 transition-all group">
-                    <div className="flex justify-between items-center mb-4">
-                        <label className="text-xs font-black text-slate-500 uppercase tracking-widest flex flex-col">
+                <div className="bg-slate-50 p-5 md:p-6 rounded-3xl border border-slate-200 hover:border-blue-300 transition-all group">
+                    <div className="flex justify-between items-start md:items-center mb-4 gap-2">
+                        <label className="text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-widest flex flex-col">
                             Induction Pass Rate
-                            <span className="text-[9px] text-slate-400 font-bold">เกณฑ์ผ่านปฐมนิเทศ</span>
+                            <span className="text-[9px] text-slate-400 font-bold mt-0.5">เกณฑ์ผ่านปฐมนิเทศ</span>
                         </label>
-                        <span className={`px-3 py-1 rounded-full text-[10px] font-black border ${inductionScore >= 80 ? 'bg-emerald-100 text-emerald-600 border-emerald-200' : 'bg-amber-100 text-amber-600 border-amber-200'}`}>
+                        <span className={`shrink-0 px-3 py-1 rounded-full text-[9px] md:text-[10px] font-black border ${inductionScore >= 80 ? 'bg-emerald-100 text-emerald-600 border-emerald-200' : 'bg-amber-100 text-amber-600 border-amber-200'}`}>
                             {inductionScore >= 80 ? 'STRICT' : 'STANDARD'}
                         </span>
                     </div>
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-3 md:gap-4">
                         <input 
                             type="range" 
                             min="0" max="100" step="5"
@@ -158,24 +158,24 @@ const SettingsManager: React.FC = () => {
                             onChange={(e) => setInductionScore(Number(e.target.value))}
                             className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
                         />
-                        <div className="w-16 h-16 bg-white rounded-2xl border-2 border-blue-100 flex items-center justify-center text-xl font-black text-slate-800 shadow-sm group-hover:scale-110 transition-transform">
+                        <div className="w-14 h-14 md:w-16 md:h-16 shrink-0 bg-white rounded-2xl border-2 border-blue-100 flex items-center justify-center text-lg md:text-xl font-black text-slate-800 shadow-sm group-hover:scale-110 transition-transform">
                             {inductionScore}%
                         </div>
                     </div>
                 </div>
 
                 {/* Work Permit Score */}
-                <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 hover:border-purple-300 transition-all group">
-                    <div className="flex justify-between items-center mb-4">
-                        <label className="text-xs font-black text-slate-500 uppercase tracking-widest flex flex-col">
+                <div className="bg-slate-50 p-5 md:p-6 rounded-3xl border border-slate-200 hover:border-purple-300 transition-all group">
+                    <div className="flex justify-between items-start md:items-center mb-4 gap-2">
+                        <label className="text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-widest flex flex-col">
                             Work Permit Pass Rate
-                            <span className="text-[9px] text-slate-400 font-bold">เกณฑ์ผ่านใบอนุญาตทำงาน</span>
+                            <span className="text-[9px] text-slate-400 font-bold mt-0.5">เกณฑ์ผ่านใบอนุญาตทำงาน</span>
                         </label>
-                        <span className={`px-3 py-1 rounded-full text-[10px] font-black border ${permitScore >= 80 ? 'bg-emerald-100 text-emerald-600 border-emerald-200' : 'bg-amber-100 text-amber-600 border-amber-200'}`}>
+                        <span className={`shrink-0 px-3 py-1 rounded-full text-[9px] md:text-[10px] font-black border ${permitScore >= 80 ? 'bg-emerald-100 text-emerald-600 border-emerald-200' : 'bg-amber-100 text-amber-600 border-amber-200'}`}>
                             {permitScore >= 80 ? 'STRICT' : 'STANDARD'}
                         </span>
                     </div>
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-3 md:gap-4">
                         <input 
                             type="range" 
                             min="0" max="100" step="5"
@@ -183,7 +183,7 @@ const SettingsManager: React.FC = () => {
                             onChange={(e) => setPermitScore(Number(e.target.value))}
                             className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
                         />
-                        <div className="w-16 h-16 bg-white rounded-2xl border-2 border-purple-100 flex items-center justify-center text-xl font-black text-slate-800 shadow-sm group-hover:scale-110 transition-transform">
+                        <div className="w-14 h-14 md:w-16 md:h-16 shrink-0 bg-white rounded-2xl border-2 border-purple-100 flex items-center justify-center text-lg md:text-xl font-black text-slate-800 shadow-sm group-hover:scale-110 transition-transform">
                             {permitScore}%
                         </div>
                     </div>
@@ -191,18 +191,18 @@ const SettingsManager: React.FC = () => {
             </div>
             
             {/* ✅ ส่วนตั้งค่าลิงก์ใหม่ (Help & Support Links) */}
-            <div className="border-t border-slate-100 pt-8 mb-8">
-                <div className="flex items-start gap-4 mb-6">
-                    <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl border border-indigo-100">
+            <div className="border-t border-slate-100 pt-6 md:pt-8 mb-4 md:mb-8">
+                <div className="flex flex-col sm:flex-row items-start gap-3 md:gap-4 mb-6">
+                    <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl border border-indigo-100 shrink-0">
                         <LinkIcon size={24} />
                     </div>
                     <div>
-                        <h3 className="text-lg font-black text-slate-800 uppercase">Support Links <span className="text-sm font-bold text-slate-400 normal-case">| ลิงก์คู่มือและติดต่อ</span></h3>
-                        <p className="text-xs text-slate-400 font-bold mt-1">ตั้งค่าลิงก์ที่แสดงในหน้าเข้าสู่ระบบ (Displayed on Login Page)</p>
+                        <h3 className="text-base md:text-lg font-black text-slate-800 uppercase">Support Links <span className="text-xs md:text-sm font-bold text-slate-400 normal-case">| ลิงก์คู่มือและติดต่อ</span></h3>
+                        <p className="text-[10px] md:text-xs text-slate-400 font-bold mt-1">ตั้งค่าลิงก์ที่แสดงในหน้าเข้าสู่ระบบ (Displayed on Login Page)</p>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                     <div className="space-y-2">
                         <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5 ml-1">
                             <BookOpen size={12} className="text-blue-500" /> User Guide URL (ลิงก์คู่มือใช้งาน)
@@ -212,7 +212,7 @@ const SettingsManager: React.FC = () => {
                             placeholder="เช่น https://yourdomain.com/manual.pdf"
                             value={manualUrl}
                             onChange={(e) => setManualUrl(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold text-sm shadow-inner outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all text-slate-700"
+                            className="w-full bg-slate-50 border border-slate-200 p-3 md:p-4 rounded-2xl font-bold text-xs md:text-sm shadow-inner outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all text-slate-700"
                         />
                         <p className="text-[9px] text-slate-400 font-bold ml-1">เว้นว่างไว้หากไม่ต้องการให้แสดงปุ่มคู่มือ</p>
                     </div>
@@ -226,7 +226,7 @@ const SettingsManager: React.FC = () => {
                             placeholder="เช่น https://line.me/ti/p/@yourid"
                             value={supportUrl}
                             onChange={(e) => setSupportUrl(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold text-sm shadow-inner outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all text-slate-700"
+                            className="w-full bg-slate-50 border border-slate-200 p-3 md:p-4 rounded-2xl font-bold text-xs md:text-sm shadow-inner outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all text-slate-700"
                         />
                         <p className="text-[9px] text-slate-400 font-bold ml-1">เว้นว่างไว้หากไม่ต้องการให้แสดงปุ่มติดต่อ</p>
                     </div>
@@ -235,11 +235,11 @@ const SettingsManager: React.FC = () => {
 
          </div>
          
-         <div className="bg-slate-50 p-6 border-t border-slate-100 flex justify-end">
+         <div className="bg-slate-50 p-4 md:p-6 border-t border-slate-100 flex justify-end">
              <button 
                 onClick={handleSaveConfig} 
                 disabled={saving}
-                className="flex items-center gap-2 px-8 py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-black transition-all shadow-lg active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full md:w-auto flex items-center justify-center gap-2 px-6 md:px-8 py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-black transition-all shadow-lg active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
              >
                 {saving ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
                 Save Changes / บันทึก
@@ -247,19 +247,19 @@ const SettingsManager: React.FC = () => {
          </div>
       </div>
 
-      {/* 📚 SECTION 2: MANUALS & ASSET MANAGEMENT (ของเดิม) */}
-      <div className="bg-white p-6 md:p-10 rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden">
-        <div className="flex items-center gap-4 mb-10">
-          <div className="p-4 bg-slate-100 text-slate-600 rounded-3xl">
+      {/* 📚 SECTION 2: MANUALS & ASSET MANAGEMENT */}
+      <div className="bg-white p-5 md:p-10 rounded-[2rem] md:rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 md:gap-4 mb-6 md:mb-10">
+          <div className="p-3 md:p-4 bg-slate-100 text-slate-600 rounded-[1rem] md:rounded-3xl shrink-0">
             <FileText size={28} strokeWidth={2.5} />
           </div>
           <div>
-            <h3 className="text-xl md:text-2xl font-black text-slate-900 leading-none uppercase tracking-tight">Resource Center <span className="text-sm font-bold text-slate-400 normal-case">| จัดการไฟล์ระบบ</span></h3>
-            <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] mt-1.5">Manage Study Materials (PDF Assets)</p>
+            <h3 className="text-lg md:text-2xl font-black text-slate-900 leading-none uppercase tracking-tight mb-1 md:mb-0">Resource Center <span className="text-xs md:text-sm font-bold text-slate-400 normal-case mt-1 sm:mt-0 block sm:inline">| จัดการไฟล์ระบบ</span></h3>
+            <p className="text-slate-400 text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] mt-1.5">Manage Study Materials (PDF Assets)</p>
           </div>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8">
           <ManualUploadCard 
             title="Induction Manual (ปฐมนิเทศ)"
             type="induction"
@@ -274,14 +274,14 @@ const SettingsManager: React.FC = () => {
           />
         </div>
 
-        <div className="mt-10 p-5 bg-amber-50/50 rounded-3xl border border-amber-100 flex items-start gap-4">
-            <div className="p-2 bg-white rounded-xl shadow-sm text-amber-500">
+        <div className="mt-6 md:mt-10 p-4 md:p-5 bg-amber-50/50 rounded-2xl md:rounded-3xl border border-amber-100 flex flex-col sm:flex-row items-start gap-3 md:gap-4">
+            <div className="p-2 bg-white rounded-xl shadow-sm text-amber-500 shrink-0">
                 <AlertTriangle size={20} />
             </div>
             <div className="space-y-1">
-                <p className="text-xs font-black text-amber-800 uppercase tracking-tight">Deployment Notice</p>
-                <p className="text-[11px] text-amber-700/80 font-bold leading-relaxed">
-                    Uploading a new document will permanently overwrite the existing file.<br/>
+                <p className="text-[10px] md:text-xs font-black text-amber-800 uppercase tracking-tight">Deployment Notice</p>
+                <p className="text-[10px] md:text-[11px] text-amber-700/80 font-bold leading-relaxed">
+                    Uploading a new document will permanently overwrite the existing file.<br className="hidden sm:block"/>
                     การอัปโหลดไฟล์เอกสารใหม่จะทับไฟล์เดิมที่อยู่บนระบบทันที
                 </p>
             </div>
@@ -292,12 +292,12 @@ const SettingsManager: React.FC = () => {
 };
 
 const ManualUploadCard = ({ title, type, isUploading, onUpload }: any) => (
-  <div className="p-8 md:p-10 border-2 border-dashed border-slate-100 bg-slate-50/30 rounded-[2.5rem] flex flex-col items-center text-center group hover:border-blue-400 hover:bg-white transition-all duration-500 cursor-default shadow-sm hover:shadow-xl hover:shadow-blue-500/5">
-    <div className="w-20 h-20 bg-white text-slate-300 rounded-[2rem] mb-6 flex items-center justify-center shadow-sm border border-slate-50 group-hover:bg-blue-600 group-hover:text-white group-hover:scale-110 transition-all duration-500">
-      <FileText size={36} strokeWidth={1.5} />
+  <div className="p-6 md:p-10 border-2 border-dashed border-slate-100 bg-slate-50/30 rounded-[1.5rem] md:rounded-[2.5rem] flex flex-col items-center text-center group hover:border-blue-400 hover:bg-white transition-all duration-500 cursor-default shadow-sm hover:shadow-xl hover:shadow-blue-500/5">
+    <div className="w-16 h-16 md:w-20 md:h-20 bg-white text-slate-300 rounded-[1.5rem] md:rounded-[2rem] mb-4 md:mb-6 flex items-center justify-center shadow-sm border border-slate-50 group-hover:bg-blue-600 group-hover:text-white group-hover:scale-110 transition-all duration-500">
+      <FileText size={32} strokeWidth={1.5} className="md:w-9 md:h-9" />
     </div>
-    <h4 className="font-black text-slate-800 text-lg uppercase tracking-tight mb-1">{title}</h4>
-    <p className="text-[9px] font-black text-slate-400 tracking-[0.2em] uppercase mb-8">Asset Format: Adobe PDF</p>
+    <h4 className="font-black text-slate-800 text-sm md:text-lg uppercase tracking-tight mb-1">{title}</h4>
+    <p className="text-[8px] md:text-[9px] font-black text-slate-400 tracking-[0.2em] uppercase mb-6 md:mb-8">Asset Format: Adobe PDF</p>
     
     <label className="cursor-pointer relative w-full">
       <input 
@@ -307,9 +307,9 @@ const ManualUploadCard = ({ title, type, isUploading, onUpload }: any) => (
         onChange={onUpload} 
         disabled={isUploading} 
       />
-      <div className={`w-full py-4 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-2 transition-all shadow-sm ${isUploading ? 'bg-slate-100 text-slate-400' : 'bg-white border border-slate-200 text-slate-900 hover:bg-slate-900 hover:text-white hover:border-slate-900'}`}>
-        {isUploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-        {isUploading ? 'Deploying Assets...' : 'Replace Artifact (อัปโหลดใหม่)'}
+      <div className={`w-full py-3 md:py-4 rounded-xl md:rounded-2xl font-black text-[9px] md:text-[10px] uppercase tracking-widest md:tracking-[0.2em] flex items-center justify-center gap-2 transition-all shadow-sm ${isUploading ? 'bg-slate-100 text-slate-400' : 'bg-white border border-slate-200 text-slate-900 hover:bg-slate-900 hover:text-white hover:border-slate-900'}`}>
+        {isUploading ? <Loader2 size={14} className="animate-spin md:w-4 md:h-4" /> : <Upload size={14} className="md:w-4 md:h-4" />}
+        {isUploading ? 'Deploying...' : 'Replace Artifact'}
       </div>
     </label>
   </div>
