@@ -6,11 +6,31 @@
 /* 🔥 SAFETYPASS ULTIMATE GLOBAL ANIMATIONS  */
 /* ========================================= */
 
+/* ✅ 1. เพิ่มความสมูทในการเลื่อนหน้าเว็บ (ครอบคลุมทั้ง ขึ้น-ลง และ ซ้าย-ขวา) */
+html {
+  scroll-behavior: smooth;
+}
+
+/* ✅ 2. เปิดระบบแรงเฉื่อย (Momentum Scroll) ให้มือถือไถลื่นๆ ทั้งแนวตั้งและแนวนอน */
+* {
+  -webkit-overflow-scrolling: touch; 
+}
+
 @layer base {
   body {
     @apply antialiased text-slate-900 bg-slate-50;
     font-feature-settings: "cv11", "ss01";
+    
+    /* ป้องกันอาการจอยางยืด (เด้งขอบบน-ล่าง) บนมือถือ */
+    overscroll-behavior-y: none; 
   }
+}
+
+/* ✅ 3. ป้องกันปัญหา "ปัดซ้ายขวาแล้วเบราว์เซอร์เด้งกลับหน้าเดิม" (Swipe to go back interference) */
+.overflow-x-auto, .overflow-y-auto {
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: contain;
+  scroll-behavior: smooth;
 }
 
 /* 🟢 1. TOAST ANIMATIONS (iOS Style) */
@@ -44,7 +64,7 @@
   animation: toast-out 0.25s cubic-bezier(0.06, 0.71, 0.55, 1) forwards;
 }
 
-/* 🟢 2. MODERN SHIMMER EFFECT (ปรับปรุงให้เนียนกว่าเดิม) */
+/* 🟢 2. MODERN SHIMMER EFFECT */
 @keyframes shimmer {
   0% {
     background-position: -200% 0;
@@ -65,7 +85,7 @@
   animation: shimmer 1.5s infinite linear;
 }
 
-/* 🟢 3. SHAKE EFFECT (สำหรับ Error Feedback) */
+/* 🟢 3. SHAKE EFFECT */
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
   25% { transform: translateX(-4px); }
@@ -76,7 +96,7 @@
   animation: shake 0.2s ease-in-out 0s 2;
 }
 
-/* 🟢 4. PULSE FOR STATUS INDICATORS (เตรียมไว้สำหรับ Step 3) */
+/* 🟢 4. PULSE FOR STATUS INDICATORS */
 @keyframes soft-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.8; transform: scale(0.98); }
@@ -86,7 +106,7 @@
   animation: soft-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-/* 🟢 5. GLOW EFFECTS FOR SMART BADGES (สำหรับ Step 3) */
+/* 🟢 5. GLOW EFFECTS FOR SMART BADGES */
 .glow-emerald { shadow-color: #10b981; filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.2)); }
 .glow-amber { shadow-color: #f59e0b; filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.2)); }
 .glow-red { shadow-color: #ef4444; filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.2)); }
