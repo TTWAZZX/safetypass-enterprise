@@ -345,8 +345,8 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
           </div>
         </div>
 
-        {/* ✅ กล่องรีวิวข้อสอบ (แสดงเฉพาะตอนสอบ INDUCTION เท่านั้น!) */}
-        {type === 'INDUCTION' && (
+        {/* ✅ กล่องรีวิวข้อสอบ (แสดงถ้าเป็น INDUCTION หรือถ้าสอบผ่านแล้วเท่านั้น) */}
+        {(type === 'INDUCTION' || passed) && (
           <div className="mb-8 border-t border-slate-100 pt-6 text-left">
              <h3 className="text-xs md:text-sm font-black text-slate-800 uppercase tracking-tight mb-4 flex items-center gap-2">
                <ListChecks size={18} className="text-blue-500" /> Exam Review
