@@ -36,6 +36,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [loading, setLoading] = useState(false);
   const [fetchingUser, setFetchingUser] = useState(false);
   const [dataFoundMsg, setDataFoundMsg] = useState(false); // ✅ State สำหรับโชว์ข้อความดึงข้อมูลสำเร็จ
+  const [dataNotFoundMsg, setDataNotFoundMsg] = useState(false); // ✅ เพิ่ม State สำหรับโชว์ข้อความไม่พบข้อมูล
 
   // Support Links State
   const [manualUrl, setManualUrl] = useState<string>('');
@@ -66,6 +67,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     
     setFetchingUser(true);
     setDataFoundMsg(false);
+    setDataNotFoundMsg(false); // ✅ รีเซ็ตสถานะแจ้งเตือนไม่พบข้อมูลก่อนเริ่มค้นหาใหม่
     try {
       const userData = await api.checkUser(idToCheck);
       if (userData) {
@@ -90,6 +92,10 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         // โชว์ข้อความว่าดึงข้อมูลสำเร็จ 5 วินาที
         setDataFoundMsg(true);
         setTimeout(() => setDataFoundMsg(false), 5000);
+      } else {
+        // ✅ ถ้าหาไม่เจอให้โชว์ข้อความว่าไม่มีข้อมูล 5 วินาที
+        setDataNotFoundMsg(true);
+        setTimeout(() => setDataNotFoundMsg(false), 5000);
       }
     } catch (err) {
       console.error("Error auto-filling user data", err);
@@ -254,22 +260,31 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                         </button>
                     </div>
                     
-                    {/* แจ้งเตือนเมื่อดึงข้อมูลสำเร็จ */}
-                    {dataFoundMsg ? (
-                        <div className="flex items-center gap-1.5 mt-2 ml-1 text-emerald-600 animate-in fade-in slide-in-from-top-1">
-                          <CheckCircle size={12} />
-                          <span className="text-[9px] font-bold uppercase tracking-widest">
-                            พบข้อมูลเดิมในระบบ ดึงข้อมูลสำเร็จ!
-                          </span>
-                        </div>
-                    ) : (
-                        <div className="flex items-center gap-1.5 mt-1.5 ml-1 opacity-80">
-                          <ShieldCheck size={10} className="text-emerald-500" />
-                          <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest leading-none">
-                            Protected by military-grade encryption (pgcrypto)
-                          </span>
-                        </div>
-                    )}
+                    {/* ✅ ส่วนแจ้งเตือนเมื่อดึงข้อมูลสำเร็จ หรือ ไม่พบข้อมูล */}
+                    <div className="min-h-[20px]">
+                      {dataFoundMsg ? (
+                          <div className="flex items-center gap-1.5 mt-2 ml-1 text-emerald-600 animate-in fade-in slide-in-from-top-1">
+                            <CheckCircle size={12} />
+                            <span className="text-[9px] font-bold uppercase tracking-widest">
+                              พบข้อมูลเดิมในระบบ ดึงข้อมูลสำเร็จ!
+                            </span>
+                          </div>
+                      ) : dataNotFoundMsg ? (
+                          <div className="flex items-center gap-1.5 mt-2 ml-1 text-amber-500 animate-in fade-in slide-in-from-top-1">
+                            <AlertCircle size={12} />
+                            <span className="text-[9px] font-bold uppercase tracking-widest">
+                              ไม่พบประวัติ กรุณากรอกข้อมูลเพื่อลงทะเบียนใหม่
+                            </span>
+                          </div>
+                      ) : (
+                          <div className="flex items-center gap-1.5 mt-1.5 ml-1 opacity-80">
+                            <ShieldCheck size={10} className="text-emerald-500" />
+                            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest leading-none">
+                              Protected by military-grade encryption (pgcrypto)
+                            </span>
+                          </div>
+                      )}
+                    </div>
                 </div>
 
                 <div className="col-span-2 space-y-1">
