@@ -242,6 +242,10 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
   /* ================= 📖 READ STEP ================= */
   if (step === 'READ') {
     const pdfUrl = `https://qdodmxrecioltwdryhec.supabase.co/storage/v1/object/public/manuals/${type.toLowerCase()}.pdf`;
+    
+    // ✅ อัปเดต: แปลง URL ด้วย Google Docs Viewer ให้เปิดบนมือถือได้พอดีจอ
+    const googleDocsViewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(pdfUrl)}&embedded=true`;
+
     return (
       <div className="max-w-2xl mx-auto p-4 md:p-6 animate-in slide-in-from-bottom-4 duration-500 text-left select-none">
         <button onClick={onBack} className="flex items-center gap-1.5 text-slate-400 hover:text-blue-600 mb-4 font-black text-[10px] uppercase tracking-widest transition-all">
@@ -252,9 +256,16 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
             <div><h2 className="text-lg font-black text-slate-900 leading-tight">{t('user.manual')}</h2><p className="text-[10px] text-blue-600 font-bold uppercase tracking-widest mt-0.5">{type} Safety Training</p></div>
             <a href={pdfUrl} target="_blank" rel="noopener noreferrer" className="p-2 bg-white text-blue-600 hover:bg-blue-50 rounded-xl border border-slate-200 shadow-sm transition-all"><Maximize2 size={20} /></a>
           </div>
+          
+          {/* ✅ แก้ไข: ใช้ iframe เรียก Google Docs Viewer แทน */}
           <div className="flex-grow bg-slate-200 relative overflow-hidden">
-            <iframe src={`${pdfUrl}#toolbar=0&navpanes=0&view=FitH`} className="w-full h-full border-none absolute inset-0" title="Manual Viewer" />
+            <iframe 
+                src={googleDocsViewerUrl} 
+                className="w-full h-full border-none absolute inset-0" 
+                title="Manual Viewer" 
+            />
           </div>
+
           <div className="p-5 bg-white text-center space-y-4 flex-shrink-0 border-t border-slate-100 z-10">
             <label className="flex items-start gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-100 cursor-pointer active:bg-blue-50 transition-all text-left">
               <input type="checkbox" checked={hasReadManual} onChange={(e) => setHasReadManual(e.target.checked)} className="mt-1 w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 flex-shrink-0" />

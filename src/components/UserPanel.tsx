@@ -654,10 +654,10 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
                 </div>
               </div>
 
-              {/* 2. ส่วนแสดง PDF - ใช้ flex-grow เพื่อให้กินพื้นที่ที่เหลือ */}
-              <div className="flex-grow bg-slate-200 relative">
+              {/* 2. ส่วนแสดง PDF - ใช้ Google Docs Viewer เพื่อให้ Responsive บนมือถือ */}
+              <div className="flex-grow bg-slate-200 relative overflow-hidden">
                 <iframe 
-                    src={`https://qdodmxrecioltwdryhec.supabase.co/storage/v1/object/public/manuals/${viewingManual.toLowerCase()}.pdf#toolbar=0&navpanes=0&view=FitH`} 
+                    src={`https://docs.google.com/viewer?url=${encodeURIComponent(`https://qdodmxrecioltwdryhec.supabase.co/storage/v1/object/public/manuals/${viewingManual.toLowerCase()}.pdf`)}&embedded=true`}
                     className="w-full h-full border-none absolute inset-0" 
                     title="Manual Viewer" 
                 />
