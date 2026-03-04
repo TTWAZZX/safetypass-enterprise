@@ -76,7 +76,7 @@ export const api = {
   register: async (
     nationalId: string,
     name: string,
-    vendorId: string,
+    vendorId: string | null, // เปลี่ยนให้รองรับ null
     age: number,
     nationality: string,
     otherVendorName?: string
@@ -93,21 +93,9 @@ export const api = {
     const email = `${nationalId}@safetypass.com`;
     const password = nationalId; 
 
-    // 1. ตรวจสอบข้อมูลในตาราง users ก่อน (เผื่อแอดมิน Import ไว้)
-    // ✅ แก้ไข: ดึงข้อมูลมาทั้งหมด (*) เพื่อเตรียมเก็บ "ใบเซอร์" เอาไว้
-    const { data: existingUserInDB } = await supabase
-      .from('users')
-      .select('*') 
-      .eq('national_id_hash', nationalIdHash)
-      .maybeSingle();
-
-    if (existingUserInDB && existingUserInDB.is_active === false) {
-      throw new Error('บัญชีของคุณถูกระงับสิทธิ์ชั่วคราว โปรดติดต่อเจ้าหน้าที่ Safety');
-    }
-
     let authUser = null;
 
-    // 2. พยายาม SignUp (สร้างบัญชี Auth)
+    // 1. พยายาม SignUp (สร้างบัญชี Auth)
     const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
@@ -117,30 +105,9 @@ export const api = {
     if (signUpError) {
       // ดักจับกรณีเคยลงทะเบียน Auth ไว้แล้ว (Error 422)
       if (signUpError.status === 422 || signUpError.message.includes('already registered') || signUpError.message.includes('User already registered')) {
-        
-        // ลอง Login แอบๆ เพื่อดึง ID ของระบบ Auth มาตรวจสอบ
-        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-          email, password
-        });
-        
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
         if (signInError) throw new Error('already registered'); 
         authUser = signInData.user;
-
-        // เช็คว่าในตารางข้อมูล (public.users) สมบูรณ์และเชื่อมกับ Auth ตัวนี้แล้วหรือยัง?
-        const { data: checkLinkedUser } = await supabase.from('users').select('id').eq('id', authUser.id).maybeSingle();
-        
-        if (checkLinkedUser) {
-          // ✅ กรณีที่ 1: บัญชีสมบูรณ์แล้ว (มีทั้ง Auth และ User) แปลว่าผู้ใช้กด "สมัครซ้ำ"
-          // ล้าง Session ทิ้งทันที เพื่อไม่ให้ระบบแอบล็อกอิน
-          await supabase.auth.signOut();
-          // โยน Error ไปให้หน้าเว็บสลับไปแท็บ Login และโชว์ป้ายสีฟ้า
-          throw new Error('already registered');
-        } else {
-          // ✅ กรณีที่ 2: ข้อมูลไม่สมบูรณ์ (เช่น แอดมินเพิ่งลบแล้วเพิ่มชื่อเข้าไปใหม่)
-          // ให้ระบบข้ามการแจ้ง Error แล้วไหลไปทำ Upsert ด้านล่างเพื่อ "ซ่อมแซมเชื่อมบัญชี" ให้ผู้ใช้เข้าใช้งานได้ทันที!
-          console.log("Repairing and linking account...");
-        }
-
       } else {
         throw signUpError;
       }
@@ -150,7 +117,43 @@ export const api = {
 
     if (!authUser) throw new Error('ไม่สามารถเชื่อมต่อระบบยืนยันตัวตนได้');
 
-    // 3. เตรียม Payload สำหรับการ Upsert
+    // 2. 🔍 ค้นหาให้ครอบคลุม! หาจาก ID แท้, ID แอดมิน หรือ Hash (ป้องกันแอดมินพิมพ์ตกหล่น)
+    const { data: existingUsers, error: fetchError } = await supabase
+      .from('users')
+      .select('*')
+      .or(`id.eq.${authUser.id},national_id.eq.${nationalId},national_id_hash.eq.${nationalIdHash}`);
+
+    if (fetchError) throw new Error('ตรวจสอบข้อมูลเดิมไม่สำเร็จ');
+
+    // แยกแยะว่าอันไหนคือบัญชีจริง(Linked) และอันไหนคือบัญชีที่แอดมินสร้างรอไว้(Dummy)
+    const linkedUser = existingUsers?.find(u => u.id === authUser.id);
+    const dummyUser = existingUsers?.find(u => u.id !== authUser.id && (u.national_id === nationalId || u.national_id_hash === nationalIdHash));
+
+    // ✅ กรณีที่ 1: มีบัญชีจริงอยู่แล้ว (แปลว่าพนักงานคนนี้เคยกดลงทะเบียนสำเร็จไปแล้ว)
+    if (linkedUser) {
+        if (linkedUser.is_active === false) throw new Error('บัญชีของคุณถูกระงับสิทธิ์ชั่วคราว');
+        
+        // ถ้าระบบเจอบัญชีที่แอดมินสร้างซ้อนทับขึ้นมา (เกิดจากแอดมินไปกดเพิ่มชื่อใหม่)
+        // ระบบจะทำการ "สูบ" ใบเซอร์มาใส่อันจริง และลบอันปลอมทิ้งให้เลย!
+        if (dummyUser) {
+            await supabase.from('exam_history').update({ user_id: linkedUser.id }).eq('user_id', dummyUser.id);
+            await supabase.from('work_permits').update({ user_id: linkedUser.id }).eq('user_id', dummyUser.id);
+            if (dummyUser.induction_expiry) {
+                await supabase.from('users').update({ induction_expiry: dummyUser.induction_expiry }).eq('id', linkedUser.id);
+            }
+            await supabase.from('users').delete().eq('id', dummyUser.id);
+        }
+
+        // ล้างเซสชันแล้วโยน Error ให้หน้าเว็บเด้งไปหน้า Login โชว์แถบสีฟ้า
+        await supabase.auth.signOut();
+        throw new Error('already registered');
+    }
+
+    // ✅ กรณีที่ 2: เพิ่งลงทะเบียนครั้งแรก หรือ แอดมินพิมพ์ชื่อรอไว้ให้
+    if (dummyUser && dummyUser.is_active === false) {
+      throw new Error('บัญชีของคุณถูกระงับสิทธิ์ชั่วคราว プロดติดต่อเจ้าหน้าที่ Safety');
+    }
+
     const payload: any = {
       id: authUser.id, 
       name,
@@ -158,34 +161,31 @@ export const api = {
       national_id_hash: nationalIdHash,
       age,
       nationality,
-      vendor_id: finalVendorId,
-      role: existingUserInDB?.role || 'USER', // ✅ รักษาสิทธิ์เดิมเอาไว้
+      vendor_id: finalVendorId === 'OTHER' ? null : finalVendorId,
+      role: dummyUser?.role || 'USER',
       pdpa_agreed: true,
       pdpa_agreed_at: new Date().toISOString(),
       is_active: true,
-      // ✅ จุดสำคัญที่สุด: ดึงข้อมูลใบเซอร์ (induction_expiry) จากที่แอดมินเพิ่มไว้ มาใส่ในบัญชีใหม่ด้วย!
-      induction_expiry: existingUserInDB?.induction_expiry || null
+      induction_expiry: dummyUser?.induction_expiry || null
     };
 
-    // 4. จัดการข้อมูลซ้ำซ้อน
-    if (existingUserInDB && existingUserInDB.id !== authUser.id) {
-      // ✅ ก่อนจะลบ ID เก่าทิ้ง ต้องย้ายประวัติการสอบต่างๆ มาผูกกับ ID ใหม่ก่อน! (ป้องกันประวัติหายเกลี้ยง)
-      await supabase.from('exam_history').update({ user_id: authUser.id }).eq('user_id', existingUserInDB.id);
-      await supabase.from('work_permits').update({ user_id: authUser.id }).eq('user_id', existingUserInDB.id);
-      await supabase.from('exam_logs').update({ user_id: authUser.id }).eq('user_id', existingUserInDB.id);
-
-      // ลบข้อมูลเก่าที่แอดมิน Import เพื่อเตรียมใส่ข้อมูลใหม่ที่ผูกกับ Auth ID
-      await supabase.from('users').delete().eq('id', existingUserInDB.id);
+    // ถ้ามีบัญชีที่แอดมินสร้างรอไว้ ให้โอนประวัติทั้งหมดมาที่ไอดีใหม่ แล้วลบของแอดมินทิ้ง
+    if (dummyUser) {
+      await supabase.from('exam_history').update({ user_id: authUser.id }).eq('user_id', dummyUser.id);
+      await supabase.from('work_permits').update({ user_id: authUser.id }).eq('user_id', dummyUser.id);
+      await supabase.from('exam_logs').update({ user_id: authUser.id }).eq('user_id', dummyUser.id);
+      await supabase.from('users').delete().eq('id', dummyUser.id);
     }
 
+    // สร้างข้อมูลลงตาราง (ใช้ insert แทน upsert เพราะเคลียร์ทางไว้หมดแล้ว)
     const { data: newUser, error: dbError } = await supabase
       .from('users')
-      .upsert(payload, { onConflict: 'national_id_hash' }) 
+      .insert([payload]) 
       .select('*, vendors(*)')
       .single();
 
     if (dbError) {
-      console.error("Database Upsert Error:", dbError);
+      console.error("Database Insert Error:", dbError);
       throw new Error('ลงทะเบียนไม่สำเร็จ: ' + dbError.message);
     }
     
