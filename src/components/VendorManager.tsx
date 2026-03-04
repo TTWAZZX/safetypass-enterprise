@@ -82,7 +82,8 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
   const { showToast } = useToastContext();
   
   const [activeTab, setActiveTab] = useState<'USERS' | 'VENDORS' | 'LOGS'>(initialSearch ? 'USERS' : 'VENDORS');
-  const [searchQuery, setSearchQuery] = useState(initialSearch || ''); 
+  const [searchQuery, setSearchQuery] = useState(initialSearch || '');
+  const [selectedVendorFilter, setSelectedVendorFilter] = useState(''); // ✅ State สำหรับตัวกรองบริษัท
   
   const [loading, setLoading] = useState(true);
   const [dataList, setDataList] = useState<any[]>([]);
@@ -107,10 +108,10 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
   const userFileInputRef = useRef<HTMLInputElement>(null);
   const vendorFileInputRef = useRef<HTMLInputElement>(null);
 
-  // ✅ รีเซ็ตหน้ากลับไปที่ 1 เสมอเวลาค้นหาหรือเปลี่ยนหน้าแท็บ
+  // ✅ รีเซ็ตหน้ากลับไปที่ 1 เสมอเวลาค้นหา เปลี่ยนแท็บ หรือเปลี่ยนตัวกรอง
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeTab, searchQuery, itemsPerPage]);
+  }, [activeTab, searchQuery, selectedVendorFilter, itemsPerPage]);
 
   const logAction = async (action: string, target: string, details: string = '') => {
     try {
@@ -417,11 +418,20 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     if (error) showToast(error.message, 'error'); else { showToast('Reset Complete', 'success'); logAction('RESET_TRAINING', name); loadData(); }
   };
 
-  // ✅ ระบบค้นหาและเตรียมข้อมูลแบ่งหน้า (Pagination Logic)
-  const filtered = activeTab === 'LOGS' ? logs : dataList.filter(item => 
-    (item.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
-    (item.national_id || '').includes(searchQuery)
-  );
+  // ✅ ระบบค้นหา + ตัวกรองบริษัท
+  const filtered = activeTab === 'LOGS' ? logs : dataList.filter(item => {
+    const matchesSearch = (item.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          (item.national_id || '').includes(searchQuery);
+    
+    // ถ้าอยู่หน้า USERS และมีการเลือกตัวกรองบริษัท
+    if (activeTab === 'USERS' && selectedVendorFilter) {
+      if (selectedVendorFilter === 'EXTERNAL') {
+        return matchesSearch && !item.vendor_id; // หาคนไม่มีสังกัด
+      }
+      return matchesSearch && item.vendor_id === selectedVendorFilter; // หาคนที่สังกัดตรงกัน
+    }
+    return matchesSearch;
+  });
 
   const totalItems = filtered.length;
   const totalPages = itemsPerPage === -1 ? 1 : Math.ceil(totalItems / itemsPerPage);
@@ -492,9 +502,9 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
           </div>
         </div>
         <div className="flex w-full lg:w-auto bg-slate-100 p-1 rounded-2xl border border-slate-200 shadow-inner overflow-x-auto no-scrollbar">
-          <TabButton active={activeTab === 'VENDORS'} onClick={() => {setActiveTab('VENDORS'); setSearchQuery('');}} icon={<Building2 size={14}/>} label="Vendors" />
-          <TabButton active={activeTab === 'USERS'} onClick={() => {setActiveTab('USERS'); setSearchQuery('');}} icon={<Users size={14}/>} label="Personnel" />
-          <TabButton active={activeTab === 'LOGS'} onClick={() => {setActiveTab('LOGS'); setSearchQuery('');}} icon={<History size={14}/>} label="Audit" />
+          <TabButton active={activeTab === 'VENDORS'} onClick={() => {setActiveTab('VENDORS'); setSearchQuery(''); setSelectedVendorFilter('');}} icon={<Building2 size={14}/>} label="Vendors" />
+          <TabButton active={activeTab === 'USERS'} onClick={() => {setActiveTab('USERS'); setSearchQuery(''); setSelectedVendorFilter('');}} icon={<Users size={14}/>} label="Personnel" />
+          <TabButton active={activeTab === 'LOGS'} onClick={() => {setActiveTab('LOGS'); setSearchQuery(''); setSelectedVendorFilter('');}} icon={<History size={14}/>} label="Audit" />
         </div>
       </div>
 
@@ -504,9 +514,30 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
         {/* Toolbar */}
         <div className="p-4 md:p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between gap-4 bg-slate-50/50">
           {activeTab !== 'LOGS' ? (
-            <div className="relative flex-1 group w-full">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-              <input className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all shadow-sm" placeholder={`Search ${activeTab.toLowerCase()}...`} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+            <div className="flex flex-col md:flex-row gap-3 flex-1 w-full">
+              {/* ช่องค้นหา */}
+              <div className="relative flex-1 group w-full">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+                <input className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all shadow-sm" placeholder={`Search ${activeTab.toLowerCase()}...`} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+              </div>
+              
+              {/* ✅ เพิ่มตัวกรองบริษัท (แสดงเฉพาะแท็บ USERS) */}
+              {activeTab === 'USERS' && (
+                <div className="relative w-full md:w-64">
+                  <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                  <select 
+                    className="w-full pl-10 pr-8 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-[11px] text-slate-600 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all shadow-sm appearance-none cursor-pointer truncate"
+                    value={selectedVendorFilter}
+                    onChange={(e) => setSelectedVendorFilter(e.target.value)}
+                  >
+                    <option value="">🏢 ทุกบริษัท (All Vendors)</option>
+                    {allVendors.map(v => (
+                      <option key={v.id} value={v.id}>{v.name}</option>
+                    ))}
+                    <option value="EXTERNAL">⚠️ ไม่ระบุสังกัด (EXTERNAL)</option>
+                  </select>
+                </div>
+              )}
             </div>
           ) : <div className="text-slate-400 font-black text-[10px] uppercase px-2 flex items-center gap-2 w-full"><ShieldCheck size={14} /> System Access History</div>}
           

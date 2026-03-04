@@ -37,6 +37,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [fetchingUser, setFetchingUser] = useState(false);
   const [dataFoundMsg, setDataFoundMsg] = useState(false); // ✅ State สำหรับโชว์ข้อความดึงข้อมูลสำเร็จ
   const [dataNotFoundMsg, setDataNotFoundMsg] = useState(false); // ✅ เพิ่ม State สำหรับโชว์ข้อความไม่พบข้อมูล
+  const [infoMsg, setInfoMsg] = useState(''); // ✅ State สำหรับแบนเนอร์สีฟ้า
 
   // Support Links State
   const [manualUrl, setManualUrl] = useState<string>('');
@@ -132,6 +133,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     e.preventDefault();
     setLoading(true);
     setError("");
+    setInfoMsg(""); // เคลียร์ข้อความเก่า
     try {
       const user = await api.register(
         regId, 
@@ -145,16 +147,15 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     } catch (err: any) {
       const errorMsg = err.message || '';
       
-      // ✅ ดักจับ Error 422 กรณีเคยลงทะเบียนสร้างบัญชีไปแล้ว ให้เด้งกลับไปหน้า Login 
-      if (errorMsg.toLowerCase().includes('already registered') || errorMsg.toLowerCase().includes('already exists')) {
-         setError('เลขบัตรประชาชนนี้เคยลงทะเบียนไว้แล้ว ระบบกำลังสลับไปยังหน้าเข้าสู่ระบบ...');
+      // ✅ ดักจับ Error: สลับหน้าทันที และโชว์แบนเนอร์สีฟ้า
+      if (errorMsg.toLowerCase().includes('already registered') || errorMsg.toLowerCase().includes('already exists') || errorMsg.includes('User already registered')) {
          
-         // สลับไปหน้า Login อัตโนมัติพร้อมกรอกเลขบัตรให้
-         setLoginId(regId);
-         setTimeout(() => {
-             setMode('LOGIN');
-             setError('');
-         }, 3000);
+         setLoginId(regId); // กรอกเลขให้
+         setMode('LOGIN'); // สลับหน้า
+         setError('');
+         
+         setInfoMsg('พบว่าคุณมีบัญชีในระบบแล้ว! กรุณากด Login เพื่อเข้าใช้งาน');
+         setTimeout(() => setInfoMsg(''), 6000); // โชว์ 6 วินาทีแล้วหายไป
       } else {
          setError('Registration failed: ' + errorMsg);
       }
@@ -200,6 +201,15 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         {/* LOGIN FORM */}
         {mode === 'LOGIN' && (
           <form onSubmit={handleLogin} className="space-y-4 relative z-10">
+            
+            {/* ✅ แบนเนอร์แจ้งเตือน กรณีเด้งมาจากหน้าลงทะเบียน */}
+            {infoMsg && (
+                <div className="bg-blue-50 border border-blue-200 text-blue-700 p-3 rounded-2xl text-[10px] sm:text-xs font-bold flex items-start gap-2 animate-in slide-in-from-top-2 shadow-sm">
+                    <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                    <span className="leading-relaxed">{infoMsg}</span>
+                </div>
+            )}
+
             <div className="space-y-1.5 text-left">
               <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('auth.national_id')}</label>
               <input 
@@ -217,6 +227,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 </span>
               </div>
             </div>
+            
             <button disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-2xl shadow-lg shadow-blue-100 transition-all flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95 text-xs uppercase tracking-widest">
                 {loading ? <Loader2 size={18} className="animate-spin" /> : <>Login <ChevronRight size={16} /></>}
             </button>

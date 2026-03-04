@@ -94,9 +94,10 @@ export const api = {
     const password = nationalId; 
 
     // 1. ตรวจสอบข้อมูลในตาราง users ก่อน (เผื่อแอดมิน Import ไว้)
+    // ✅ แก้ไข: ดึงข้อมูลมาทั้งหมด (*) เพื่อเตรียมเก็บ "ใบเซอร์" เอาไว้
     const { data: existingUserInDB } = await supabase
       .from('users')
-      .select('id, is_active')
+      .select('*') 
       .eq('national_id_hash', nationalIdHash)
       .maybeSingle();
 
@@ -114,7 +115,6 @@ export const api = {
     });
 
     if (signUpError) {
-      // กรณีที่ 422: เคยลงทะเบียน Auth ไปแล้ว ให้ดักเพื่อเปลี่ยนเป็นการ SignIn
       if (signUpError.status === 422 || signUpError.message.includes('already registered')) {
         const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
           email,
@@ -133,22 +133,28 @@ export const api = {
 
     // 3. เตรียม Payload สำหรับการ Upsert
     const payload: any = {
-      id: authUser.id, // 🌟 สำคัญ: บังคับใช้ ID จากระบบ Auth เพื่อให้ Login ได้
+      id: authUser.id, 
       name,
       national_id: nationalId,
       national_id_hash: nationalIdHash,
       age,
       nationality,
       vendor_id: finalVendorId,
-      role: 'USER',
+      role: existingUserInDB?.role || 'USER', // ✅ รักษาสิทธิ์เดิมเอาไว้
       pdpa_agreed: true,
       pdpa_agreed_at: new Date().toISOString(),
-      is_active: true
+      is_active: true,
+      // ✅ จุดสำคัญที่สุด: ดึงข้อมูลใบเซอร์ (induction_expiry) จากที่แอดมินเพิ่มไว้ มาใส่ในบัญชีใหม่ด้วย!
+      induction_expiry: existingUserInDB?.induction_expiry || null
     };
 
-    // 4. ทำการ Upsert (ถ้ามีข้อมูลเก่าจากการ Import ระบบจะลบแถวเก่าที่มี national_id_hash ตรงกัน แล้วแทนที่ด้วยแถวใหม่ที่ ID ตรงกับ Auth)
-    // แต่เนื่องจาก users_pkey (id) จะชน เราจึงต้องลบแถวเก่าทิ้งก่อนถ้า ID ไม่ตรงกัน
+    // 4. จัดการข้อมูลซ้ำซ้อน
     if (existingUserInDB && existingUserInDB.id !== authUser.id) {
+      // ✅ ก่อนจะลบ ID เก่าทิ้ง ต้องย้ายประวัติการสอบต่างๆ มาผูกกับ ID ใหม่ก่อน! (ป้องกันประวัติหายเกลี้ยง)
+      await supabase.from('exam_history').update({ user_id: authUser.id }).eq('user_id', existingUserInDB.id);
+      await supabase.from('work_permits').update({ user_id: authUser.id }).eq('user_id', existingUserInDB.id);
+      await supabase.from('exam_logs').update({ user_id: authUser.id }).eq('user_id', existingUserInDB.id);
+
       // ลบข้อมูลเก่าที่แอดมิน Import เพื่อเตรียมใส่ข้อมูลใหม่ที่ผูกกับ Auth ID
       await supabase.from('users').delete().eq('id', existingUserInDB.id);
     }
