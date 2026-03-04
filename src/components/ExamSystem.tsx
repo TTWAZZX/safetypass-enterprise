@@ -18,7 +18,7 @@ import {
   Check,
   Award,
   BadgeCheck,
-  ListChecks // ✅ เพิ่มไอคอนใหม่สำหรับหน้ารีวิวข้อสอบ
+  ListChecks 
 } from 'lucide-react';
 
 interface ExamSystemProps {
@@ -45,27 +45,20 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
   const [loading, setLoading] = useState(false);
   const [hasReadManual, setHasReadManual] = useState(false);
   
-  // ✅ เก็บข้อมูล User ที่อัปเดตแล้วไว้ส่งกลับ
   const [updatedUserData, setUpdatedUserData] = useState<User | null>(null);
-
-  // ✅ State สำหรับเก็บผลลัพธ์รายข้อ (เพื่อเอาไปโชว์ตอนสอบเสร็จ)
   const [detailedResults, setDetailedResults] = useState<{question: Question, userAns: any, isCorrect: boolean}[]>([]);
 
-  // --- Pagination States ---
   const [currentPage, setCurrentPage] = useState(0);
   const questionsPerPage = 5;
 
-  // 🔑 คีย์สำหรับบันทึก Local Storage
   const STORAGE_KEY = `exam_progress_${user.id}_${type}`;
 
-  // 1. Auto-Scroll to top
   useEffect(() => {
     if (step === 'EXAM') {
       window.scrollTo({ top: 0, behavior: 'instant' });
     }
   }, [currentPage, step]);
 
-  // 2. Anti-Cheating System
   useEffect(() => {
     const handleContextMenu = (e: MouseEvent) => e.preventDefault();
     const handleCopyPaste = (e: ClipboardEvent) => {
@@ -93,7 +86,6 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
     };
   }, []);
 
-  // 3. Shuffle Logic
   const shuffleArray = <T,>(array: T[]): T[] => {
     const shuffled = [...array];
     for (let i = shuffled.length - 1; i > 0; i--) {
@@ -122,7 +114,6 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
     setQuestions(prepared);
   };
 
-  // 4. Hydration (Load from Local Storage)
   useEffect(() => {
     const loadState = async () => {
       const savedState = localStorage.getItem(STORAGE_KEY);
@@ -151,7 +142,6 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
     loadState();
   }, [type, user.id]);
 
-  // 5. Auto-Save แบบ Real-time
   useEffect(() => {
     if (questions.length === 0 || step === 'RESULT') return;
     const stateToSave = {
@@ -166,7 +156,6 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
     localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToSave));
   }, [questions, answers, step, permitNo, hasReadManual, currentPage, STORAGE_KEY]);
 
-  // ✅ ฟังก์ชันช่วยแปลงคำตอบของผู้ใช้เป็นข้อความเพื่อแสดงในหน้ารีวิว
   const getUserAnswerText = (q: Question, userAns: any) => {
     if (userAns === undefined || userAns === null) return "ไม่ได้ตอบคำถาม (No Answer)";
     if (q.pattern === QuestionPattern.SHORT_ANSWER || q.pattern === 'short_answer') return userAns;
@@ -176,7 +165,6 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
     return selectedChoice ? (language === 'th' ? selectedChoice.text_th : selectedChoice.text_en) : "-";
   };
 
-  // 6. Submit & Grading Logic
   const handleSubmit = async () => {
     if (loading) return;
     setLoading(true);
@@ -185,7 +173,6 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
       let correctCount = 0;
       const details: {question: Question, userAns: any, isCorrect: boolean}[] = [];
       
-      // วนลูปตรวจทีละข้อ พร้อมเก็บรายละเอียด
       questions.forEach((q) => {
         const userAns = answers[q.id];
         let isCorrect = false;
@@ -219,7 +206,6 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
 
         if (isCorrect) correctCount++;
         
-        // บันทึกผลรายข้อ
         details.push({
             question: q,
             userAns: userAns,
@@ -227,15 +213,13 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
         });
       });
 
-      // คำนวณผล (เกณฑ์ 80%)
       const calculatedPassed = (correctCount / questions.length) * 100 >= 80;
 
-      // บันทึกลงฐานข้อมูล
       await api.submitExamWithAnswers(type, answers, permitNo);
 
       setScore(correctCount);
       setPassed(calculatedPassed); 
-      setDetailedResults(details); // ✅ เซฟผลรีวิวรายข้อลง State
+      setDetailedResults(details); 
       
       if (type === 'WORK_PERMIT') {
         try {
@@ -327,9 +311,9 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
     );
   }
 
-  /* ================= 📊 RESULT STEP (แจ้งคะแนนและรีวิวรายข้อ) ================= */
+  /* ================= 📊 RESULT STEP ================= */
   if (step === 'RESULT') {
-    const requiredScore = Math.ceil(questions.length * 0.8); // ✅ คำนวณเกณฑ์ขั้นต่ำ 80%
+    const requiredScore = Math.ceil(questions.length * 0.8);
 
     return (
       <div className="max-w-md mx-auto text-center p-6 md:p-8 bg-white rounded-[2.5rem] shadow-xl border border-slate-100 mt-6 md:mt-10 animate-in zoom-in text-left select-none pb-8">
@@ -354,7 +338,6 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
           <div className="text-5xl md:text-6xl font-black text-slate-800 tracking-tighter flex items-center justify-center gap-2">
              {score} <span className="text-lg md:text-xl text-slate-300 font-bold">/ {questions.length}</span>
           </div>
-          {/* ✅ แจ้งเกณฑ์ขั้นต่ำ */}
           <div className="mt-3 inline-block bg-white px-3 py-1.5 rounded-lg border border-slate-200">
              <p className="text-[9px] md:text-[10px] text-slate-500 font-bold uppercase tracking-widest">
                 Passing Score: <span className="text-blue-600">{requiredScore}</span> (80%)
@@ -362,33 +345,35 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
           </div>
         </div>
 
-        {/* ✅ กล่องรีวิวข้อสอบ (Exam Review) */}
-        <div className="mb-8 border-t border-slate-100 pt-6 text-left">
-           <h3 className="text-xs md:text-sm font-black text-slate-800 uppercase tracking-tight mb-4 flex items-center gap-2">
-             <ListChecks size={18} className="text-blue-500" /> Exam Review
-           </h3>
-           
-           <div className="max-h-[300px] overflow-y-auto space-y-3 pr-1 md:pr-2 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
-              {detailedResults.map((res, i) => (
-                <div key={i} className={`p-4 rounded-2xl border transition-colors ${res.isCorrect ? 'bg-emerald-50/50 border-emerald-100' : 'bg-red-50/50 border-red-100'}`}>
-                   <div className="flex gap-3 items-start">
-                      <div className="mt-0.5 shrink-0">
-                         {res.isCorrect ? <CheckCircle2 className="text-emerald-500" size={18} /> : <XCircle className="text-red-500" size={18} />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                         <p className="text-[11px] md:text-xs font-bold text-slate-700 leading-relaxed mb-2">
-                            <span className="text-slate-400 mr-1">Q{i+1}.</span>
-                            {language === 'th' ? res.question.content_th : res.question.content_en}
-                         </p>
-                         <div className={`text-[9px] md:text-[10px] font-black uppercase tracking-wider px-2 py-1.5 rounded-lg inline-block ${res.isCorrect ? 'bg-emerald-100/50 text-emerald-700' : 'bg-red-100/50 text-red-700'}`}>
-                            Your Answer: <span className="font-bold opacity-90">{getUserAnswerText(res.question, res.userAns)}</span>
-                         </div>
-                      </div>
-                   </div>
-                </div>
-              ))}
-           </div>
-        </div>
+        {/* ✅ กล่องรีวิวข้อสอบ (แสดงเฉพาะตอนสอบ INDUCTION เท่านั้น!) */}
+        {type === 'INDUCTION' && (
+          <div className="mb-8 border-t border-slate-100 pt-6 text-left">
+             <h3 className="text-xs md:text-sm font-black text-slate-800 uppercase tracking-tight mb-4 flex items-center gap-2">
+               <ListChecks size={18} className="text-blue-500" /> Exam Review
+             </h3>
+             
+             <div className="max-h-[300px] overflow-y-auto space-y-3 pr-1 md:pr-2 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+                {detailedResults.map((res, i) => (
+                  <div key={i} className={`p-4 rounded-2xl border transition-colors ${res.isCorrect ? 'bg-emerald-50/50 border-emerald-100' : 'bg-red-50/50 border-red-100'}`}>
+                     <div className="flex gap-3 items-start">
+                        <div className="mt-0.5 shrink-0">
+                           {res.isCorrect ? <CheckCircle2 className="text-emerald-500" size={18} /> : <XCircle className="text-red-500" size={18} />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                           <p className="text-[11px] md:text-xs font-bold text-slate-700 leading-relaxed mb-2">
+                              <span className="text-slate-400 mr-1">Q{i+1}.</span>
+                              {language === 'th' ? res.question.content_th : res.question.content_en}
+                           </p>
+                           <div className={`text-[9px] md:text-[10px] font-black uppercase tracking-wider px-2 py-1.5 rounded-lg inline-block ${res.isCorrect ? 'bg-emerald-100/50 text-emerald-700' : 'bg-red-100/50 text-red-700'}`}>
+                              Your Answer: <span className="font-bold opacity-90">{getUserAnswerText(res.question, res.userAns)}</span>
+                           </div>
+                        </div>
+                     </div>
+                  </div>
+                ))}
+             </div>
+          </div>
+        )}
 
         {/* Action Button */}
         {passed ? (
@@ -402,7 +387,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
             <button 
                 onClick={async () => { 
                   localStorage.removeItem(STORAGE_KEY);
-                  setDetailedResults([]); // เคลียร์ผลการรีวิว
+                  setDetailedResults([]); 
                   setStep('READ'); 
                   setCurrentPage(0); 
                   setAnswers({}); 
