@@ -45,6 +45,9 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
   const [loading, setLoading] = useState(false);
   const [hasReadManual, setHasReadManual] = useState(false);
   
+  // ✅ เพิ่ม State สำหรับเกณฑ์คะแนนผ่าน (ดึงจากฐานข้อมูล)
+  const [passThreshold, setPassThreshold] = useState<number>(80); 
+  
   const [updatedUserData, setUpdatedUserData] = useState<User | null>(null);
   const [detailedResults, setDetailedResults] = useState<{question: Question, userAns: any, isCorrect: boolean}[]>([]);
 
@@ -53,12 +56,14 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
 
   const STORAGE_KEY = `exam_progress_${user.id}_${type}`;
 
+  // 1. Auto-Scroll to top
   useEffect(() => {
     if (step === 'EXAM') {
       window.scrollTo({ top: 0, behavior: 'instant' });
     }
   }, [currentPage, step]);
 
+  // 2. Anti-Cheating System
   useEffect(() => {
     const handleContextMenu = (e: MouseEvent) => e.preventDefault();
     const handleCopyPaste = (e: ClipboardEvent) => {
@@ -86,6 +91,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
     };
   }, []);
 
+  // 3. Shuffle Logic
   const shuffleArray = <T,>(array: T[]): T[] => {
     const shuffled = [...array];
     for (let i = shuffled.length - 1; i > 0; i--) {
@@ -114,8 +120,21 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
     setQuestions(prepared);
   };
 
+  // ✅ 4. Hydration & Load Config (ดึงเกณฑ์คะแนนผ่านจากหน้า Admin)
   useEffect(() => {
     const loadState = async () => {
+      // --- ดึงเกณฑ์คะแนนผ่านจาก Database ก่อน ---
+      try {
+        const config = await api.getSystemSettings();
+        const configKey = type === 'INDUCTION' ? 'PASSING_SCORE_INDUCTION' : 'PASSING_SCORE_WORK_PERMIT';
+        if (config[configKey]) {
+          setPassThreshold(Number(config[configKey]));
+        }
+      } catch (err) {
+        console.error('Failed to load pass threshold, using default 80%', err);
+      }
+
+      // --- จากนั้นค่อยโหลด State ข้อสอบเดิม (ถ้ามี) ---
       const savedState = localStorage.getItem(STORAGE_KEY);
       if (savedState) {
         try {
@@ -142,6 +161,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
     loadState();
   }, [type, user.id]);
 
+  // 5. Auto-Save แบบ Real-time
   useEffect(() => {
     if (questions.length === 0 || step === 'RESULT') return;
     const stateToSave = {
@@ -165,6 +185,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
     return selectedChoice ? (language === 'th' ? selectedChoice.text_th : selectedChoice.text_en) : "-";
   };
 
+  // 6. Submit & Grading Logic
   const handleSubmit = async () => {
     if (loading) return;
     setLoading(true);
@@ -213,7 +234,8 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
         });
       });
 
-      const calculatedPassed = (correctCount / questions.length) * 100 >= 80;
+      // ✅ แก้ไข: ใช้เกณฑ์คะแนนผ่านแบบ Dynamic (ดึงค่ามาจากหน้า Admin)
+      const calculatedPassed = (correctCount / questions.length) * 100 >= passThreshold;
 
       await api.submitExamWithAnswers(type, answers, permitNo);
 
@@ -313,7 +335,8 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
 
   /* ================= 📊 RESULT STEP ================= */
   if (step === 'RESULT') {
-    const requiredScore = Math.ceil(questions.length * 0.8);
+    // ✅ แก้ไข: ใช้เกณฑ์คะแนนผ่านแบบ Dynamic (ดึงค่ามาจากหน้า Admin)
+    const requiredScore = Math.ceil(questions.length * (passThreshold / 100));
 
     return (
       <div className="max-w-md mx-auto text-center p-6 md:p-8 bg-white rounded-[2.5rem] shadow-xl border border-slate-100 mt-6 md:mt-10 animate-in zoom-in text-left select-none pb-8">
@@ -340,13 +363,13 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
           </div>
           <div className="mt-3 inline-block bg-white px-3 py-1.5 rounded-lg border border-slate-200">
              <p className="text-[9px] md:text-[10px] text-slate-500 font-bold uppercase tracking-widest">
-                Passing Score: <span className="text-blue-600">{requiredScore}</span> (80%)
+                Passing Score: <span className="text-blue-600">{requiredScore}</span> ({passThreshold}%)
              </p>
           </div>
         </div>
 
-        {/* ✅ กล่องรีวิวข้อสอบ (แสดงถ้าเป็น INDUCTION หรือถ้าสอบผ่านแล้วเท่านั้น) */}
-        {(type === 'INDUCTION' || passed) && (
+        {/* ✅ กล่องรีวิวข้อสอบ (แสดงเฉพาะตอนสอบ INDUCTION เท่านั้น!) */}
+        {type === 'INDUCTION' && (
           <div className="mb-8 border-t border-slate-100 pt-6 text-left">
              <h3 className="text-xs md:text-sm font-black text-slate-800 uppercase tracking-tight mb-4 flex items-center gap-2">
                <ListChecks size={18} className="text-blue-500" /> Exam Review
