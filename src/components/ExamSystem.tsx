@@ -17,7 +17,8 @@ import {
   XCircle,
   Check,
   Award,
-  BadgeCheck
+  BadgeCheck,
+  ListChecks // ✅ เพิ่มไอคอนใหม่สำหรับหน้ารีวิวข้อสอบ
 } from 'lucide-react';
 
 interface ExamSystemProps {
@@ -47,21 +48,24 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
   // ✅ เก็บข้อมูล User ที่อัปเดตแล้วไว้ส่งกลับ
   const [updatedUserData, setUpdatedUserData] = useState<User | null>(null);
 
+  // ✅ State สำหรับเก็บผลลัพธ์รายข้อ (เพื่อเอาไปโชว์ตอนสอบเสร็จ)
+  const [detailedResults, setDetailedResults] = useState<{question: Question, userAns: any, isCorrect: boolean}[]>([]);
+
   // --- Pagination States ---
   const [currentPage, setCurrentPage] = useState(0);
   const questionsPerPage = 5;
 
-  // 🔑 คีย์สำหรับบันทึก Local Storage (แยกตาม User และประเภทข้อสอบ)
+  // 🔑 คีย์สำหรับบันทึก Local Storage
   const STORAGE_KEY = `exam_progress_${user.id}_${type}`;
 
-  // ✅ 1. Auto-Scroll to top
+  // 1. Auto-Scroll to top
   useEffect(() => {
     if (step === 'EXAM') {
       window.scrollTo({ top: 0, behavior: 'instant' });
     }
   }, [currentPage, step]);
 
-  // ✅ 2. Anti-Cheating System
+  // 2. Anti-Cheating System
   useEffect(() => {
     const handleContextMenu = (e: MouseEvent) => e.preventDefault();
     const handleCopyPaste = (e: ClipboardEvent) => {
@@ -89,7 +93,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
     };
   }, []);
 
-  // ✅ 3. Shuffle Logic
+  // 3. Shuffle Logic
   const shuffleArray = <T,>(array: T[]): T[] => {
     const shuffled = [...array];
     for (let i = shuffled.length - 1; i > 0; i--) {
@@ -99,7 +103,6 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
     return shuffled;
   };
 
-  // ฟังก์ชันโหลดข้อสอบใหม่ (ใช้ตอนเริ่มใหม่ หรือตอน Local Storage ว่างเปล่า)
   const fetchNewQuestions = async () => {
     const rawQuestions = await api.getQuestions(type);
     const prepared = shuffleArray(rawQuestions).map(q => {
@@ -119,14 +122,13 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
     setQuestions(prepared);
   };
 
-  // ✅ 4. โหลดข้อมูลจาก Local Storage หรือดึงใหม่ (Hydration)
+  // 4. Hydration (Load from Local Storage)
   useEffect(() => {
     const loadState = async () => {
       const savedState = localStorage.getItem(STORAGE_KEY);
       if (savedState) {
         try {
           const parsed = JSON.parse(savedState);
-          // เช็คอายุของข้อมูล (เช่น ให้จำไว้แค่ 24 ชั่วโมง)
           const now = new Date().getTime();
           if (now - parsed.timestamp < 24 * 60 * 60 * 1000) {
             setQuestions(parsed.questions || []);
@@ -135,26 +137,23 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
             setPermitNo(parsed.permitNo || '');
             setHasReadManual(parsed.hasReadManual || false);
             setCurrentPage(parsed.currentPage || 0);
-            return; // เจอของเก่า โหลดเสร็จแล้ว ออกได้เลย
+            return; 
           } else {
-            localStorage.removeItem(STORAGE_KEY); // ข้อมูลเก่าเกิน ลบทิ้ง
+            localStorage.removeItem(STORAGE_KEY); 
           }
         } catch (e) {
           console.error('Failed to parse saved exam state', e);
         }
       }
-      // ถ้าไม่มีของเก่า ให้ดึงข้อสอบชุดใหม่
       await fetchNewQuestions();
     };
     
     loadState();
   }, [type, user.id]);
 
-  // ✅ 5. Auto-Save บันทึกข้อมูลแบบ Real-time
+  // 5. Auto-Save แบบ Real-time
   useEffect(() => {
-    // ไม่บันทึกถ้ายังไม่มีข้อสอบ หรือทำเสร็จไปโชว์หน้าผลลัพธ์แล้ว
     if (questions.length === 0 || step === 'RESULT') return;
-    
     const stateToSave = {
       questions,
       answers,
@@ -167,45 +166,65 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
     localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToSave));
   }, [questions, answers, step, permitNo, hasReadManual, currentPage, STORAGE_KEY]);
 
-  // ✅ 6. Submit & Grading Logic
+  // ✅ ฟังก์ชันช่วยแปลงคำตอบของผู้ใช้เป็นข้อความเพื่อแสดงในหน้ารีวิว
+  const getUserAnswerText = (q: Question, userAns: any) => {
+    if (userAns === undefined || userAns === null) return "ไม่ได้ตอบคำถาม (No Answer)";
+    if (q.pattern === QuestionPattern.SHORT_ANSWER || q.pattern === 'short_answer') return userAns;
+    if (q.pattern === QuestionPattern.MATCHING || q.pattern === 'matching') return "ตอบแบบจับคู่ (Matched items)";
+    
+    const selectedChoice = q.choices_json[Number(userAns)];
+    return selectedChoice ? (language === 'th' ? selectedChoice.text_th : selectedChoice.text_en) : "-";
+  };
+
+  // 6. Submit & Grading Logic
   const handleSubmit = async () => {
     if (loading) return;
     setLoading(true);
     
     try {
       let correctCount = 0;
+      const details: {question: Question, userAns: any, isCorrect: boolean}[] = [];
       
-      // วนลูปตรวจทีละข้อ
+      // วนลูปตรวจทีละข้อ พร้อมเก็บรายละเอียด
       questions.forEach((q) => {
         const userAns = answers[q.id];
+        let isCorrect = false;
 
-        if (userAns === undefined || userAns === null) return;
+        if (userAns !== undefined && userAns !== null) {
+            if (q.pattern === 'SHORT_ANSWER' || q.pattern === 'short_answer') {
+                const correctText = q.choices_json[0]?.correct_answer?.toString().toLowerCase().trim();
+                const userText = userAns.toString().toLowerCase().trim();
+                if (userText === correctText) isCorrect = true;
+            } 
+            else if (q.pattern === 'MATCHING' || q.pattern === 'matching') {
+                const pairs = q.choices_json;
+                if (Array.isArray(userAns)) {
+                    isCorrect = pairs.every((p: any, idx: number) => Number(userAns[idx]) === idx);
+                }
+            }
+            else {
+                const selectedChoice = q.choices_json[Number(userAns)];
+                if (selectedChoice) {
+                    const isCorrectFlag = selectedChoice.is_correct;
+                    const isReallyCorrect = 
+                        isCorrectFlag === true || 
+                        String(isCorrectFlag) === 'true' || 
+                        String(isCorrectFlag) === 'True' ||
+                        String(isCorrectFlag) === 'TRUE';
 
-        if (q.pattern === 'SHORT_ANSWER' || q.pattern === 'short_answer') {
-            const correctText = q.choices_json[0]?.correct_answer?.toString().toLowerCase().trim();
-            const userText = userAns.toString().toLowerCase().trim();
-            if (userText === correctText) correctCount++;
-        } 
-        else if (q.pattern === 'MATCHING' || q.pattern === 'matching') {
-            const pairs = q.choices_json;
-            if (Array.isArray(userAns)) {
-                const isAllCorrect = pairs.every((p: any, idx: number) => Number(userAns[idx]) === idx);
-                if (isAllCorrect) correctCount++;
+                    if (isReallyCorrect) isCorrect = true;
+                }
             }
         }
-        else {
-            const selectedChoice = q.choices_json[Number(userAns)];
-            if (selectedChoice) {
-                const isCorrectFlag = selectedChoice.is_correct;
-                const isReallyCorrect = 
-                    isCorrectFlag === true || 
-                    String(isCorrectFlag) === 'true' || 
-                    String(isCorrectFlag) === 'True' ||
-                    String(isCorrectFlag) === 'TRUE';
 
-                if (isReallyCorrect) correctCount++;
-            }
-        }
+        if (isCorrect) correctCount++;
+        
+        // บันทึกผลรายข้อ
+        details.push({
+            question: q,
+            userAns: userAns,
+            isCorrect: isCorrect
+        });
       });
 
       // คำนวณผล (เกณฑ์ 80%)
@@ -216,6 +235,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
 
       setScore(correctCount);
       setPassed(calculatedPassed); 
+      setDetailedResults(details); // ✅ เซฟผลรีวิวรายข้อลง State
       
       if (type === 'WORK_PERMIT') {
         try {
@@ -249,8 +269,6 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
       }
       
       setStep('RESULT');
-
-      // 🔥 สำคัญ: ล้างความจำเมื่อส่งข้อสอบเรียบร้อย
       localStorage.removeItem(STORAGE_KEY);
 
     } catch (err: any) {
@@ -292,11 +310,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
           </div>
           
           <div className="flex-grow bg-slate-200 relative overflow-hidden">
-            <iframe 
-                src={googleDocsViewerUrl} 
-                className="w-full h-full border-none absolute inset-0" 
-                title="Manual Viewer" 
-            />
+            <iframe src={googleDocsViewerUrl} className="w-full h-full border-none absolute inset-0" title="Manual Viewer" />
           </div>
 
           <div className="p-5 bg-white text-center space-y-4 flex-shrink-0 border-t border-slate-100 z-10">
@@ -313,48 +327,82 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
     );
   }
 
-  /* ================= 📊 RESULT STEP (แจ้งคะแนนก่อนรับบัตร) ================= */
+  /* ================= 📊 RESULT STEP (แจ้งคะแนนและรีวิวรายข้อ) ================= */
   if (step === 'RESULT') {
+    const requiredScore = Math.ceil(questions.length * 0.8); // ✅ คำนวณเกณฑ์ขั้นต่ำ 80%
+
     return (
-      <div className="max-w-md mx-auto text-center p-8 bg-white rounded-[2.5rem] shadow-xl border border-slate-100 mt-10 animate-in zoom-in text-left select-none">
+      <div className="max-w-md mx-auto text-center p-6 md:p-8 bg-white rounded-[2.5rem] shadow-xl border border-slate-100 mt-6 md:mt-10 animate-in zoom-in text-left select-none pb-8">
         
         {/* Icon Header */}
-        <div className={`w-24 h-24 rounded-[1.5rem] flex items-center justify-center mx-auto mb-6 shadow-inner ${passed ? 'bg-emerald-50' : 'bg-red-50'}`}>
-            {passed ? <Award className="w-12 h-12 text-emerald-500" /> : <AlertCircle className="w-12 h-12 text-red-500" />}
+        <div className={`w-20 h-20 md:w-24 md:h-24 rounded-[1.5rem] flex items-center justify-center mx-auto mb-5 shadow-inner ${passed ? 'bg-emerald-50' : 'bg-red-50'}`}>
+            {passed ? <Award className="w-10 h-10 md:w-12 md:h-12 text-emerald-500" /> : <AlertCircle className="w-10 h-10 md:w-12 md:h-12 text-red-500" />}
         </div>
 
         {/* Title */}
-        <h2 className="text-2xl font-black text-slate-900 text-center mb-1">
+        <h2 className="text-xl md:text-2xl font-black text-slate-900 text-center mb-1">
             {passed ? 'Examination Passed' : 'Assessment Failed'}
         </h2>
-        
-        {/* Subtitle */}
-        <p className={`font-bold text-center text-xs mb-8 uppercase tracking-widest ${passed ? 'text-emerald-500' : 'text-red-400'}`}>
+        <p className={`font-bold text-center text-[10px] md:text-xs mb-6 uppercase tracking-widest ${passed ? 'text-emerald-500' : 'text-red-400'}`}>
             {passed ? 'You are now certified' : 'Please review and retry'}
         </p>
 
         {/* Score Box */}
-        <div className="bg-slate-50 rounded-[2rem] p-8 mb-8 border border-slate-100 text-center relative overflow-hidden">
+        <div className="bg-slate-50 rounded-[2rem] p-6 mb-6 border border-slate-100 text-center relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-slate-200 to-transparent"></div>
-          <p className="text-[10px] text-slate-400 uppercase font-black tracking-[0.2em] mb-2">Total Score</p>
-          <div className="text-6xl font-black text-slate-800 tracking-tighter flex items-center justify-center gap-2">
-             {score} <span className="text-xl text-slate-300 font-bold">/ {questions.length}</span>
+          <p className="text-[10px] text-slate-400 uppercase font-black tracking-[0.2em] mb-1">Total Score</p>
+          <div className="text-5xl md:text-6xl font-black text-slate-800 tracking-tighter flex items-center justify-center gap-2">
+             {score} <span className="text-lg md:text-xl text-slate-300 font-bold">/ {questions.length}</span>
           </div>
+          {/* ✅ แจ้งเกณฑ์ขั้นต่ำ */}
+          <div className="mt-3 inline-block bg-white px-3 py-1.5 rounded-lg border border-slate-200">
+             <p className="text-[9px] md:text-[10px] text-slate-500 font-bold uppercase tracking-widest">
+                Passing Score: <span className="text-blue-600">{requiredScore}</span> (80%)
+             </p>
+          </div>
+        </div>
+
+        {/* ✅ กล่องรีวิวข้อสอบ (Exam Review) */}
+        <div className="mb-8 border-t border-slate-100 pt-6 text-left">
+           <h3 className="text-xs md:text-sm font-black text-slate-800 uppercase tracking-tight mb-4 flex items-center gap-2">
+             <ListChecks size={18} className="text-blue-500" /> Exam Review
+           </h3>
+           
+           <div className="max-h-[300px] overflow-y-auto space-y-3 pr-1 md:pr-2 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+              {detailedResults.map((res, i) => (
+                <div key={i} className={`p-4 rounded-2xl border transition-colors ${res.isCorrect ? 'bg-emerald-50/50 border-emerald-100' : 'bg-red-50/50 border-red-100'}`}>
+                   <div className="flex gap-3 items-start">
+                      <div className="mt-0.5 shrink-0">
+                         {res.isCorrect ? <CheckCircle2 className="text-emerald-500" size={18} /> : <XCircle className="text-red-500" size={18} />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                         <p className="text-[11px] md:text-xs font-bold text-slate-700 leading-relaxed mb-2">
+                            <span className="text-slate-400 mr-1">Q{i+1}.</span>
+                            {language === 'th' ? res.question.content_th : res.question.content_en}
+                         </p>
+                         <div className={`text-[9px] md:text-[10px] font-black uppercase tracking-wider px-2 py-1.5 rounded-lg inline-block ${res.isCorrect ? 'bg-emerald-100/50 text-emerald-700' : 'bg-red-100/50 text-red-700'}`}>
+                            Your Answer: <span className="font-bold opacity-90">{getUserAnswerText(res.question, res.userAns)}</span>
+                         </div>
+                      </div>
+                   </div>
+                </div>
+              ))}
+           </div>
         </div>
 
         {/* Action Button */}
         {passed ? (
             <button 
                 onClick={() => updatedUserData && onComplete(updatedUserData)} 
-                className="w-full py-4 bg-emerald-600 text-white font-black rounded-2xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200 active:scale-95 flex items-center justify-center gap-2 uppercase text-xs tracking-widest"
+                className="w-full py-4 md:py-5 bg-emerald-600 text-white font-black rounded-2xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200 active:scale-95 flex items-center justify-center gap-2 uppercase text-[11px] md:text-xs tracking-widest"
             >
                 <BadgeCheck size={18} /> รับบัตรประจำตัว (Get Card)
             </button>
         ) : (
             <button 
                 onClick={async () => { 
-                  // 🔥 สำคัญ: ล้างความจำ และโหลดข้อสอบใหม่ให้ถ้าเริ่มทำใหม่
                   localStorage.removeItem(STORAGE_KEY);
+                  setDetailedResults([]); // เคลียร์ผลการรีวิว
                   setStep('READ'); 
                   setCurrentPage(0); 
                   setAnswers({}); 
@@ -362,7 +410,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
                   setPermitNo('');
                   await fetchNewQuestions();
                 }} 
-                className="w-full py-4 bg-slate-900 text-white font-black rounded-2xl hover:bg-slate-800 transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2 uppercase text-xs tracking-widest"
+                className="w-full py-4 md:py-5 bg-slate-900 text-white font-black rounded-2xl hover:bg-slate-800 transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2 uppercase text-[11px] md:text-xs tracking-widest"
             >
                 <RotateCcw size={16} /> สอบใหม่อีกครั้ง (Try Again)
             </button>
@@ -413,7 +461,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
               <p className="font-bold text-slate-800 text-[15px] leading-relaxed">{language === 'th' ? q.content_th : q.content_en}</p>
             </div>
 
-            {/* ✅ DYNAMIC RENDERER */}
+            {/* DYNAMIC RENDERER */}
             <div className="mt-4">
                 {q.pattern === QuestionPattern.SHORT_ANSWER ? (
                     <input 
