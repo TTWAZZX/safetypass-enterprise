@@ -51,6 +51,9 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
   const [currentPage, setCurrentPage] = useState(0);
   const questionsPerPage = 5;
 
+  // 🔑 คีย์สำหรับบันทึก Local Storage (แยกตาม User และประเภทข้อสอบ)
+  const STORAGE_KEY = `exam_progress_${user.id}_${type}`;
+
   // ✅ 1. Auto-Scroll to top
   useEffect(() => {
     if (step === 'EXAM') {
@@ -86,7 +89,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
     };
   }, []);
 
-  // ✅ 3. Shuffle Logic (Updated: Shuffle Only Questions, NOT Choices)
+  // ✅ 3. Shuffle Logic
   const shuffleArray = <T,>(array: T[]): T[] => {
     const shuffled = [...array];
     for (let i = shuffled.length - 1; i > 0; i--) {
@@ -96,33 +99,75 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
     return shuffled;
   };
 
-  useEffect(() => {
-    api.getQuestions(type).then((rawQuestions) => {
-      // ✅ สลับ "ลำดับข้อคำถาม" (Questions) ได้เหมือนเดิม
-      const prepared = shuffleArray(rawQuestions).map(q => {
-        
-        let processedChoices = q.choices_json;
-        if (typeof processedChoices === 'string') {
-             try { processedChoices = JSON.parse(processedChoices); } catch (e) { processedChoices = []; }
-        }
-
-        // หากเป็นข้อสอบจับคู่ ให้เตรียมข้อมูลฝั่งขวาที่ Shuffle แล้ว
-        if (q.pattern === QuestionPattern.MATCHING) {
-            const pairs = [...processedChoices];
-            return { ...q, choices_json: pairs, shuffled_right: shuffleArray(pairs) };
-        }
-        
-        // ⚠️ FIXED: ปรนัยปกติ ไม่สลับตัวเลือก (Choices) แล้ว เพื่อให้ Index ตรงกับ Database
-        return {
-          ...q,
-          choices_json: processedChoices // ไม่ใส่ shuffleArray() ที่นี่
-        };
-      });
-      setQuestions(prepared);
+  // ฟังก์ชันโหลดข้อสอบใหม่ (ใช้ตอนเริ่มใหม่ หรือตอน Local Storage ว่างเปล่า)
+  const fetchNewQuestions = async () => {
+    const rawQuestions = await api.getQuestions(type);
+    const prepared = shuffleArray(rawQuestions).map(q => {
+      let processedChoices = q.choices_json;
+      if (typeof processedChoices === 'string') {
+           try { processedChoices = JSON.parse(processedChoices); } catch (e) { processedChoices = []; }
+      }
+      if (q.pattern === QuestionPattern.MATCHING) {
+          const pairs = [...processedChoices];
+          return { ...q, choices_json: pairs, shuffled_right: shuffleArray(pairs) };
+      }
+      return {
+        ...q,
+        choices_json: processedChoices
+      };
     });
-  }, [type]);
+    setQuestions(prepared);
+  };
 
-  // ✅ 4. Submit & Grading Logic
+  // ✅ 4. โหลดข้อมูลจาก Local Storage หรือดึงใหม่ (Hydration)
+  useEffect(() => {
+    const loadState = async () => {
+      const savedState = localStorage.getItem(STORAGE_KEY);
+      if (savedState) {
+        try {
+          const parsed = JSON.parse(savedState);
+          // เช็คอายุของข้อมูล (เช่น ให้จำไว้แค่ 24 ชั่วโมง)
+          const now = new Date().getTime();
+          if (now - parsed.timestamp < 24 * 60 * 60 * 1000) {
+            setQuestions(parsed.questions || []);
+            setAnswers(parsed.answers || {});
+            setStep(parsed.step || 'READ');
+            setPermitNo(parsed.permitNo || '');
+            setHasReadManual(parsed.hasReadManual || false);
+            setCurrentPage(parsed.currentPage || 0);
+            return; // เจอของเก่า โหลดเสร็จแล้ว ออกได้เลย
+          } else {
+            localStorage.removeItem(STORAGE_KEY); // ข้อมูลเก่าเกิน ลบทิ้ง
+          }
+        } catch (e) {
+          console.error('Failed to parse saved exam state', e);
+        }
+      }
+      // ถ้าไม่มีของเก่า ให้ดึงข้อสอบชุดใหม่
+      await fetchNewQuestions();
+    };
+    
+    loadState();
+  }, [type, user.id]);
+
+  // ✅ 5. Auto-Save บันทึกข้อมูลแบบ Real-time
+  useEffect(() => {
+    // ไม่บันทึกถ้ายังไม่มีข้อสอบ หรือทำเสร็จไปโชว์หน้าผลลัพธ์แล้ว
+    if (questions.length === 0 || step === 'RESULT') return;
+    
+    const stateToSave = {
+      questions,
+      answers,
+      step,
+      permitNo,
+      hasReadManual,
+      currentPage,
+      timestamp: new Date().getTime()
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToSave));
+  }, [questions, answers, step, permitNo, hasReadManual, currentPage, STORAGE_KEY]);
+
+  // ✅ 6. Submit & Grading Logic
   const handleSubmit = async () => {
     if (loading) return;
     setLoading(true);
@@ -134,34 +179,24 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
       questions.forEach((q) => {
         const userAns = answers[q.id];
 
-        // 1. ถ้าไม่ได้ตอบ ให้ข้าม (ถือว่าผิด)
         if (userAns === undefined || userAns === null) return;
 
-        // 2. ตรวจตามประเภทคำถาม
         if (q.pattern === 'SHORT_ANSWER' || q.pattern === 'short_answer') {
-            // แบบเติมคำ: ตัดช่องว่างหน้าหลัง และแปลงเป็นตัวเล็กก่อนเทียบ
             const correctText = q.choices_json[0]?.correct_answer?.toString().toLowerCase().trim();
             const userText = userAns.toString().toLowerCase().trim();
             if (userText === correctText) correctCount++;
         } 
         else if (q.pattern === 'MATCHING' || q.pattern === 'matching') {
-            // แบบจับคู่: ต้องถูกทุกคู่
             const pairs = q.choices_json;
-            // เช็คว่า userAns เป็น Array และค่าตรงกับ Index หรือไม่
             if (Array.isArray(userAns)) {
                 const isAllCorrect = pairs.every((p: any, idx: number) => Number(userAns[idx]) === idx);
                 if (isAllCorrect) correctCount++;
             }
         }
         else {
-            // แบบเลือกตอบ (Multiple Choice / True-False)
-            // userAns คือ index ของตัวเลือกที่ตอบ
             const selectedChoice = q.choices_json[Number(userAns)];
-            
             if (selectedChoice) {
-                // รองรับทั้ง Boolean (true) และ String ("true") และ Case-insensitive
                 const isCorrectFlag = selectedChoice.is_correct;
-                
                 const isReallyCorrect = 
                     isCorrectFlag === true || 
                     String(isCorrectFlag) === 'true' || 
@@ -176,13 +211,12 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
       // คำนวณผล (เกณฑ์ 80%)
       const calculatedPassed = (correctCount / questions.length) * 100 >= 80;
 
-      // บันทึกลงฐานข้อมูล (รอให้เสร็จก่อนค่อยไปต่อ)
+      // บันทึกลงฐานข้อมูล
       await api.submitExamWithAnswers(type, answers, permitNo);
 
       setScore(correctCount);
       setPassed(calculatedPassed); 
       
-      // 🔥 ย้ายออกมาไว้นอก if (calculatedPassed) เพื่อให้ส่งแจ้งเตือนทั้งตอนผ่านและตก
       if (type === 'WORK_PERMIT') {
         try {
           fetch('/api/notify-work-permit', {
@@ -190,12 +224,12 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               name: user.name,
-              national_id: user.national_id, // ✅ เพิ่มบรรทัดนี้ เพื่อให้ปุ่มดูใบเซอร์ทำงานได้
+              national_id: user.national_id, 
               vendor: user.vendors?.name || 'EXTERNAL (ไม่มีสังกัด)',
               score: correctCount,
               maxScore: questions.length,
               permitNo: permitNo,
-              status: calculatedPassed ? 'PASSED' : 'FAILED' // ✅ แยกสถานะผ่าน/ตก
+              status: calculatedPassed ? 'PASSED' : 'FAILED' 
             })
           }).catch(e => console.error("LINE Notification Trigger Error:", e));
         } catch (err) {
@@ -203,7 +237,6 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
         }
       }
 
-      // เฉพาะคนสอบผ่านเท่านั้นที่ต้องจัดการเรื่องข้อมูล User และวันหมดอายุ
       if (calculatedPassed) {
         const updatedUser = { ...user };
         const now = new Date();
@@ -216,6 +249,9 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
       }
       
       setStep('RESULT');
+
+      // 🔥 สำคัญ: ล้างความจำเมื่อส่งข้อสอบเรียบร้อย
+      localStorage.removeItem(STORAGE_KEY);
 
     } catch (err: any) {
       console.error("Submission Error:", err);
@@ -242,8 +278,6 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
   /* ================= 📖 READ STEP ================= */
   if (step === 'READ') {
     const pdfUrl = `https://qdodmxrecioltwdryhec.supabase.co/storage/v1/object/public/manuals/${type.toLowerCase()}.pdf`;
-    
-    // ✅ อัปเดต: แปลง URL ด้วย Google Docs Viewer ให้เปิดบนมือถือได้พอดีจอ
     const googleDocsViewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(pdfUrl)}&embedded=true`;
 
     return (
@@ -257,7 +291,6 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
             <a href={pdfUrl} target="_blank" rel="noopener noreferrer" className="p-2 bg-white text-blue-600 hover:bg-blue-50 rounded-xl border border-slate-200 shadow-sm transition-all"><Maximize2 size={20} /></a>
           </div>
           
-          {/* ✅ แก้ไข: ใช้ iframe เรียก Google Docs Viewer แทน */}
           <div className="flex-grow bg-slate-200 relative overflow-hidden">
             <iframe 
                 src={googleDocsViewerUrl} 
@@ -319,7 +352,16 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
             </button>
         ) : (
             <button 
-                onClick={() => { setStep('READ'); setCurrentPage(0); setAnswers({}); }} 
+                onClick={async () => { 
+                  // 🔥 สำคัญ: ล้างความจำ และโหลดข้อสอบใหม่ให้ถ้าเริ่มทำใหม่
+                  localStorage.removeItem(STORAGE_KEY);
+                  setStep('READ'); 
+                  setCurrentPage(0); 
+                  setAnswers({}); 
+                  setHasReadManual(false);
+                  setPermitNo('');
+                  await fetchNewQuestions();
+                }} 
                 className="w-full py-4 bg-slate-900 text-white font-black rounded-2xl hover:bg-slate-800 transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2 uppercase text-xs tracking-widest"
             >
                 <RotateCcw size={16} /> สอบใหม่อีกครั้ง (Try Again)
