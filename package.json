@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@line/liff": "^2.27.3",
     "@supabase/supabase-js": "^2.95.3",
     "crypto-js": "^4.2.0",
     "html2canvas": "^1.4.1",

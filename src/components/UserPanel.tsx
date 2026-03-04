@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useToastContext } from './ToastProvider';
+import liff from '@line/liff'; // ✅ นำเข้า LINE LIFF
 
 const maskNationalID = (id: string) => {
   if (!id || id.length < 13) return id;
@@ -87,6 +88,62 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
   // ✅ State สำหรับจัดการข้อมูล Vendor ในหน้า Edit Profile
   const [vendorsList, setVendorsList] = useState<{id: string, name: string}[]>([]);
   const [editVendorId, setEditVendorId] = useState(user.vendor_id || '');
+  
+  // ✅ 1. State สำหรับสถานะปุ่มโหลด LINE
+  const [isSyncingLine, setIsSyncingLine] = useState(false);
+
+  // ✅ 2. เริ่มต้นการทำงานของ LIFF เมื่อเปิดหน้าเว็บ
+  useEffect(() => {
+    const initLiff = async () => {
+      try {
+        // ⚠️ เอา LIFF ID ที่คุณเพิ่งก๊อปปี้มา ใส่แทนคำว่า YOUR_LIFF_ID ด้านล่างนี้เลยครับ
+        await liff.init({ liffId: '2009323437-35Fcl1JT' }); 
+      } catch (err) {
+        console.error('LIFF Init Error:', err);
+      }
+    };
+    initLiff();
+  }, []);
+
+  // ✅ 3. ฟังก์ชันดึงรูปจาก LINE และบันทึกลง Database
+  const handleSyncLineProfile = async () => {
+    if (isBanned) return;
+    setIsSyncingLine(true);
+    try {
+      if (!liff.isLoggedIn()) {
+        // ถ้าผู้ใช้เปิดผ่านเบราว์เซอร์ปกติ(Chrome/Safari) จะเด้งไปล็อกอิน LINE
+        liff.login({ redirectUri: window.location.href });
+        return;
+      }
+
+      // ถ้าเปิดในแอป LINE หรือล็อกอินแล้ว ดึงข้อมูลได้ทันที!
+      const profile = await liff.getProfile();
+      const newAvatarUrl = profile.pictureUrl;
+
+      if (!newAvatarUrl) {
+        showToast('ไม่พบรูปโปรไฟล์ใน LINE ของคุณ', 'error');
+        return;
+      }
+
+      // 1. บันทึกรูปภาพลงฐานข้อมูล
+      const { error } = await supabase
+        .from('users')
+        .update({ avatar_url: newAvatarUrl })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      // 2. อัปเดตหน้าจอให้เปลี่ยนรูปทันที
+      onUserUpdate({ ...user, avatar_url: newAvatarUrl });
+      showToast('ซิงค์รูปโปรไฟล์จาก LINE สำเร็จ!', 'success');
+
+    } catch (err: any) {
+      console.error(err);
+      showToast('ไม่สามารถเชื่อมต่อ LINE ได้', 'error');
+    } finally {
+      setIsSyncingLine(false);
+    }
+  };
 
   // 🔥 เช็คสถานะการโดนแบน (ดึงจาก user.is_active ที่เราเพิ่งเพิ่มในฐานข้อมูล)
   // ใช้ (user as any) ป้องกัน TypeScript error เผื่อใน types.ts ยังไม่ได้เพิ่ม
@@ -292,10 +349,40 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
 
           <div className={`relative z-10 mx-2 md:mx-6 bg-white rounded-[2rem] p-5 md:p-6 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.1)] border mt-16 flex flex-col md:flex-row gap-5 items-start md:items-center ${isBanned ? 'border-red-200' : 'border-slate-100'}`}>
               <div className="relative self-center md:self-start">
-                  <div className="w-24 h-24 rounded-[1.5rem] bg-white p-1.5 shadow-lg -mt-16 md:mt-0 relative z-20">
-                      <div className={`w-full h-full rounded-2xl flex items-center justify-center text-4xl font-black border uppercase shadow-inner ${isBanned ? 'bg-red-50 text-red-600 border-red-100' : 'bg-gradient-to-br from-slate-50 to-slate-100 text-blue-600 border-slate-200'}`}>
-                          {user.name ? user.name.charAt(0) : '?'}
+                  <div className="w-24 h-24 rounded-[1.5rem] bg-white p-1.5 shadow-lg -mt-16 md:mt-0 relative z-20 group">
+                      <div className={`w-full h-full rounded-2xl flex items-center justify-center text-4xl font-black border uppercase shadow-inner overflow-hidden relative ${isBanned ? 'bg-red-50 text-red-600 border-red-100' : 'bg-gradient-to-br from-slate-50 to-slate-100 text-blue-600 border-slate-200'}`}>
+                          
+                          {/* โชว์รูปโปรไฟล์ ถ้ามีรูปให้แสดงรูป ถ้าไม่มีให้แสดงตัวอักษรย่อ */}
+                          {user.avatar_url ? (
+                              <img src={user.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                          ) : (
+                              user.name ? user.name.charAt(0) : '?'
+                          )}
+                          
+                          {/* 🟢 ปุ่ม Sync LINE ซ่อนอยู่ จะโชว์ตอนเอาเมาส์ชี้ */}
+                          {!isBanned && (
+                              <button 
+                                  onClick={handleSyncLineProfile} 
+                                  disabled={isSyncingLine}
+                                  className="absolute inset-0 bg-slate-900/60 backdrop-blur-[2px] flex flex-col items-center justify-center text-white opacity-0 md:group-hover:opacity-100 transition-opacity duration-300"
+                              >
+                                  {isSyncingLine ? <Loader2 size={24} className="animate-spin" /> : <RefreshCw size={24} className="mb-1" />}
+                                  <span className="text-[8px] uppercase tracking-widest font-black text-center leading-tight">Sync<br/>LINE</span>
+                              </button>
+                          )}
                       </div>
+
+                      {/* 🟢 Badge ไอคอน LINE มุมขวาบน (เพื่อให้กดได้ง่ายๆ ในมือถือ) */}
+                      {!isBanned && (
+                          <button 
+                              onClick={handleSyncLineProfile}
+                              disabled={isSyncingLine}
+                              className="absolute -top-2 -right-2 bg-[#06C755] text-white p-1.5 rounded-full shadow-lg border-2 border-white hover:scale-110 active:scale-95 transition-all z-30" 
+                              title="ซิงค์รูปโปรไฟล์จาก LINE"
+                          >
+                              <RefreshCw size={12} className={isSyncingLine ? "animate-spin" : ""} />
+                          </button>
+                      )}
                   </div>
                   {/* ✅ Badge เปลี่ยนสีตามสถานะแบน */}
                   <div className={`absolute -bottom-3 left-1/2 -translate-x-1/2 text-white text-[9px] font-black px-3 py-1.5 rounded-full uppercase tracking-widest border-4 border-white shadow-md flex items-center gap-1 whitespace-nowrap z-30 ${isBanned ? 'bg-red-600' : 'bg-slate-900'}`}>

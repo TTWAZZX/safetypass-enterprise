@@ -70,18 +70,19 @@ export interface Vendor {
   created_at?: string;
 }
 
-// ✅ User ปรับปรุงใหม่รองรับ Age, Nationality, วันเกิด และสถานะระงับสิทธิ์
+// ✅ User ปรับปรุงใหม่รองรับ avatar_url จาก LINE
 export interface User {
   id: string;
   national_id: string;
   name: string;
   age?: number | null;           
-  date_of_birth?: string | null; // ✅ เพิ่มฟิลด์วันเกิด
+  date_of_birth?: string | null; 
   nationality?: string;   
   vendor_id: string | null;
   induction_expiry: string | null; 
-  role: 'ADMIN' | 'USER' | string; // ปรับให้ยืดหยุ่นรองรับ UserRole
-  is_active?: boolean;           // ✅ เพิ่มฟิลด์สถานะบัญชี (แบน/ไม่แบน)
+  role: 'ADMIN' | 'USER' | string; 
+  is_active?: boolean;           
+  avatar_url?: string | null;    // ✅ เพิ่มฟิลด์รูปโปรไฟล์
   created_at: string;
   vendors?: {             
     name: string;
