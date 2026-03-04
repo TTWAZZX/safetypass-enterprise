@@ -115,13 +115,9 @@ export const api = {
     });
 
     if (signUpError) {
-      if (signUpError.status === 422 || signUpError.message.includes('already registered')) {
-        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-          email,
-          password
-        });
-        if (signInError) throw new Error('already registered'); 
-        authUser = signInData.user;
+      // ✅ ยกเลิกระบบแอบล็อกอินอัตโนมัติ ให้โยน Error ไปหา Auth.tsx แทน
+      if (signUpError.status === 422 || signUpError.message.includes('already registered') || signUpError.message.includes('User already registered')) {
+        throw new Error('already registered'); 
       } else {
         throw signUpError;
       }
