@@ -123,7 +123,19 @@ const DigitalCard: React.FC<DigitalCardProps> = ({
           <div className="px-6 relative z-10 text-center mt-2">
             <div className={`w-20 h-20 mx-auto bg-gradient-to-b p-[2.5px] rounded-[1.8rem] shadow-2xl mb-4 ${isPermit ? 'from-pink-400 to-indigo-500' : 'from-blue-400 to-emerald-400'}`}>
               <div className="w-full h-full bg-slate-900 rounded-[1.6rem] overflow-hidden flex items-center justify-center border border-white/10">
-                 <UserIcon size={32} className="text-slate-500 opacity-50"/>
+                {/* ✅ แก้ไข: ดึงรูปโปรไฟล์ LINE มาแสดง ถ้าไม่มีให้แสดงตัวย่อชื่อ */}
+                {user.avatar_url ? (
+                  <img 
+                    src={user.avatar_url} 
+                    alt="Profile" 
+                    className="w-full h-full object-cover" 
+                    crossOrigin="anonymous" 
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-3xl font-black text-white uppercase">
+                    {user.name ? user.name.charAt(0) : <UserIcon size={32} className="text-slate-500 opacity-50"/>}
+                  </div>
+                )}
               </div>
             </div>
             

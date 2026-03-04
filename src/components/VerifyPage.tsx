@@ -209,7 +209,16 @@ const VerifyPage: React.FC = () => {
         <div className="p-8 space-y-4">
           <div className="text-center relative mb-6">
             <div className="w-20 h-20 bg-slate-50 rounded-[1.5rem] mx-auto mb-4 flex items-center justify-center border border-slate-100 shadow-inner relative overflow-hidden group">
-               <User className="w-8 h-8 text-slate-300" />
+               {/* ✅ แก้ไข: ดึงรูปโปรไฟล์จาก LINE มาแสดงในหน้า Verify ด้วย */}
+               {userData?.avatar_url ? (
+                  <img 
+                    src={userData.avatar_url} 
+                    alt="Profile" 
+                    className="w-full h-full object-cover" 
+                  />
+               ) : (
+                  <User className="w-8 h-8 text-slate-300" />
+               )}
                <div className="absolute inset-0 bg-blue-600/5 opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
             <h2 className="text-xl font-black text-slate-900 leading-tight uppercase tracking-tight">{userData?.name || 'Unknown User'}</h2>
