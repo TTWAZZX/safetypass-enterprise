@@ -28,7 +28,8 @@ import {
   AlertTriangle,
   ArrowRightCircle,
   Maximize2,
-  Ban // ✅ เพิ่มไอคอน Ban
+  Ban, // ✅ เพิ่มไอคอน Ban
+  Building2 // ✅ เพิ่มไอคอนตึก
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useToastContext } from './ToastProvider';
@@ -368,19 +369,69 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
                         </div>
                     </div>
                   ) : (
-                    <div>
-                        <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight uppercase leading-none mb-3">{user.name}</h2>
-                        <div className="flex flex-wrap justify-center md:justify-start gap-2 text-[10px] md:text-xs font-bold text-slate-500">
-                          <span className={`px-3 py-1.5 rounded-lg border flex items-center gap-1.5 group relative ${isBanned ? 'bg-red-50 border-red-100 text-red-500' : 'bg-slate-50 border-slate-100'}`}>
-                            <Ticket size={12} className={isBanned ? 'text-red-500' : 'text-blue-500'}/> {maskNationalID(user.national_id)} <Lock size={10} className={isBanned ? 'text-red-400' : 'text-emerald-500 ml-1'} />
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-slate-800 text-white text-[8px] px-2 py-1 rounded whitespace-nowrap z-50">Data Encrypted with pgcrypto</div>
-                        </span>
-                          <span className="bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 flex items-center gap-1.5">
-                              <ShieldCheck size={12} className="text-blue-500"/> {user.vendors?.name || 'ไม่มีสังกัดบริษัท'}
-                          </span>
-                          <span className="bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 flex items-center gap-1.5">
-                              <Calendar size={12} className="text-blue-500"/> {user.age ? `${user.age} Years` : '-'}
-                          </span>
+                    <div className="w-full flex flex-col items-center md:items-start">
+                        {/* 1. ชื่อและตำแหน่ง */}
+                        <div className="text-center md:text-left mb-4">
+                            <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight uppercase leading-none">{user.name}</h2>
+                            <p className="text-[10px] md:text-xs font-bold text-blue-500 uppercase tracking-widest mt-1.5 flex items-center justify-center md:justify-start gap-1.5">
+                               <ShieldCheck size={14} className={isBanned ? 'text-red-500' : 'text-blue-500'} />
+                               <span className={isBanned ? 'text-red-500' : 'text-blue-500'}>
+                                  {user.role === 'ADMIN' ? 'System Administrator' : 'Authorized Personnel'}
+                               </span>
+                            </p>
+                        </div>
+
+                        {/* 2. 📊 Enterprise Data Grid (กล่องแสดงข้อมูล) */}
+                        <div className={`w-full rounded-2xl p-4 md:p-5 border text-left grid grid-cols-2 gap-y-4 gap-x-4 shadow-sm relative overflow-hidden ${isBanned ? 'bg-red-50/50 border-red-100' : 'bg-slate-50 border-slate-100'}`}>
+                            
+                            {/* ลายน้ำพื้นหลังบางๆ */}
+                            <div className="absolute -right-4 -bottom-4 opacity-[0.03] pointer-events-none">
+                                <QrCode size={100} />
+                            </div>
+                            
+                            {/* แถวที่ 1: สังกัด และ เลขบัตร */}
+                            <div className="col-span-2 md:col-span-1 z-10">
+                                <span className="text-[8px] md:text-[9px] text-slate-400 font-black uppercase tracking-widest flex items-center gap-1">
+                                    <Building2 size={10}/> Company / Vendor
+                                </span>
+                                <span className="text-xs md:text-sm font-bold text-slate-800 truncate block mt-0.5">
+                                    {user.vendors?.name || 'ไม่มีสังกัดบริษัท (EXTERNAL)'}
+                                </span>
+                            </div>
+                            <div className="col-span-2 md:col-span-1 z-10">
+                                <span className="text-[8px] md:text-[9px] text-slate-400 font-black uppercase tracking-widest flex items-center gap-1">
+                                    <Ticket size={10}/> National ID / Passport
+                                </span>
+                                <span className="text-xs md:text-sm font-bold text-slate-800 font-mono mt-0.5 flex items-center gap-1.5">
+                                    {maskNationalID(user.national_id)} 
+                                    <Lock size={10} className={isBanned ? 'text-red-400' : 'text-emerald-500'} />
+                                </span>
+                            </div>
+
+                            {/* เส้นแบ่ง */}
+                            <div className="col-span-2 h-px bg-slate-200/60 my-0.5 z-10"></div>
+
+                            {/* แถวที่ 2: วันเกิด/อายุ และ สัญชาติ */}
+                            <div className="col-span-1 z-10">
+                                <span className="text-[8px] md:text-[9px] text-slate-400 font-black uppercase tracking-widest flex items-center gap-1">
+                                    <Calendar size={10}/> DOB & Age
+                                </span>
+                                <span className="text-xs md:text-sm font-bold text-slate-800 mt-0.5 flex flex-wrap items-baseline gap-1">
+                                    {(user as any).date_of_birth ? new Date((user as any).date_of_birth).toLocaleDateString(language === 'th' ? 'th-TH' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '-'} 
+                                    <span className="text-[10px] md:text-[11px] text-blue-600 font-black bg-blue-50 px-1.5 py-0.5 rounded-md border border-blue-100">
+                                        {user.age ? `${user.age} Y` : '-'}
+                                    </span>
+                                </span>
+                            </div>
+                            <div className="col-span-1 z-10">
+                                <span className="text-[8px] md:text-[9px] text-slate-400 font-black uppercase tracking-widest flex items-center gap-1">
+                                    <Globe2 size={10}/> Nationality
+                                </span>
+                                <span className="text-xs md:text-sm font-bold text-slate-800 mt-0.5 block">
+                                    {user.nationality || 'ไม่ระบุ'}
+                                </span>
+                            </div>
+
                         </div>
                     </div>
                   )}
