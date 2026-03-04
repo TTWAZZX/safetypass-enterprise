@@ -38,6 +38,20 @@ const maskNationalID = (id: string) => {
   return `${id.substring(0, 1)}-${id.substring(1, 5)}-XXXXX-${id.substring(10, 12)}-${id.substring(12)}`;
 };
 
+// ✅ เพิ่มฟังก์ชันคำนวณอายุจากวันเกิด
+const calculateAge = (dobString: string | null | undefined) => {
+  if (!dobString) return '-';
+  const birthday = new Date(dobString);
+  if (isNaN(birthday.getTime())) return '-';
+  const today = new Date();
+  let age = today.getFullYear() - birthday.getFullYear();
+  const m = today.getMonth() - birthday.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birthday.getDate())) {
+    age--;
+  }
+  return age;
+};
+
 interface UserPanelProps {
   user: User;
   onUserUpdate: (user: User) => void;
@@ -58,10 +72,16 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
   // Profile Edit States
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(user.name);
-  const [editAge, setEditAge] = useState(user.age || '');
+  const [editAge, setEditAge] = useState(user.age || ''); // เก็บอายุไว้เหมือนเดิม
+  const [editDob, setEditDob] = useState((user as any).date_of_birth || ''); // ✅ เพิ่ม State วันเกิด
   const [editNationality, setEditNationality] = useState(user.nationality || 'ไทย (Thai)');
   const [isOtherNationality, setIsOtherNationality] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  
+  // ✅ State สำหรับ Gatekeeper Modal (บังคับกรอกวันเกิด)
+  const [showDobModal, setShowDobModal] = useState(!(user as any).date_of_birth);
+  const [dobInput, setDobInput] = useState((user as any).date_of_birth || '');
+  const [isSavingDob, setIsSavingDob] = useState(false);
   
   // ✅ State สำหรับจัดการข้อมูล Vendor ในหน้า Edit Profile
   const [vendorsList, setVendorsList] = useState<{id: string, name: string}[]>([]);
@@ -125,7 +145,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
   const hasInduction = user.induction_expiry && new Date(user.induction_expiry) > new Date();
   const isNearExpiry = user.induction_expiry && (new Date(user.induction_expiry).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24) < 30;
 
-  // ✅ 3. ฟังก์ชันบันทึกข้อมูล (รวมอัปเดต Vendor ID ลง Database)
+  // ✅ 3.1 ฟังก์ชันบันทึกข้อมูล (รวมอัปเดต Vendor ID และ วันเกิด ลง Database)
   const handleUpdateProfile = async () => {
     if (!editName.trim()) return showToast('กรุณากรอกชื่อ-นามสกุล', 'error');
     setIsSaving(true);
@@ -133,6 +153,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
       const payload = { 
         name: editName, 
         age: Number(editAge) || null, 
+        date_of_birth: editDob || null, // ✅ สิ่งที่เพิ่มเข้ามา: เซฟวันเกิดด้วย
         nationality: editNationality,
         vendor_id: editVendorId || null
       };
@@ -151,10 +172,11 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
         ...user, 
         name: editName, 
         age: Number(editAge), 
+        date_of_birth: editDob || null, // ✅ อัปเดต State ให้มีวันเกิด
         nationality: editNationality,
         vendor_id: editVendorId || null,
         vendors: selectedVendor ? { name: selectedVendor.name } : null
-      });
+      } as any); // ป้องกัน Error แดงใน TypeScript ถ้ายังไม่ได้แก้ไฟล์ types.ts
 
       showToast('อัปเดตข้อมูลส่วนตัวเรียบร้อยแล้ว', 'success');
       setIsEditing(false);
@@ -162,6 +184,31 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
       showToast('เกิดข้อผิดพลาด: ' + err.message, 'error');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // ✅ 3.2 ฟังก์ชันบันทึกข้อมูลสำหรับหน้าต่างบังคับกรอก (Gatekeeper Modal)
+  const handleSaveDob = async () => {
+    if (!dobInput) return showToast('กรุณาระบุวัน/เดือน/ปีเกิด', 'error');
+    setIsSavingDob(true);
+    try {
+      // คำนวณอายุจากวันเกิดที่เลือก เพื่อเซฟคู่กัน (ให้ของเดิมไม่พัง)
+      const calculatedAge = calculateAge(dobInput);
+      const payload = { 
+        date_of_birth: dobInput, 
+        age: calculatedAge !== '-' ? Number(calculatedAge) : null 
+      };
+
+      const { error } = await supabase.from('users').update(payload).eq('id', user.id);
+      if (error) throw error;
+      
+      onUserUpdate({ ...user, ...payload } as any);
+      setShowDobModal(false);
+      showToast('บันทึกข้อมูลสำเร็จ เข้าสู่ระบบพร้อมใช้งาน', 'success');
+    } catch (err: any) {
+      showToast('บันทึกไม่สำเร็จ: ' + err.message, 'error');
+    } finally {
+      setIsSavingDob(false);
     }
   };
 
@@ -259,11 +306,36 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
                   {isEditing ? (
                     <div className="space-y-3 text-left">
                         <input className="text-lg font-bold text-slate-900 border-b-2 border-blue-500 outline-none w-full bg-slate-50 px-3 py-2 rounded-t-lg transition-all" value={editName} onChange={(e) => setEditName(e.target.value)} />
-                        <div className="grid grid-cols-2 gap-3">
+                        {/* ✅ เพิ่มช่องวันเกิดคู่กับอายุ */}
+                        <div className="grid grid-cols-2 gap-3 mb-3">
                             <div>
-                              <label className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Age</label>
-                              <input type="number" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-bold text-xs outline-none focus:border-blue-500" value={editAge} onChange={(e) => setEditAge(e.target.value)} />
+                              <label className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Date of Birth</label>
+                              <input 
+                                type="date" 
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-bold text-xs outline-none focus:border-blue-500" 
+                                value={editDob} 
+                                onChange={(e) => {
+                                  setEditDob(e.target.value);
+                                  // คำนวณอายุแล้วเปลี่ยนค่าในช่อง Age อัตโนมัติ
+                                  const newAge = calculateAge(e.target.value);
+                                  if (newAge !== '-') setEditAge(newAge.toString());
+                                }} 
+                                max={new Date().toISOString().split("T")[0]} 
+                              />
                             </div>
+                            <div>
+                              <label className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Age (Auto)</label>
+                              <input 
+                                type="number" 
+                                className="w-full bg-slate-100 text-slate-500 border border-slate-200 rounded-xl px-3 py-2 font-bold text-xs outline-none cursor-not-allowed" 
+                                value={editAge} 
+                                readOnly // ล็อกไว้ให้คำนวณจากวันเกิดอย่างเดียว
+                                placeholder="-"
+                              />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-3">
                             <div>
                               <label className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Nationality</label>
                               <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-bold text-xs outline-none focus:border-blue-500" value={isOtherNationality ? 'OTHER' : editNationality} onChange={(e) => {
@@ -469,6 +541,48 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
             <div className="mt-6 text-blue-400 font-bold text-xs uppercase tracking-[0.3em] flex items-center gap-2"><ShieldCheck size={16} /> Authenticated Access</div>
           </div>
         )}
+
+        {/* 🛑 Gatekeeper Modal: บังคับกรอกวันเกิด (เด้งทับทุกอย่าง ไม่มีปุ่มปิด) */}
+        {showDobModal && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
+            <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-2xl max-w-sm w-full text-center animate-in zoom-in-95">
+              <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-blue-100">
+                <Calendar className="text-blue-600 w-8 h-8" />
+              </div>
+              <h2 className="text-xl font-black text-slate-800 uppercase mb-2">อัปเดตข้อมูลส่วนตัว</h2>
+              <p className="text-[10px] md:text-xs text-slate-500 mb-6 font-bold leading-relaxed px-2">
+                เพื่อความถูกต้องของข้อมูลความปลอดภัย กรุณาระบุ <span className="text-blue-600">วัน/เดือน/ปีเกิด (ค.ศ.)</span> ของคุณก่อนเข้าใช้งานระบบ
+              </p>
+              
+              <div className="text-left mb-6">
+                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Date of Birth / วันเกิด</label>
+                 <input 
+                   type="date" 
+                   className="w-full border-2 border-slate-200 p-4 rounded-xl font-bold text-slate-700 outline-none focus:border-blue-500 transition-all shadow-inner mt-1"
+                   value={dobInput}
+                   onChange={(e) => setDobInput(e.target.value)}
+                   max={new Date().toISOString().split("T")[0]} 
+                 />
+                 {/* แสดงอายุแบบ Real-time หลังจากเลือกวันเกิด */}
+                 {dobInput && calculateAge(dobInput) !== '-' && (
+                    <p className="text-[9px] text-emerald-600 font-bold mt-2 ml-1">
+                      <CheckCircle2 size={10} className="inline mr-1 -mt-0.5" /> 
+                      อายุของคุณคือ {calculateAge(dobInput)} ปี
+                    </p>
+                 )}
+              </div>
+              
+              <button 
+                onClick={handleSaveDob}
+                disabled={isSavingDob || !dobInput}
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-black py-4 rounded-2xl transition-all shadow-lg shadow-blue-200 active:scale-95 uppercase tracking-widest text-[11px] flex items-center justify-center gap-2"
+              >
+                {isSavingDob ? <Loader2 size={16} className="animate-spin" /> : <><Save size={16} /> บันทึกข้อมูลและเข้าใช้งาน</>}
+              </button>
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );

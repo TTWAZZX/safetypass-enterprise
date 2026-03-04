@@ -70,16 +70,18 @@ export interface Vendor {
   created_at?: string;
 }
 
-// ✅ User ปรับปรุงใหม่รองรับ Age และ Nationality ตามหน้า Register
+// ✅ User ปรับปรุงใหม่รองรับ Age, Nationality, วันเกิด และสถานะระงับสิทธิ์
 export interface User {
   id: string;
   national_id: string;
   name: string;
-  age?: number;           
+  age?: number | null;           
+  date_of_birth?: string | null; // ✅ เพิ่มฟิลด์วันเกิด
   nationality?: string;   
-  vendor_id: string;
+  vendor_id: string | null;
   induction_expiry: string | null; 
-  role: UserRole | 'ADMIN' | 'USER';
+  role: 'ADMIN' | 'USER' | string; // ปรับให้ยืดหยุ่นรองรับ UserRole
+  is_active?: boolean;           // ✅ เพิ่มฟิลด์สถานะบัญชี (แบน/ไม่แบน)
   created_at: string;
   vendors?: {             
     name: string;
