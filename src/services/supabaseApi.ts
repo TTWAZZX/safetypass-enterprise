@@ -115,9 +115,32 @@ export const api = {
     });
 
     if (signUpError) {
-      // ✅ ยกเลิกระบบแอบล็อกอินอัตโนมัติ ให้โยน Error ไปหา Auth.tsx แทน
+      // ดักจับกรณีเคยลงทะเบียน Auth ไว้แล้ว (Error 422)
       if (signUpError.status === 422 || signUpError.message.includes('already registered') || signUpError.message.includes('User already registered')) {
-        throw new Error('already registered'); 
+        
+        // ลอง Login แอบๆ เพื่อดึง ID ของระบบ Auth มาตรวจสอบ
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email, password
+        });
+        
+        if (signInError) throw new Error('already registered'); 
+        authUser = signInData.user;
+
+        // เช็คว่าในตารางข้อมูล (public.users) สมบูรณ์และเชื่อมกับ Auth ตัวนี้แล้วหรือยัง?
+        const { data: checkLinkedUser } = await supabase.from('users').select('id').eq('id', authUser.id).maybeSingle();
+        
+        if (checkLinkedUser) {
+          // ✅ กรณีที่ 1: บัญชีสมบูรณ์แล้ว (มีทั้ง Auth และ User) แปลว่าผู้ใช้กด "สมัครซ้ำ"
+          // ล้าง Session ทิ้งทันที เพื่อไม่ให้ระบบแอบล็อกอิน
+          await supabase.auth.signOut();
+          // โยน Error ไปให้หน้าเว็บสลับไปแท็บ Login และโชว์ป้ายสีฟ้า
+          throw new Error('already registered');
+        } else {
+          // ✅ กรณีที่ 2: ข้อมูลไม่สมบูรณ์ (เช่น แอดมินเพิ่งลบแล้วเพิ่มชื่อเข้าไปใหม่)
+          // ให้ระบบข้ามการแจ้ง Error แล้วไหลไปทำ Upsert ด้านล่างเพื่อ "ซ่อมแซมเชื่อมบัญชี" ให้ผู้ใช้เข้าใช้งานได้ทันที!
+          console.log("Repairing and linking account...");
+        }
+
       } else {
         throw signUpError;
       }
