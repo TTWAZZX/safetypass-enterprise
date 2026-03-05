@@ -14,19 +14,20 @@ export const api = {
     // 🔥 1. PRE-CHECK: ด่านตรวจก่อนเข้า Auth
     // วิ่งไปเช็คในตาราง users ก่อนว่า แอดมินสร้างชื่อคนนี้รอไว้หรือยัง?
     const hash = SHA256(nationalId).toString();
-    const { data: preCheckUser } = await supabase
+    const { data: preCheckUsers } = await supabase
       .from('users')
       .select('pdpa_agreed, is_active')
       .or(`national_id.eq.${nationalId},national_id_hash.eq.${hash}`)
-      .maybeSingle();
+      .limit(1); // ✅ ใช้ limit(1) ป้องกัน Error กรณีฐานข้อมูลมีข้อมูลทับซ้อน
 
-    if (preCheckUser) {
+    if (preCheckUsers && preCheckUsers.length > 0) {
+      const preCheckUser = preCheckUsers[0];
       // โดนแอดมินแบนตั้งแต่ยังไม่เข้า
       if (preCheckUser.is_active === false) {
          throw new Error('บัญชีของคุณถูกระงับสิทธิ์ชั่วคราว โปรดติดต่อเจ้าหน้าที่ Safety');
       }
       // ✅ ด่านสกัดสำคัญ: แอดมินเพิ่มชื่อให้แล้ว แต่ผู้ใช้ยังไม่เคยกดยอมรับ PDPA
-      if (preCheckUser.pdpa_agreed === false) {
+      if (preCheckUser.pdpa_agreed === false || preCheckUser.pdpa_agreed === null) {
          throw new Error('REQUIRE_REGISTER'); // เตะกลับไปหน้า Register อัตโนมัติ
       }
     }
@@ -83,16 +84,16 @@ export const api = {
       .from('users')
       .select('*, vendors(*)')
       .or(`national_id.eq.${nationalId},national_id_hash.eq.${hash}`)
-      .maybeSingle();
+      .limit(1); // ✅ ใช้ limit(1) ปลอดภัยกว่า
       
     if (error) {
         console.error("Check user error:", error);
         return null;
     }
     
-    const userData = data as any;
+    const userData = data?.[0] as any;
 
-    if (userData && userData.vendor_id) {
+    if (userData && userData.vendor_id && !userData.vendors) {
         const { data: vendor } = await supabase.from('vendors').select('name').eq('id', userData.vendor_id).single();
         return { ...userData, vendors: vendor };
     }
@@ -156,29 +157,54 @@ export const api = {
     const linkedUser = existingUsers?.find(u => u.id === authUser.id);
     const dummyUser = existingUsers?.find(u => u.id !== authUser.id && (u.national_id === nationalId || u.national_id_hash === nationalIdHash));
 
-    // ✅ กรณีที่ 1: มีบัญชีจริงอยู่แล้ว (แปลว่าพนักงานคนนี้เคยกดลงทะเบียนสำเร็จไปแล้ว)
+    // 🔥 ✅ แก้ไขจุดลูปนรก: กรณีที่ 1 มีบัญชีจริงอยู่แล้ว 
     if (linkedUser) {
         if (linkedUser.is_active === false) throw new Error('บัญชีของคุณถูกระงับสิทธิ์ชั่วคราว');
         
-        // ถ้าระบบเจอบัญชีที่แอดมินสร้างซ้อนทับขึ้นมา (เกิดจากแอดมินไปกดเพิ่มชื่อใหม่)
-        // ระบบจะทำการ "สูบ" ใบเซอร์มาใส่อันจริง และลบอันปลอมทิ้งให้เลย!
+        // 🔴 ถ้าพนักงานคนนี้เคยกดยอมรับ PDPA ผ่านไปแล้ว ให้เตะไปล็อกอิน (ลอจิกเดิม)
+        if (linkedUser.pdpa_agreed === true) {
+            await supabase.auth.signOut();
+            throw new Error('already registered');
+        }
+
+        // 🟢 ถ้ายังมี Dummy ค้างอยู่ (โอนถ่ายข้อมูลและลบขยะทิ้ง)
         if (dummyUser) {
             await supabase.from('exam_history').update({ user_id: linkedUser.id }).eq('user_id', dummyUser.id);
             await supabase.from('work_permits').update({ user_id: linkedUser.id }).eq('user_id', dummyUser.id);
+            await supabase.from('exam_logs').update({ user_id: linkedUser.id }).eq('user_id', dummyUser.id);
             if (dummyUser.induction_expiry) {
                 await supabase.from('users').update({ induction_expiry: dummyUser.induction_expiry }).eq('id', linkedUser.id);
             }
             await supabase.from('users').delete().eq('id', dummyUser.id);
         }
 
-        // ล้างเซสชันแล้วโยน Error ให้หน้าเว็บเด้งไปหน้า Login โชว์แถบสีฟ้า
-        await supabase.auth.signOut();
-        throw new Error('already registered');
+        // 🟢 สำคัญสุด: อัปเดตข้อมูลใหม่ทับเข้าไป พร้อมเซ็ต pdpa_agreed = true (ตัดลูปนรก)
+        const updatePayload = {
+            name,
+            age,
+            nationality,
+            vendor_id: finalVendorId === 'OTHER' ? null : finalVendorId,
+            role: dummyUser?.role || linkedUser.role || 'USER',
+            pdpa_agreed: true,
+            pdpa_agreed_at: new Date().toISOString(),
+            is_active: true
+        };
+
+        const { data: updatedUser, error: updateErr } = await supabase
+            .from('users')
+            .update(updatePayload)
+            .eq('id', linkedUser.id)
+            .select('*, vendors(*)')
+            .single();
+
+        if (updateErr) throw new Error('อัปเดตข้อมูลไม่สำเร็จ: ' + updateErr.message);
+
+        return { ...updatedUser, national_id: nationalId } as unknown as User;
     }
 
-    // ✅ กรณีที่ 2: เพิ่งลงทะเบียนครั้งแรก หรือ แอดมินพิมพ์ชื่อรอไว้ให้
+    // ✅ กรณีที่ 2: เพิ่งลงทะเบียนครั้งแรกล้วนๆ
     if (dummyUser && dummyUser.is_active === false) {
-      throw new Error('บัญชีของคุณถูกระงับสิทธิ์ชั่วคราว プロดติดต่อเจ้าหน้าที่ Safety');
+      throw new Error('บัญชีของคุณถูกระงับสิทธิ์ชั่วคราว โปรดติดต่อเจ้าหน้าที่ Safety');
     }
 
     const payload: any = {
