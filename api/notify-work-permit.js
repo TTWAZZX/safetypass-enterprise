@@ -26,7 +26,7 @@ export default async function handler(req, res) {
     messages: [
       {
         type: 'flex',
-        altText: isPassed ? `✅ สอบผ่าน: ${name}` : `❌ สอบไม่ผ่าน: ${name}`,
+        altText: isPassed ? `สอบผ่าน: ${name}` : `สอบไม่ผ่าน: ${name}`,
         contents: {
           type: "bubble",
           size: "mega", // อัปเกรดขนาดให้ใหญ่ขึ้นเพื่อให้ข้อความไม่เบียดกัน
@@ -51,7 +51,7 @@ export default async function handler(req, res) {
               },
               {
                 type: "text",
-                text: isPassed ? "✅ WORK PERMIT APPROVED" : "❌ ASSESSMENT FAILED",
+                text: isPassed ? "PERMIT APPROVED" : "ASSESSMENT FAILED",
                 color: isPassed ? "#10B981" : "#EF4444", // เขียวถ้าผ่าน แดงถ้าตก
                 weight: "bold",
                 size: "lg",
@@ -69,7 +69,7 @@ export default async function handler(req, res) {
             contents: [
               {
                 type: "text",
-                text: "สรุปผลการทดสอบความปลอดภัย (Safety Induction & Work Permit)",
+                text: "สรุปผลการทดสอบความปลอดภัยก่อนเข้างาน (Safety Induction & Work Permit)",
                 weight: "regular",
                 size: "xs",
                 color: "#64748B",
@@ -91,7 +91,7 @@ export default async function handler(req, res) {
                     type: "box",
                     layout: "horizontal",
                     contents: [
-                      { type: "text", text: "📝 ใบอนุญาต", color: "#94A3B8", size: "sm", flex: 3 },
+                      { type: "text", text: "ใบอนุญาต", color: "#94A3B8", size: "sm", flex: 3 },
                       { 
                         type: "text", 
                         text: permitNo || "-", 
@@ -107,7 +107,7 @@ export default async function handler(req, res) {
                     type: "box",
                     layout: "horizontal",
                     contents: [
-                      { type: "text", text: "👤 ชื่อ", color: "#94A3B8", size: "sm", flex: 3 },
+                      { type: "text", text: "ชื่อ", color: "#94A3B8", size: "sm", flex: 3 },
                       { type: "text", text: name, wrap: true, color: "#0F172A", size: "sm", flex: 7, weight: "bold" }
                     ]
                   },
@@ -115,7 +115,7 @@ export default async function handler(req, res) {
                     type: "box",
                     layout: "horizontal",
                     contents: [
-                      { type: "text", text: "🏢 บริษัท", color: "#94A3B8", size: "sm", flex: 3 },
+                      { type: "text", text: "บริษัท", color: "#94A3B8", size: "sm", flex: 3 },
                       { type: "text", text: vendor || "ไม่มีสังกัด", wrap: true, color: "#0F172A", size: "sm", flex: 7, weight: "bold" }
                     ]
                   },
@@ -123,7 +123,7 @@ export default async function handler(req, res) {
                     type: "box",
                     layout: "horizontal",
                     contents: [
-                      { type: "text", text: "📊 คะแนน", color: "#94A3B8", size: "sm", flex: 3 },
+                      { type: "text", text: "คะแนน", color: "#94A3B8", size: "sm", flex: 3 },
                       { 
                         type: "text", 
                         text: `${score} / ${maxScore}`, 
@@ -139,7 +139,7 @@ export default async function handler(req, res) {
                     type: "box",
                     layout: "horizontal",
                     contents: [
-                      { type: "text", text: "📌 สถานะ", color: "#94A3B8", size: "sm", flex: 3 },
+                      { type: "text", text: "สถานะ", color: "#94A3B8", size: "sm", flex: 3 },
                       { 
                         type: "text", 
                         text: isPassed ? "ผ่านเกณฑ์ (บัตร 5 วัน)" : "ไม่ผ่านเกณฑ์ (สอบใหม่)", 
@@ -171,7 +171,7 @@ export default async function handler(req, res) {
                 color: "#3B82F6", // สีฟ้าน้ำทะเล
                 action: {
                   type: "uri",
-                  label: "📄 ดูใบเซอร์ / Digital Pass",
+                  label: "ดูใบเซอร์ / Digital Pass",
                   uri: `${BASE_URL}/verify?id=${national_id}`
                 }
               },
@@ -181,7 +181,7 @@ export default async function handler(req, res) {
                 height: "sm",
                 action: {
                   type: "uri",
-                  label: "🚫 ระงับสิทธิ์สอบ (Admin)",
+                  label: "ระงับสิทธิ์สอบ (Admin)",
                   uri: `${BASE_URL}/admin?search=${national_id}`
                 }
               }

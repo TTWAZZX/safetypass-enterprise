@@ -21,7 +21,7 @@ export default async function handler(req, res) {
   // 🎨 สร้าง Flex Message ระดับ Premium
   const flexMessage = {
     type: "flex",
-    altText: `🚨 มีบริษัทใหม่ลงทะเบียน: ${vendorName}`,
+    altText: `มีบริษัทใหม่ลงทะเบียน: ${vendorName}`,
     contents: {
       type: "bubble",
       size: "mega",
