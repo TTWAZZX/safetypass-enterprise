@@ -86,7 +86,7 @@ export default async function handler(req, res) {
                 contents: [
                   {
                     type: "text",
-                    text: "🏢 บริษัท",
+                    text: "บริษัท",
                     color: "#94A3B8",
                     size: "sm",
                     flex: 3
@@ -108,7 +108,7 @@ export default async function handler(req, res) {
                 contents: [
                   {
                     type: "text",
-                    text: "👤 ผู้ติดต่อ",
+                    text: "ผู้ติดต่อ",
                     color: "#94A3B8",
                     size: "sm",
                     flex: 3
@@ -130,7 +130,7 @@ export default async function handler(req, res) {
                 contents: [
                   {
                     type: "text",
-                    text: "⏰ เวลา",
+                    text: "เวลา",
                     color: "#94A3B8",
                     size: "sm",
                     flex: 3
@@ -161,7 +161,7 @@ export default async function handler(req, res) {
             contents: [
               {
                 type: "text",
-                text: "ระบบจัดการ VENDOR",
+                text: "CTR GATEPASS",
                 size: "xs",
                 color: "#10B981",
                 weight: "bold",
