@@ -1,3 +1,4 @@
+import { supabase } from '../services/supabaseClient'; // ✅ เพิ่มบรรทัดนี้เข้ามา
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/supabaseApi';
 import { User, Vendor } from '../types';
@@ -116,11 +117,28 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     e.preventDefault();
     setLoading(true);
     setError("");
+    setInfoMsg("");
     try {
       const user = await api.login(loginId);
+      
+      // แสตมป์เวลาเข้าสู่ระบบล่าสุด (ที่เราเพิ่งทำไป)
+      await supabase.from('users').update({ last_login: new Date().toISOString() }).eq('id', user.id);
+      
       onLogin(user);
     } catch (err: any) {
-      setError(err.message || 'Login failed');
+      const errorMsg = err.message || '';
+      
+      // 🔥 ดักจับถ้ายังไม่ได้ลงทะเบียน ให้สลับหน้าและโยนเลขบัตรไปช่อง Register
+      if (errorMsg.includes('REQUIRE_REGISTER')) {
+         setRegId(loginId); // ส่งเลขบัตรที่พิมพ์ค้างไว้ไปหน้าลงทะเบียน
+         setMode('REGISTER'); // สลับไปหน้าลงทะเบียนอัตโนมัติ
+         setInfoMsg('กรุณาตรวจสอบข้อมูลและยอมรับเงื่อนไข (PDPA) ก่อนเข้าใช้งานครั้งแรก');
+         setTimeout(() => setInfoMsg(''), 6000);
+         // สั่งให้ระบบวิ่งไปดึงข้อมูลแอดมินอัตโนมัติเลย
+         handleCheckID(loginId); 
+      } else {
+         setError(errorMsg);
+      }
     } finally {
       setLoading(false);
     }
@@ -157,7 +175,11 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         }
       }
 
-      onLogin(user); // ✅ ยิง LINE เสร็จค่อยรันคำสั่งล็อกอิน
+      // ✅ แสตมป์เวลาเข้าสู่ระบบล่าสุด สำหรับคนที่เพิ่งสมัครใหม่
+      await supabase.from('users').update({ last_login: new Date().toISOString() }).eq('id', user.id);
+
+      onLogin(user); // ✅ ยิง LINE และแสตมป์เวลาเสร็จค่อยรันคำสั่งล็อกอิน
+
     } catch (err: any) {
       const errorMsg = err.message || '';
       

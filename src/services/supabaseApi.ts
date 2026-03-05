@@ -10,6 +10,28 @@ export const api = {
   ===================================================== */
 
   login: async (nationalId: string): Promise<User> => {
+    
+    // 🔥 1. PRE-CHECK: ด่านตรวจก่อนเข้า Auth
+    // วิ่งไปเช็คในตาราง users ก่อนว่า แอดมินสร้างชื่อคนนี้รอไว้หรือยัง?
+    const hash = SHA256(nationalId).toString();
+    const { data: preCheckUser } = await supabase
+      .from('users')
+      .select('pdpa_agreed, is_active')
+      .or(`national_id.eq.${nationalId},national_id_hash.eq.${hash}`)
+      .maybeSingle();
+
+    if (preCheckUser) {
+      // โดนแอดมินแบนตั้งแต่ยังไม่เข้า
+      if (preCheckUser.is_active === false) {
+         throw new Error('บัญชีของคุณถูกระงับสิทธิ์ชั่วคราว โปรดติดต่อเจ้าหน้าที่ Safety');
+      }
+      // ✅ ด่านสกัดสำคัญ: แอดมินเพิ่มชื่อให้แล้ว แต่ผู้ใช้ยังไม่เคยกดยอมรับ PDPA
+      if (preCheckUser.pdpa_agreed === false) {
+         throw new Error('REQUIRE_REGISTER'); // เตะกลับไปหน้า Register อัตโนมัติ
+      }
+    }
+
+    // 2. ดำเนินการ Login กับ Supabase Auth ตามปกติ (สำหรับคนที่ PDPA = true แล้ว)
     const email = `${nationalId}@safetypass.com`
     const password = nationalId 
 
@@ -18,9 +40,15 @@ export const api = {
       password
     })
 
-    if (authError) throw new Error('เข้าสู่ระบบไม่สำเร็จ: ' + authError.message)
+    if (authError) {
+      // ดักจับคนแปลกหน้าที่ไม่เคยมีในระบบเลย พยายามจะมาล็อกอิน
+      if (authError.message.includes('Invalid login credentials')) {
+          throw new Error('ไม่พบข้อมูล: กรุณาลงทะเบียนและยอมรับเงื่อนไขก่อนเข้าใช้งาน');
+      }
+      throw new Error('เข้าสู่ระบบไม่สำเร็จ: ' + authError.message);
+    }
 
-    // 1. ดึงข้อมูล Profile ทั่วไป (จะได้ national_id = "PROTECTED")
+    // 3. ดึงข้อมูล Profile ทั่วไป (จะได้ national_id = "PROTECTED")
     const { data: userData, error: userError } = await supabase
       .from('users')
       .select('*, vendors(*)')
@@ -29,14 +57,13 @@ export const api = {
 
     if (userError || !userData) throw new Error('ไม่พบข้อมูลผู้ใช้งานในระบบ')
 
-    // 🔥 บล็อกผู้ใช้ที่โดนแบน (is_active = false)
+    // 🔥 บล็อกผู้ใช้ที่โดนแบน (ป้องกันเหนียวไว้อีกชั้น)
     if (userData.is_active === false) {
-      // Sign out ออกจากระบบทันทีเพื่อความปลอดภัย
       await supabase.auth.signOut();
       throw new Error('บัญชีของคุณถูกระงับสิทธิ์ชั่วคราว โปรดติดต่อเจ้าหน้าที่ Safety');
     }
     
-    // 2. 🔐 SECURE DECRYPT: เรียก RPC เพื่อถอดรหัสเลขบัตรจริงมาแสดงผล
+    // 4. 🔐 SECURE DECRYPT: เรียก RPC เพื่อถอดรหัสเลขบัตรจริงมาแสดงผล
     const { data: realId, error: decryptError } = await supabase.rpc('get_my_decrypted_id');
     
     if (decryptError) console.error("Decryption failed:", decryptError);

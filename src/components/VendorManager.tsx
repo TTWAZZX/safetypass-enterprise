@@ -4,30 +4,10 @@ import { api } from '../services/supabaseApi';
 import { useToastContext } from './ToastProvider';
 import * as XLSX from 'xlsx';
 import { 
-  Users, 
-  Building2, 
-  Search, 
-  Plus, 
-  RotateCcw, 
-  CheckCircle, 
-  Loader2,
-  Trash2,
-  Edit3,
-  UserPlus,
-  Upload,
-  Download,
-  History,
-  ShieldCheck,
-  X,
-  Globe2,
-  Calendar,
-  CalendarClock,
-  Ban,
-  Clock,
-  CheckCircle2,
-  ShieldAlert,
-  ChevronLeft,
-  ChevronRight
+  Users, Building2, Search, Plus, RotateCcw, CheckCircle, Loader2,
+  Trash2, Edit3, UserPlus, Upload, Download, History, ShieldCheck,
+  X, Globe2, Calendar, CalendarClock, Ban, Clock, CheckCircle2,
+  ShieldAlert, ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 const maskNationalID = (id: string | null | undefined) => {
@@ -127,6 +107,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
       if (activeTab === 'VENDORS') {
         query = supabase.from('vendors').select('*').order('created_at', { ascending: false });
       } else if (activeTab === 'USERS') {
+        // ✅ สั่งให้ดึง last_login มาด้วย
         query = supabase.from('users').select('*, vendors(name)').order('created_at', { ascending: false });
       } else {
         query = supabase.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(2000);
@@ -240,7 +221,8 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
         'Age': user.age || '',
         'Nationality': user.nationality || '',
         'Status': user.is_active === false ? 'BANNED' : (user.induction_expiry ? 'Certified' : 'Pending'),
-        'Induction Expiry': user.induction_expiry ? new Date(user.induction_expiry).toLocaleDateString() : '-'
+        'Induction Expiry': user.induction_expiry ? new Date(user.induction_expiry).toLocaleDateString() : '-',
+        'Last Login': user.last_login ? new Date(user.last_login).toLocaleString('th-TH') : 'Never Logged In' // ✅ เพิ่มใน Export
       }));
       fileName = `Personnel_List_${new Date().toISOString().split('T')[0]}.xlsx`;
     } else if (activeTab === 'VENDORS') {
@@ -302,7 +284,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
               age: age, 
               nationality: nationality,
               induction_expiry: processedExpiry, 
-              pdpa_agreed: true,
+              pdpa_agreed: false, // 🚨 เปลี่ยนจาก true เป็น false
               is_active: true
             };
 
@@ -391,7 +373,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             vendorName: name,
-            adminEmail: user?.email || 'System User'
+            adminEmail: user?.email || 'System Admin'
           })
         }).catch(e => console.error("LINE Admin Notification Trigger Error:", e));
       } catch (err) {
@@ -411,25 +393,21 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     const name = window.prompt("ชื่อ-นามสกุล:");
     const nid = window.prompt("เลขบัตรประชาชน:");
     if (!name || !nid) return;
-    const { error } = await supabase.from('users').insert([{ id: generateUUID(), name, national_id: nid, role: 'USER' }]);
+    // 🚨 เพิ่ม pdpa_agreed: false เข้าไปใน insert
+    const { error } = await supabase.from('users').insert([{ id: generateUUID(), name, national_id: nid, role: 'USER', pdpa_agreed: false }]);
     if (error) showToast(error.message, 'error'); else { showToast('Success', 'success'); loadData(); }
   };
 
-  // 🔥 อัปเกรดฟังก์ชันลบ: ลบแบบดุดัน ถอนรากถอนโคน เพื่อเลี่ยง Foreign Key Error
   const handleDeleteUser = async (id: string, name: string) => {
     if (!window.confirm(`⚠️ คำเตือน: คุณกำลังจะลบพนักงาน "${name}"\nประวัติการสอบ ใบอนุญาต และข้อมูล Log ทั้งหมดจะถูกลบถาวร ยืนยันการลบ?`)) return;
     
     setLoading(true);
     try {
-      // 1. ส่งคำสั่งลบไปยังตารางลูก (Child Tables) ทั้งหมดก่อน เพื่อเคลียร์ Foreign Key
-      // (ใส่ทั้งตัวพิมพ์เล็กพิมพ์ใหญ่เผื่อ Database อ้างอิงชื่อต่างกัน)
-      const childTables = ['exam_logs', 'EXAM_LOGS', 'exam_history', 'EXAM_HISTORY', 'work_permits', 'WORK_PERMITS'];
-      
+      const childTables = ['exam_logs', 'exam_history', 'work_permits'];
       await Promise.all(
         childTables.map(table => supabase.from(table).delete().eq('user_id', id))
       );
 
-      // 2. เมื่อลูกหายหมดแล้ว ค่อยลบข้อมูลในตารางแม่ (Parent Table)
       const { error } = await supabase.from('users').delete().eq('id', id);
       
       if (error) {
@@ -632,12 +610,26 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                                <div className={`w-10 h-10 shrink-0 rounded-2xl text-white transition-all flex items-center justify-center font-black text-xs shadow-inner uppercase ${item.is_active === false ? 'bg-red-400' : 'bg-slate-200 text-slate-500 group-hover:bg-blue-600'}`}>
                                  {item.name?.charAt(0)}
                                </div>
-                               <div className="min-w-0">
+                               <div className="min-w-0 flex flex-col gap-0.5">
                                  <div className="font-black text-slate-800 uppercase text-xs truncate max-w-[200px] flex items-center gap-2">
                                     {item.name} 
                                     {item.is_active === false && <span className="bg-red-500 text-white px-1.5 py-0.5 rounded text-[8px] tracking-widest shrink-0">BANNED</span>}
                                  </div>
-                                 {activeTab === 'USERS' && <div className="text-[10px] text-slate-400 font-mono mt-0.5 tracking-tighter">ID: {maskNationalID(item.national_id)}</div>}
+                                 {activeTab === 'USERS' && (
+                                    <div className="flex items-center gap-2">
+                                        <p className="text-[10px] text-slate-400 font-mono tracking-tighter">ID: {maskNationalID(item.national_id)}</p>
+                                        {/* 🔥 ✅ โชว์ Badge สถานะการเข้าสู่ระบบ */}
+                                        {item.last_login ? (
+                                            <span className="text-[8px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded flex items-center gap-1 border border-emerald-100">
+                                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div> Active
+                                            </span>
+                                        ) : (
+                                            <span className="text-[8px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded flex items-center gap-1 border border-slate-200">
+                                                <div className="w-1.5 h-1.5 rounded-full bg-slate-300"></div> Pending
+                                            </span>
+                                        )}
+                                    </div>
+                                 )}
                                </div>
                             </div>
                           </td>
@@ -729,7 +721,23 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                                  <h4 className="font-black text-slate-800 uppercase text-sm truncate">{item.name}</h4>
                                  {item.is_active === false && <span className="bg-red-500 text-white px-1.5 py-0.5 rounded text-[8px] tracking-widest shrink-0">BANNED</span>}
                                </div>
-                               {activeTab === 'USERS' && <p className="text-[10px] text-slate-400 font-mono mt-0.5 truncate">ID: {maskNationalID(item.national_id)}</p>}
+                               
+                               {activeTab === 'USERS' && (
+                                   <div className="flex items-center justify-between mt-1">
+                                      <p className="text-[10px] text-slate-400 font-mono truncate">ID: {maskNationalID(item.national_id)}</p>
+                                      {/* 🔥 ✅ โชว์ Badge ในมือถือด้วย */}
+                                      {item.last_login ? (
+                                        <span className="text-[8px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div> Active
+                                        </span>
+                                      ) : (
+                                        <span className="text-[8px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-slate-300"></div> Pending
+                                        </span>
+                                      )}
+                                   </div>
+                               )}
+
                                {activeTab === 'VENDORS' && <p className="text-[10px] text-slate-400 font-mono mt-0.5 truncate">Reg: {new Date(item.created_at).toLocaleDateString()}</p>}
                             </div>
                          </div>
