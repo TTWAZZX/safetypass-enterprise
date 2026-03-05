@@ -371,7 +371,6 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     e.target.value = '';
   };
 
-  // ✅ แก้ไข: เพิ่มการยิงแจ้งเตือนเมื่อเพิ่ม Vendor ใหม่
   const handleAddVendor = async () => {
     const name = window.prompt("ชื่อบริษัทใหม่ (New Company Name):");
     if (!name) return;
@@ -385,7 +384,6 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
       logAction('CREATE_VENDOR', name); 
       loadData(); 
 
-      // 🔥 ยิง API แจ้งเตือนเข้า LINE Admin
       try {
         const { data: { user } } = await supabase.auth.getUser();
         fetch('/api/notify-admin', {
@@ -417,20 +415,36 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     if (error) showToast(error.message, 'error'); else { showToast('Success', 'success'); loadData(); }
   };
 
+  // 🔥 อัปเกรดฟังก์ชันลบ: ลบแบบดุดัน ถอนรากถอนโคน เพื่อเลี่ยง Foreign Key Error
   const handleDeleteUser = async (id: string, name: string) => {
     if (!window.confirm(`⚠️ คำเตือน: คุณกำลังจะลบพนักงาน "${name}"\nประวัติการสอบ ใบอนุญาต และข้อมูล Log ทั้งหมดจะถูกลบถาวร ยืนยันการลบ?`)) return;
+    
     setLoading(true);
     try {
-      await supabase.from('exam_history').delete().eq('user_id', id);
-      await supabase.from('exam_logs').delete().eq('user_id', id);
-      await supabase.from('work_permits').delete().eq('user_id', id);
+      // 1. ส่งคำสั่งลบไปยังตารางลูก (Child Tables) ทั้งหมดก่อน เพื่อเคลียร์ Foreign Key
+      // (ใส่ทั้งตัวพิมพ์เล็กพิมพ์ใหญ่เผื่อ Database อ้างอิงชื่อต่างกัน)
+      const childTables = ['exam_logs', 'EXAM_LOGS', 'exam_history', 'EXAM_HISTORY', 'work_permits', 'WORK_PERMITS'];
+      
+      await Promise.all(
+        childTables.map(table => supabase.from(table).delete().eq('user_id', id))
+      );
+
+      // 2. เมื่อลูกหายหมดแล้ว ค่อยลบข้อมูลในตารางแม่ (Parent Table)
       const { error } = await supabase.from('users').delete().eq('id', id);
-      if (error) throw error;
+      
+      if (error) {
+        throw new Error(`ติดข้อจำกัดฐานข้อมูล: ${error.message}`);
+      }
+
       showToast(`ลบข้อมูลพนักงาน ${name} สำเร็จ`, 'success');
       logAction('DELETE_USER', name, 'Full Cascade Delete Done');
       loadData();
-    } catch (err: any) { showToast('ไม่สามารถลบได้: ' + err.message, 'error'); } 
-    finally { setLoading(false); }
+    } catch (err: any) { 
+      console.error("Delete Error:", err);
+      showToast('ไม่สามารถลบได้: ' + err.message, 'error'); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const handleResetTraining = async (id: string, name: string) => {
