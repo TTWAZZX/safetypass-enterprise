@@ -141,23 +141,23 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         vendorId === 'OTHER' ? otherVendor : undefined
       );
 
-      // 🔥 ✅ เพิ่มระบบแจ้งเตือนเข้า LINE Admin เมื่อ User ขอเพิ่มบริษัทใหม่
+      // 🔥 ✅ แก้ไข: เติมคำว่า await เพื่อให้ระบบ "รอ" ส่ง LINE ให้เสร็จก่อนเปลี่ยนหน้า
       if (vendorId === 'OTHER' && otherVendor.trim() !== '') {
         try {
-          fetch('/api/notify-admin', {
+          await fetch('/api/notify-admin', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               vendorName: otherVendor.trim(),
               adminEmail: `พนักงานสมัครใหม่ (${name})`
             })
-          }).catch(e => console.error("LINE Admin Notification Trigger Error:", e));
+          });
         } catch (err) {
           console.error("Fail to trigger LINE Admin API:", err);
         }
       }
 
-      onLogin(user);
+      onLogin(user); // ✅ ยิง LINE เสร็จค่อยรันคำสั่งล็อกอิน
     } catch (err: any) {
       const errorMsg = err.message || '';
       
