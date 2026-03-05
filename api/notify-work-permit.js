@@ -4,7 +4,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ message: 'Method Not Allowed' });
   }
 
-  // ✅ รับค่าจาก Frontend (เพิ่ม national_id เพื่อใช้ทำลิงก์ปุ่มกด)
+  // ✅ รับค่าจาก Frontend (ดึงมาครบถ้วนเหมือนเดิม)
   const { name, vendor, score, maxScore, permitNo, status, national_id } = req.body;
 
   // ตรวจสอบสถานะการสอบ
@@ -13,14 +13,14 @@ export default async function handler(req, res) {
   const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN;
   const LINE_GROUP_ID = process.env.LINE_GROUP_ID;
 
-  // 🌐 ตั้งค่า URL ของเว็บคุณ (เปลี่ยนเป็นโดเมนจริงของคุณบน Vercel)
+  // 🌐 ตั้งค่า URL ของเว็บคุณ
   const BASE_URL = "https://safetypass-enterprise.vercel.app";
 
   if (!LINE_ACCESS_TOKEN || !LINE_GROUP_ID) {
     return res.status(500).json({ message: 'LINE Credentials Missing' });
   }
 
-  // 🎨 ออกแบบ Flex Message (รวม Footer พร้อมปุ่ม Quick Action)
+  // 🎨 ออกแบบ Flex Message แบบ Premium Enterprise
   const flexMessage = {
     to: LINE_GROUP_ID,
     messages: [
@@ -29,21 +29,39 @@ export default async function handler(req, res) {
         altText: isPassed ? `✅ สอบผ่าน: ${name}` : `❌ สอบไม่ผ่าน: ${name}`,
         contents: {
           type: "bubble",
-          size: "kilo",
+          size: "mega", // อัปเกรดขนาดให้ใหญ่ขึ้นเพื่อให้ข้อความไม่เบียดกัน
           header: {
             type: "box",
             layout: "vertical",
             contents: [
               {
+                type: "box",
+                layout: "horizontal",
+                contents: [
+                  {
+                    type: "text",
+                    text: "SECURITY COMPLIANCE NODE",
+                    color: "#EAB308", // สีทอง Premium
+                    size: "xxs",
+                    weight: "bold",
+                    flex: 0
+                  }
+                ],
+                paddingBottom: "5px"
+              },
+              {
                 type: "text",
                 text: isPassed ? "✅ WORK PERMIT APPROVED" : "❌ ASSESSMENT FAILED",
-                color: "#ffffff",
+                color: isPassed ? "#10B981" : "#EF4444", // เขียวถ้าผ่าน แดงถ้าตก
                 weight: "bold",
-                size: "sm"
+                size: "lg",
+                wrap: true
               }
             ],
-            backgroundColor: isPassed ? "#10b981" : "#ef4444",
-            paddingAll: "12px"
+            backgroundColor: "#0F172A", // สีน้ำเงินเข้มหรูหรา
+            paddingAll: "20px",
+            paddingTop: "22px",
+            paddingBottom: "22px"
           },
           body: {
             type: "box",
@@ -51,83 +69,84 @@ export default async function handler(req, res) {
             contents: [
               {
                 type: "text",
-                text: isPassed ? "ผู้รับเหมาผ่านการทดสอบ" : "ผู้รับเหมาไม่ผ่านการทดสอบ",
-                weight: "bold",
-                size: "lg",
-                color: "#1e293b",
-                wrap: true
+                text: "สรุปผลการทดสอบความปลอดภัย (Safety Induction & Work Permit)",
+                weight: "regular",
+                size: "xs",
+                color: "#64748B",
+                wrap: true,
+                margin: "none"
+              },
+              {
+                type: "separator",
+                margin: "lg",
+                color: "#E2E8F0"
               },
               {
                 type: "box",
                 layout: "vertical",
                 margin: "lg",
-                spacing: "sm",
+                spacing: "md",
                 contents: [
                   {
                     type: "box",
-                    layout: "baseline",
-                    spacing: "sm",
+                    layout: "horizontal",
                     contents: [
-                      { type: "text", text: "เลขใบอนุญาต", color: "#64748b", size: "sm", flex: 3 },
+                      { type: "text", text: "📝 ใบอนุญาต", color: "#94A3B8", size: "sm", flex: 3 },
                       { 
                         type: "text", 
                         text: permitNo || "-", 
                         wrap: true, 
-                        color: isPassed ? "#f59e0b" : "#1e293b", 
+                        color: "#0F172A", 
                         size: "sm", 
-                        flex: 6, 
+                        flex: 7, 
                         weight: "bold" 
                       }
                     ]
                   },
                   {
                     type: "box",
-                    layout: "baseline",
-                    spacing: "sm",
+                    layout: "horizontal",
                     contents: [
-                      { type: "text", text: "ชื่อ", color: "#64748b", size: "sm", flex: 3 },
-                      { type: "text", text: name, wrap: true, color: "#0f172a", size: "sm", flex: 6, weight: "bold" }
+                      { type: "text", text: "👤 ชื่อ", color: "#94A3B8", size: "sm", flex: 3 },
+                      { type: "text", text: name, wrap: true, color: "#0F172A", size: "sm", flex: 7, weight: "bold" }
                     ]
                   },
                   {
                     type: "box",
-                    layout: "baseline",
-                    spacing: "sm",
+                    layout: "horizontal",
                     contents: [
-                      { type: "text", text: "บริษัท", color: "#64748b", size: "sm", flex: 3 },
-                      { type: "text", text: vendor || "ไม่มีสังกัด", wrap: true, color: "#0f172a", size: "sm", flex: 6 }
+                      { type: "text", text: "🏢 บริษัท", color: "#94A3B8", size: "sm", flex: 3 },
+                      { type: "text", text: vendor || "ไม่มีสังกัด", wrap: true, color: "#0F172A", size: "sm", flex: 7, weight: "bold" }
                     ]
                   },
                   {
                     type: "box",
-                    layout: "baseline",
-                    spacing: "sm",
+                    layout: "horizontal",
                     contents: [
-                      { type: "text", text: "คะแนน", color: "#64748b", size: "sm", flex: 3 },
+                      { type: "text", text: "📊 คะแนน", color: "#94A3B8", size: "sm", flex: 3 },
                       { 
                         type: "text", 
                         text: `${score} / ${maxScore}`, 
                         wrap: true, 
-                        color: isPassed ? "#10b981" : "#ef4444", 
+                        color: isPassed ? "#10B981" : "#EF4444", 
                         size: "sm", 
-                        flex: 6, 
+                        flex: 7, 
                         weight: "bold" 
                       }
                     ]
                   },
                   {
                     type: "box",
-                    layout: "baseline",
-                    spacing: "sm",
+                    layout: "horizontal",
                     contents: [
-                      { type: "text", text: "สถานะ", color: "#64748b", size: "sm", flex: 3 },
+                      { type: "text", text: "📌 สถานะ", color: "#94A3B8", size: "sm", flex: 3 },
                       { 
                         type: "text", 
                         text: isPassed ? "ผ่านเกณฑ์ (บัตร 5 วัน)" : "ไม่ผ่านเกณฑ์ (สอบใหม่)", 
                         wrap: true, 
-                        color: isPassed ? "#10b981" : "#ef4444", 
+                        color: isPassed ? "#10B981" : "#EF4444", 
                         size: "sm", 
-                        flex: 6, 
+                        flex: 7, 
                         weight: "bold" 
                       }
                     ]
@@ -137,17 +156,19 @@ export default async function handler(req, res) {
             ],
             paddingAll: "20px"
           },
-          // 🔗 ✅ เพิ่มปุ่ม Footer (Quick Actions)
+          // 🔗 ✅ ส่วนปุ่มกด (รักษาระบบและลิงก์เดิมไว้ 100%)
           footer: {
             type: "box",
             layout: "vertical",
             spacing: "sm",
+            paddingAll: "20px",
+            paddingTop: "0px",
             contents: [
               {
                 type: "button",
                 style: "primary",
                 height: "sm",
-                color: "#3b82f6",
+                color: "#3B82F6", // สีฟ้าน้ำทะเล
                 action: {
                   type: "uri",
                   label: "📄 ดูใบเซอร์ / Digital Pass",

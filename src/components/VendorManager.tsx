@@ -83,16 +83,15 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
   
   const [activeTab, setActiveTab] = useState<'USERS' | 'VENDORS' | 'LOGS'>(initialSearch ? 'USERS' : 'VENDORS');
   const [searchQuery, setSearchQuery] = useState(initialSearch || '');
-  const [selectedVendorFilter, setSelectedVendorFilter] = useState(''); // ✅ State สำหรับตัวกรองบริษัท
+  const [selectedVendorFilter, setSelectedVendorFilter] = useState(''); 
   
   const [loading, setLoading] = useState(true);
   const [dataList, setDataList] = useState<any[]>([]);
   const [allVendors, setAllVendors] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
   
-  // ✅ Pagination States
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10); // จำนวนรายการต่อหน้า
+  const [itemsPerPage, setItemsPerPage] = useState(10); 
   
   const [importingUsers, setImportingUsers] = useState(false);
   const [importingVendors, setImportingVendors] = useState(false);
@@ -108,7 +107,6 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
   const userFileInputRef = useRef<HTMLInputElement>(null);
   const vendorFileInputRef = useRef<HTMLInputElement>(null);
 
-  // ✅ รีเซ็ตหน้ากลับไปที่ 1 เสมอเวลาค้นหา เปลี่ยนแท็บ หรือเปลี่ยนตัวกรอง
   useEffect(() => {
     setCurrentPage(1);
   }, [activeTab, searchQuery, selectedVendorFilter, itemsPerPage]);
@@ -373,12 +371,35 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     e.target.value = '';
   };
 
+  // ✅ แก้ไข: เพิ่มการยิงแจ้งเตือนเมื่อเพิ่ม Vendor ใหม่
   const handleAddVendor = async () => {
     const name = window.prompt("ชื่อบริษัทใหม่ (New Company Name):");
     if (!name) return;
+    
     const { error } = await supabase.from('vendors').insert([{ name, status: 'PENDING' }]);
-    if (error) showToast(error.message, 'error');
-    else { showToast('ลงทะเบียนบริษัทแล้ว', 'success'); logAction('CREATE_VENDOR', name); loadData(); }
+    
+    if (error) {
+      showToast(error.message, 'error');
+    } else { 
+      showToast('ลงทะเบียนบริษัทแล้ว กรุณารอการอนุมัติ', 'success'); 
+      logAction('CREATE_VENDOR', name); 
+      loadData(); 
+
+      // 🔥 ยิง API แจ้งเตือนเข้า LINE Admin
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        fetch('/api/notify-admin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            vendorName: name,
+            adminEmail: user?.email || 'System User'
+          })
+        }).catch(e => console.error("LINE Admin Notification Trigger Error:", e));
+      } catch (err) {
+        console.error("Fail to trigger LINE Admin API:", err);
+      }
+    }
   };
 
   const handleDeleteVendor = async (id: string, name: string) => {
@@ -418,17 +439,15 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     if (error) showToast(error.message, 'error'); else { showToast('Reset Complete', 'success'); logAction('RESET_TRAINING', name); loadData(); }
   };
 
-  // ✅ ระบบค้นหา + ตัวกรองบริษัท
   const filtered = activeTab === 'LOGS' ? logs : dataList.filter(item => {
     const matchesSearch = (item.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
                           (item.national_id || '').includes(searchQuery);
     
-    // ถ้าอยู่หน้า USERS และมีการเลือกตัวกรองบริษัท
     if (activeTab === 'USERS' && selectedVendorFilter) {
       if (selectedVendorFilter === 'EXTERNAL') {
-        return matchesSearch && !item.vendor_id; // หาคนไม่มีสังกัด
+        return matchesSearch && !item.vendor_id; 
       }
-      return matchesSearch && item.vendor_id === selectedVendorFilter; // หาคนที่สังกัดตรงกัน
+      return matchesSearch && item.vendor_id === selectedVendorFilter; 
     }
     return matchesSearch;
   });
@@ -436,17 +455,14 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
   const totalItems = filtered.length;
   const totalPages = itemsPerPage === -1 ? 1 : Math.ceil(totalItems / itemsPerPage);
   
-  // ตัดข้อมูลเฉพาะหน้าปัจจุบัน
   const paginatedData = itemsPerPage === -1 
     ? filtered 
     : filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-  // ✅ ฟังก์ชันสำหรับแสดงแถบ Pagination (ใช้ซ้ำได้ทั้งข้างบนและข้างล่าง)
   const renderPagination = (position: 'top' | 'bottom') => {
     if (filtered.length === 0) return null;
     return (
       <div className={`bg-slate-50/50 p-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4 ${position === 'top' ? 'border-b border-slate-100' : 'mt-auto border-t border-slate-200 rounded-b-[1.5rem] md:rounded-b-[2.5rem]'}`}>
-         {/* Page Size Selector */}
          <div className="flex items-center gap-2 text-[10px] md:text-xs font-bold text-slate-500 w-full sm:w-auto justify-center sm:justify-start">
             <span>แสดง</span>
             <select 
@@ -465,7 +481,6 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
             <span className="ml-2 hidden sm:inline text-slate-400 font-medium">| จากทั้งหมด {totalItems} รายการ</span>
          </div>
 
-         {/* Prev / Next Buttons */}
          <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
             <button 
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
@@ -521,7 +536,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                 <input className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all shadow-sm" placeholder={`Search ${activeTab.toLowerCase()}...`} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
               </div>
               
-              {/* ✅ เพิ่มตัวกรองบริษัท (แสดงเฉพาะแท็บ USERS) */}
+              {/* ตัวกรองบริษัท */}
               {activeTab === 'USERS' && (
                 <div className="relative w-full md:w-64">
                   <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
@@ -572,7 +587,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
           ) : (
             <div className="flex-1 flex flex-col">
               
-              {/* ✅ แถบ Pagination ด้านบน (แสดงทั้งในคอมและมือถือ) */}
+              {/* ✅ แถบ Pagination ด้านบน */}
               {renderPagination('top')}
 
               {/* 🖥️ DESKTOP VIEW (TABLE) */}
