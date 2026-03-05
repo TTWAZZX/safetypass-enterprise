@@ -5,7 +5,7 @@ import { useTranslation } from '../context/LanguageContext';
 import { 
   UserPlus, LogIn, ChevronRight, AlertCircle, Loader2, 
   ShieldCheck, Globe2, BookOpen, HelpCircle,
-  Search, CheckCircle // ✅ เพิ่มไอคอนสำหรับปุ่มค้นหาและแจ้งเตือนสำเร็จ
+  Search, CheckCircle
 } from 'lucide-react';
 import PrivacyPolicyModal from './PrivacyPolicyModal';
 
@@ -35,9 +35,9 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [fetchingUser, setFetchingUser] = useState(false);
-  const [dataFoundMsg, setDataFoundMsg] = useState(false); // ✅ State สำหรับโชว์ข้อความดึงข้อมูลสำเร็จ
-  const [dataNotFoundMsg, setDataNotFoundMsg] = useState(false); // ✅ เพิ่ม State สำหรับโชว์ข้อความไม่พบข้อมูล
-  const [infoMsg, setInfoMsg] = useState(''); // ✅ State สำหรับแบนเนอร์สีฟ้า
+  const [dataFoundMsg, setDataFoundMsg] = useState(false); 
+  const [dataNotFoundMsg, setDataNotFoundMsg] = useState(false); 
+  const [infoMsg, setInfoMsg] = useState(''); 
 
   // Support Links State
   const [manualUrl, setManualUrl] = useState<string>('');
@@ -62,13 +62,12 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     loadSupportLinks();
   }, []);
 
-  // ✅ เปลี่ยนชื่อและปรับ Logic ให้ดึงข้อมูลแบบฉลาดขึ้น
   const handleCheckID = async (idToCheck = regId) => {
     if (!idToCheck || idToCheck.length < 13) return; 
     
     setFetchingUser(true);
     setDataFoundMsg(false);
-    setDataNotFoundMsg(false); // ✅ รีเซ็ตสถานะแจ้งเตือนไม่พบข้อมูลก่อนเริ่มค้นหาใหม่
+    setDataNotFoundMsg(false); 
     try {
       const userData = await api.checkUser(idToCheck);
       if (userData) {
@@ -90,11 +89,9 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
            }
         }
         
-        // โชว์ข้อความว่าดึงข้อมูลสำเร็จ 5 วินาที
         setDataFoundMsg(true);
         setTimeout(() => setDataFoundMsg(false), 5000);
       } else {
-        // ✅ ถ้าหาไม่เจอให้โชว์ข้อความว่าไม่มีข้อมูล 5 วินาที
         setDataNotFoundMsg(true);
         setTimeout(() => setDataNotFoundMsg(false), 5000);
       }
@@ -133,7 +130,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     e.preventDefault();
     setLoading(true);
     setError("");
-    setInfoMsg(""); // เคลียร์ข้อความเก่า
+    setInfoMsg(""); 
     try {
       const user = await api.register(
         regId, 
@@ -143,19 +140,35 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         nationality, 
         vendorId === 'OTHER' ? otherVendor : undefined
       );
+
+      // 🔥 ✅ เพิ่มระบบแจ้งเตือนเข้า LINE Admin เมื่อ User ขอเพิ่มบริษัทใหม่
+      if (vendorId === 'OTHER' && otherVendor.trim() !== '') {
+        try {
+          fetch('/api/notify-admin', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              vendorName: otherVendor.trim(),
+              adminEmail: `พนักงานสมัครใหม่ (${name})`
+            })
+          }).catch(e => console.error("LINE Admin Notification Trigger Error:", e));
+        } catch (err) {
+          console.error("Fail to trigger LINE Admin API:", err);
+        }
+      }
+
       onLogin(user);
     } catch (err: any) {
       const errorMsg = err.message || '';
       
-      // ✅ ดักจับ Error: สลับหน้าทันที และโชว์แบนเนอร์สีฟ้า
       if (errorMsg.toLowerCase().includes('already registered') || errorMsg.toLowerCase().includes('already exists') || errorMsg.includes('User already registered')) {
          
-         setLoginId(regId); // กรอกเลขให้
-         setMode('LOGIN'); // สลับหน้า
+         setLoginId(regId); 
+         setMode('LOGIN'); 
          setError('');
          
          setInfoMsg('พบว่าคุณมีบัญชีในระบบแล้ว! กรุณากด Login เพื่อเข้าใช้งาน');
-         setTimeout(() => setInfoMsg(''), 6000); // โชว์ 6 วินาทีแล้วหายไป
+         setTimeout(() => setInfoMsg(''), 6000); 
       } else {
          setError('Registration failed: ' + errorMsg);
       }
@@ -202,7 +215,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         {mode === 'LOGIN' && (
           <form onSubmit={handleLogin} className="space-y-4 relative z-10">
             
-            {/* ✅ แบนเนอร์แจ้งเตือน กรณีเด้งมาจากหน้าลงทะเบียน */}
             {infoMsg && (
                 <div className="bg-blue-50 border border-blue-200 text-blue-700 p-3 rounded-2xl text-[10px] sm:text-xs font-bold flex items-start gap-2 animate-in slide-in-from-top-2 shadow-sm">
                     <AlertCircle size={16} className="mt-0.5 shrink-0" />
@@ -239,7 +251,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           <form onSubmit={handleRegister} className="space-y-3.5 text-left relative z-10">
             <div className="grid grid-cols-2 gap-3">
                 
-                {/* ✅ ช่องกรอกเลขบัตรที่อัปเกรดใหม่ (Smart Auto-Fetch + Button) */}
                 <div className="col-span-2 space-y-1">
                     <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex justify-between">
                         {t('auth.national_id')}
@@ -250,13 +261,11 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                             required 
                             value={regId} 
                             onChange={e => {
-                                // บังคับกรอกเฉพาะตัวเลขและตัดให้เหลือ 13 หลัก
                                 const val = e.target.value.replace(/\D/g, '').slice(0, 13);
                                 setRegId(val);
-                                // ดึงข้อมูลอัตโนมัติเมื่อครบ 13 หลัก
                                 if (val.length === 13) handleCheckID(val);
                             }} 
-                            onBlur={() => handleCheckID()} // เผื่อเหนียวให้ดึงตอนคลิกออกด้วย
+                            onBlur={() => handleCheckID()} 
                             className="w-full pl-4 pr-24 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-xs shadow-inner transition-all" 
                             placeholder="เลขบัตรประจำตัวประชาชน 13 หลัก" 
                         />
@@ -271,7 +280,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                         </button>
                     </div>
                     
-                    {/* ✅ ส่วนแจ้งเตือนเมื่อดึงข้อมูลสำเร็จ หรือ ไม่พบข้อมูล */}
                     <div className="min-h-[20px]">
                       {dataFoundMsg ? (
                           <div className="flex items-center gap-1.5 mt-2 ml-1 text-emerald-600 animate-in fade-in slide-in-from-top-1">
