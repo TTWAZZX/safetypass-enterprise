@@ -29,6 +29,8 @@ const DigitalCard: React.FC<DigitalCardProps> = ({
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const [downloading, setDownloading] = useState(false);
+  // ✅ เพิ่ม State สำหรับโชว์รูปที่แคปเสร็จแล้ว
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const isPermit = type === 'WORK_PERMIT';
   const themeColor = isPermit 
@@ -60,21 +62,28 @@ const DigitalCard: React.FC<DigitalCardProps> = ({
     ? `${window.location.origin}/verify?id=${user.national_id}&permit=${encodeURIComponent(permit?.permit_no || '')}`
     : `${window.location.origin}/verify?id=${user.national_id}`;
 
+  // ✅ อัปเกรดระบบ Download ล็อกขนาดและแก้อาการภาพเบี้ยว/ตัวหนังสือขาด
   const handleDownload = async () => {
     if (!cardRef.current) return;
     setDownloading(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 600));
+      await new Promise(resolve => setTimeout(resolve, 800)); // เพิ่มเวลาให้ฟอนต์โหลดเสร็จสมบูรณ์
       const canvas = await html2canvas(cardRef.current, { 
         scale: 3, 
         useCORS: true, 
-        backgroundColor: null 
+        allowTaint: true,
+        backgroundColor: null,
+        logging: false,
+        // 🔥 ล็อกขนาดและตำแหน่งให้ตรงกับความเป็นจริง 100%
+        width: cardRef.current.offsetWidth,
+        height: cardRef.current.offsetHeight,
+        scrollX: 0,
+        scrollY: 0,
       });
       const image = canvas.toDataURL("image/png", 1.0);
-      const link = document.createElement("a");
-      link.href = image;
-      link.download = `SafetyPass_${isPermit ? 'Permit' : 'Induction'}_${user.national_id}.png`;
-      link.click();
+      
+      setPreviewImage(image);
+      
     } catch (err) {
       console.error(err);
       alert("บันทึกรูปภาพไม่สำเร็จ");
@@ -147,9 +156,10 @@ const DigitalCard: React.FC<DigitalCardProps> = ({
             </div>
             
             <h3 className="text-lg font-black mb-1 truncate tracking-tight uppercase px-2">{user.name}</h3>
-            <div className="flex items-center justify-center gap-1.5 text-slate-400 text-[9px] mb-6 font-bold uppercase tracking-wide">
+            {/* 🔥 แก้ไขคำสั่ง CSS ที่ทำให้ html2canvas ตัดข้อความแหว่ง เปลี่ยนมาใช้ break-words แทน */}
+            <div className="flex items-center justify-center gap-1.5 text-slate-400 text-[9px] mb-6 font-bold uppercase tracking-wide px-4">
                <Building2 size={10} className="opacity-50 flex-shrink-0" />
-               <span className="truncate max-w-[160px]">{user.vendors?.name || 'Authorized Contractor'}</span>
+               <span className="break-words text-center leading-tight">{user.vendors?.name || 'Authorized Contractor'}</span>
             </div>
 
             <div className="grid grid-cols-2 gap-3 bg-slate-950/40 rounded-[1.5rem] p-4 backdrop-blur-xl border border-white/5 shadow-inner">
@@ -202,6 +212,28 @@ const DigitalCard: React.FC<DigitalCardProps> = ({
           Enterprise Security Protocol • ID 2026
         </p>
       </div>
+
+      {/* ✅ Popup โชว์รูปภาพให้ผู้ใช้กดค้างเพื่อบันทึก (แก้ปัญหาโหลดผ่าน LINE ไม่ได้) */}
+      {previewImage && (
+        <div className="fixed inset-0 z-[9999] bg-slate-950/95 backdrop-blur-md flex flex-col items-center justify-center p-6 animate-in zoom-in duration-300 touch-none">
+           <div className="bg-blue-600 text-white text-[10px] font-black px-4 py-2 rounded-full uppercase tracking-widest mb-4 animate-bounce shadow-lg">
+              👇 กดค้างที่รูปภาพเพื่อบันทึกลงเครื่อง 👇
+           </div>
+           
+           <img 
+             src={previewImage} 
+             alt="Digital Card Ready to Save" 
+             className="w-full max-w-[320px] rounded-[2.5rem] shadow-2xl border-4 border-white/10" 
+           />
+           
+           <button 
+             onClick={() => setPreviewImage(null)} 
+             className="mt-8 bg-white/10 hover:bg-white/20 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest border border-white/20 transition-all active:scale-95"
+           >
+              ปิดหน้าต่าง (Close)
+           </button>
+        </div>
+      )}
 
     </div>
   );
