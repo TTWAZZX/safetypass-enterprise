@@ -597,8 +597,18 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
         <div className="space-y-4 px-1 text-left">
            <h3 className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] ml-2">Safety Manuals</h3>
            <div className="grid grid-cols-2 gap-4">
-              <ResourceCard icon={<BookOpen size={20} />} title="Induction" desc="Basic Safety Rules" onClick={() => setViewingManual(ExamType.INDUCTION)} />
-              <ResourceCard icon={<Ticket size={20} />} title="Work Permit" desc="High Risk Work" onClick={() => setViewingManual(ExamType.WORK_PERMIT)} />
+              <ResourceCard 
+                icon={<BookOpen size={20} />} 
+                title="Induction" 
+                desc="Basic Safety Rules" 
+                onClick={() => window.open('https://qdodmxrecioltwdryhec.supabase.co/storage/v1/object/public/manuals/induction.pdf', '_blank', 'noopener,noreferrer')} 
+              />
+              <ResourceCard 
+                icon={<Ticket size={20} />} 
+                title="Work Permit" 
+                desc="High Risk Work" 
+                onClick={() => window.open('https://qdodmxrecioltwdryhec.supabase.co/storage/v1/object/public/manuals/work_permit.pdf', '_blank', 'noopener,noreferrer')} 
+              />
            </div>
         </div>
 
