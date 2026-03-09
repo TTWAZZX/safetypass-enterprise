@@ -407,10 +407,16 @@ export const api = {
         if (type === 'INDUCTION') {
           const nextYear = new Date();
           nextYear.setFullYear(nextYear.getFullYear() + 1);
+          // ✅ ล็อกเวลาให้หมดอายุตอน 23:59:59 ของวันนั้นเป๊ะๆ (กันปัญหาเวลาเหลื่อมจนข้ามวัน)
+          nextYear.setHours(23, 59, 59, 999);
           await supabase.from('users').update({ induction_expiry: nextYear.toISOString() }).eq('id', user.id);
         } else if (type === 'WORK_PERMIT') {
           const expireDate = new Date();
-          expireDate.setDate(expireDate.getDate() + 5); 
+          // ✅ นับแบบรวมวันปัจจุบัน (เช่น สอบวันที่ 4 -> บวกเพิ่มแค่ 4 วัน = หมดวันที่ 8)
+          expireDate.setDate(expireDate.getDate() + 4); 
+          // ✅ ล็อกเวลาให้บัตรหมดอายุตอน 23:59:59 ของวันที่ 8 พอดี
+          expireDate.setHours(23, 59, 59, 999); 
+
           await supabase.from('work_permits').insert([{
             user_id: user.id,
             permit_no: permitNo || `WP-${Date.now().toString().slice(-6)}`,

@@ -41,18 +41,16 @@ const DigitalCard: React.FC<DigitalCardProps> = ({
   const displayId = isPermit ? permit?.permit_no : user.national_id;
   const idLabel = isPermit ? 'PERMIT NO.' : 'NATIONAL ID';
   
-  // ✅ สร้างฟังก์ชันแปลงวันที่ให้ชัวร์ 100% และดักจับ Error
+  // ✅ ปรับ Format ให้แสดงปีแบบ 4 หลัก (เช่น 2569) ให้ตรงกับหน้า Verify 100%
   const formatThaiDate = (dateVal: string | Date | undefined | null) => {
     if (!dateVal) return '-';
     const d = new Date(dateVal);
     if (isNaN(d.getTime())) return '-';
-    return d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' });
+    return d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }); // เปลี่ยน 2-digit เป็น numeric
   };
 
-  // ✅ ใช้วันที่หมดอายุของแต่ละประเภทให้ถูกต้อง
   const expiryDate = isPermit ? formatThaiDate(permit?.expire_date) : formatThaiDate(user.induction_expiry);
 
-  // ✅ ใช้วันที่ออกบัตร (ถ้าเป็น Permit ดึงจาก created_at, ถ้าไม่มีใช้วันนี้)
   const issueDate = isPermit && (permit as any)?.created_at 
     ? formatThaiDate((permit as any).created_at) 
     : formatThaiDate(new Date());
