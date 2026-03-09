@@ -636,6 +636,8 @@ export const api = {
       .select('*')
       .eq('user_id', userId)
       .gt('expire_date', new Date().toISOString())
+      // ✅ เพิ่มบรรทัดนี้: บังคับให้เรียงลำดับเวลา เพื่อดึงใบอนุญาต "ใหม่ล่าสุด" มาโชว์เสมอ
+      .order('created_at', { ascending: false }) 
       .limit(1)
       .maybeSingle()
     return data || null
