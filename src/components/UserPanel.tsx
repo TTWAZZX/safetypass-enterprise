@@ -608,9 +608,9 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
             <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition-transform duration-500"><QrCode size={120} /></div>
             <div className="relative z-10 flex items-center gap-6">
               
-              {/* 🔥 จุดที่แก้ไข 1/2: เปลี่ยนลิงก์ Dashboard QR Code */}
+              {/* 🔥 แก้ไข URL เข้ารหัส permit_no สำหรับ QR เล็กในหน้าแรก */}
               <div className="bg-white p-2.5 rounded-2xl shadow-lg active:scale-95 transition-all cursor-pointer" onClick={() => setShowQRFullScreen(true)}>
-                <QRCodeSVG value={`${window.location.origin}/verify?id=${user.national_id}&permit=${activePermit.permit_no}`} size={80} />
+                <QRCodeSVG value={`${window.location.origin}/verify?id=${user.national_id}&permit=${encodeURIComponent(activePermit.permit_no)}`} size={80} />
               </div>
 
               <div className="text-left">
@@ -673,8 +673,8 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
             <button className="absolute top-8 right-8 p-4 text-white/50 hover:text-white transition-all"><X size={32} /></button>
             <div className="bg-white p-10 rounded-[3rem] shadow-[0_0_80px_rgba(59,130,246,0.4)] animate-in zoom-in duration-500">
               
-              {/* 🔥 จุดที่แก้ไข 2/2: เปลี่ยนลิงก์ QR Code แบบเต็มจอ */}
-              <QRCodeSVG value={`${window.location.origin}/verify?id=${user.national_id}&permit=${activePermit.permit_no}`} size={300} />
+              {/* 🔥 แก้ไข URL เข้ารหัส permit_no สำหรับ QR แบบ Fullscreen */}
+              <QRCodeSVG value={`${window.location.origin}/verify?id=${user.national_id}&permit=${encodeURIComponent(activePermit.permit_no)}`} size={300} />
               
             </div>
             <div className="mt-10 text-3xl font-black tracking-[0.3em] uppercase border-b-2 border-blue-500 pb-4">{activePermit.permit_no}</div>

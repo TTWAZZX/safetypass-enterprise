@@ -41,15 +41,25 @@ const DigitalCard: React.FC<DigitalCardProps> = ({
   const displayId = isPermit ? permit?.permit_no : user.national_id;
   const idLabel = isPermit ? 'PERMIT NO.' : 'NATIONAL ID';
   
-  const expiryDate = isPermit 
-    ? (permit?.expire_date ? new Date(permit.expire_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' }) : '-')
-    : (user.induction_expiry ? new Date(user.induction_expiry).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' }) : '-');
+  // ✅ สร้างฟังก์ชันแปลงวันที่ให้ชัวร์ 100% และดักจับ Error
+  const formatThaiDate = (dateVal: string | Date | undefined | null) => {
+    if (!dateVal) return '-';
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return '-';
+    return d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' });
+  };
 
-  const issueDate = new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' });
+  // ✅ ใช้วันที่หมดอายุของแต่ละประเภทให้ถูกต้อง
+  const expiryDate = isPermit ? formatThaiDate(permit?.expire_date) : formatThaiDate(user.induction_expiry);
 
-  // 🔥 จุดที่ถูกแก้ไขให้ QR Code ทำงานได้ 100%
+  // ✅ ใช้วันที่ออกบัตร (ถ้าเป็น Permit ดึงจาก created_at, ถ้าไม่มีใช้วันนี้)
+  const issueDate = isPermit && (permit as any)?.created_at 
+    ? formatThaiDate((permit as any).created_at) 
+    : formatThaiDate(new Date());
+
+  // 🔥 แก้ไขตัวบั๊ก! ใช้ encodeURIComponent ครอบ permit_no เผื่อมันเป็นภาษาไทยแบบคำว่า "ทดสอบ"
   const qrValue = isPermit 
-    ? `${window.location.origin}/verify?id=${user.national_id}&permit=${permit?.permit_no}`
+    ? `${window.location.origin}/verify?id=${user.national_id}&permit=${encodeURIComponent(permit?.permit_no || '')}`
     : `${window.location.origin}/verify?id=${user.national_id}`;
 
   const handleDownload = async () => {
@@ -57,7 +67,6 @@ const DigitalCard: React.FC<DigitalCardProps> = ({
     setDownloading(true);
     try {
       await new Promise(resolve => setTimeout(resolve, 600));
-      // ✅ แก้ไขแล้ว: ลบ borderRadius ออกเพื่อไม่ให้ติด Error
       const canvas = await html2canvas(cardRef.current, { 
         scale: 3, 
         useCORS: true, 
@@ -124,7 +133,6 @@ const DigitalCard: React.FC<DigitalCardProps> = ({
           <div className="px-6 relative z-10 text-center mt-2">
             <div className={`w-20 h-20 mx-auto bg-gradient-to-b p-[2.5px] rounded-[1.8rem] shadow-2xl mb-4 ${isPermit ? 'from-pink-400 to-indigo-500' : 'from-blue-400 to-emerald-400'}`}>
               <div className="w-full h-full bg-slate-900 rounded-[1.6rem] overflow-hidden flex items-center justify-center border border-white/10">
-                {/* ✅ แก้ไข: ดึงรูปโปรไฟล์ LINE มาแสดง ถ้าไม่มีให้แสดงตัวย่อชื่อ */}
                 {user.avatar_url ? (
                   <img 
                     src={user.avatar_url} 
