@@ -320,7 +320,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
       
       {/* 🎨 Background Pattern Overlay */}
       <div className="absolute inset-0 z-0 pointer-events-none opacity-40" 
-           style={{ backgroundImage: 'radial-gradient(#cbd5e1 1px, transparent 1px)', backgroundSize: '24px 24px' }}>
+            style={{ backgroundImage: 'radial-gradient(#cbd5e1 1px, transparent 1px)', backgroundSize: '24px 24px' }}>
       </div>
 
       <div className="relative z-10 max-w-2xl mx-auto p-4 space-y-6 md:space-y-8 animate-in fade-in duration-500">
@@ -608,9 +608,9 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
             <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition-transform duration-500"><QrCode size={120} /></div>
             <div className="relative z-10 flex items-center gap-6">
               
-              {/* ✅ จุดที่ 1: แก้ value ให้เป็น URL เต็ม */}
+              {/* 🔥 จุดที่แก้ไข 1/2: เปลี่ยนลิงก์ Dashboard QR Code */}
               <div className="bg-white p-2.5 rounded-2xl shadow-lg active:scale-95 transition-all cursor-pointer" onClick={() => setShowQRFullScreen(true)}>
-                <QRCodeSVG value={`${window.location.origin}/verify/${activePermit.permit_no}`} size={80} />
+                <QRCodeSVG value={`${window.location.origin}/verify?id=${user.national_id}&permit=${activePermit.permit_no}`} size={80} />
               </div>
 
               <div className="text-left">
@@ -622,12 +622,12 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
           </div>
         )}
 
-        {/* ✅ Manual Viewer Modal (แก้ไขเพื่อไม่ให้บังปุ่ม) */}
+        {/* ✅ Manual Viewer Modal */}
         {viewingManual && (
           <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[100] flex flex-col items-center justify-center p-0 md:p-4"> 
             <div className="bg-white w-full h-full md:max-w-4xl md:h-[90vh] md:rounded-[2.5rem] flex flex-col overflow-hidden animate-in zoom-in-95 duration-300 shadow-2xl">
               
-              {/* 1. ส่วนหัว (Header) - เพิ่ม flex-shrink-0 เพื่อไม่ให้ส่วนนี้ถูกเบียดหายไป */}
+              {/* 1. ส่วนหัว (Header) */}
               <div className="p-4 md:p-6 border-b flex justify-between items-center bg-slate-50 flex-shrink-0 z-10 relative">
                 <div className="flex items-center gap-3 md:gap-4 text-left">
                   <div className="p-2 md:p-3 bg-blue-600 text-white rounded-xl md:rounded-2xl shadow-lg">
@@ -654,7 +654,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
                 </div>
               </div>
 
-              {/* 2. ส่วนแสดง PDF - ใช้ Google Docs Viewer เพื่อให้ Responsive บนมือถือ */}
+              {/* 2. ส่วนแสดง PDF */}
               <div className="flex-grow bg-slate-200 relative overflow-hidden">
                 <iframe 
                     src={`https://docs.google.com/viewer?url=${encodeURIComponent(`https://qdodmxrecioltwdryhec.supabase.co/storage/v1/object/public/manuals/${viewingManual.toLowerCase()}.pdf`)}&embedded=true`}
@@ -672,8 +672,10 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
           <div className="fixed inset-0 bg-slate-950 z-[200] flex flex-col items-center justify-center text-white p-6 animate-in fade-in duration-300 backdrop-blur-xl" onClick={() => setShowQRFullScreen(false)}>
             <button className="absolute top-8 right-8 p-4 text-white/50 hover:text-white transition-all"><X size={32} /></button>
             <div className="bg-white p-10 rounded-[3rem] shadow-[0_0_80px_rgba(59,130,246,0.4)] animate-in zoom-in duration-500">
-              {/* ✅ แก้ไข value ตรงนี้ให้เป็น URL เต็มเหมือนกัน */}
-              <QRCodeSVG value={`${window.location.origin}/verify/${activePermit.permit_no}`} size={300} />
+              
+              {/* 🔥 จุดที่แก้ไข 2/2: เปลี่ยนลิงก์ QR Code แบบเต็มจอ */}
+              <QRCodeSVG value={`${window.location.origin}/verify?id=${user.national_id}&permit=${activePermit.permit_no}`} size={300} />
+              
             </div>
             <div className="mt-10 text-3xl font-black tracking-[0.3em] uppercase border-b-2 border-blue-500 pb-4">{activePermit.permit_no}</div>
             <div className="mt-6 text-blue-400 font-bold text-xs uppercase tracking-[0.3em] flex items-center gap-2"><ShieldCheck size={16} /> Authenticated Access</div>

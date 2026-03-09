@@ -22,6 +22,7 @@ const VerifyPage: React.FC = () => {
     try {
       const urlParams = new URLSearchParams(window.location.search);
       let userId = urlParams.get('id');
+      const permitId = urlParams.get('permit'); // ✅ ดึงพารามิเตอร์ permit ที่เราแนบมาจาก QR Code ด้วย
 
       if (!userId) {
         const pathParts = window.location.pathname.split('/');
@@ -32,7 +33,7 @@ const VerifyPage: React.FC = () => {
       }
 
       if (userId) {
-        checkUserStatus(decodeURIComponent(userId));
+        checkUserStatus(decodeURIComponent(userId), permitId); // ✅ ส่ง permitId ไปตรวจสอบด้วย
       } else {
         setStatus('NOT_FOUND');
       }
@@ -43,7 +44,7 @@ const VerifyPage: React.FC = () => {
     }
   }, []);
 
-  const checkUserStatus = async (id: string) => {
+  const checkUserStatus = async (id: string, permitId: string | null) => {
     try {
       let targetUser = null;
 
@@ -116,8 +117,15 @@ const VerifyPage: React.FC = () => {
 
       const today = new Date().getTime();
       const isInductionValid = targetUser.induction_expiry && new Date(targetUser.induction_expiry).getTime() > today;
-      const latestPermit = targetUser.work_permits?.[0];
-      const isPermitValid = latestPermit && new Date(latestPermit.expire_date).getTime() > today;
+      
+      // ✅ ฉลาดขึ้น: ถ้ามี permit แนบมาใน URL ให้ตรวจใบนั้น ถ้าไม่มีให้ตรวจใบใหม่สุด
+      let targetPermit = targetUser.work_permits?.[0];
+      if (permitId && targetUser.work_permits) {
+          const specificPermit = targetUser.work_permits.find((p: any) => p.permit_no === permitId);
+          if (specificPermit) targetPermit = specificPermit;
+      }
+
+      const isPermitValid = targetPermit && new Date(targetPermit.expire_date).getTime() > today;
 
       setTimeout(() => {
         if (isInductionValid || isPermitValid) {
@@ -175,8 +183,20 @@ const VerifyPage: React.FC = () => {
     );
   }
 
-  // 🛡️ เช็คความปลอดภัยชั้นที่ 3: กันพังตอนดึง Work Permit
-  const activePermit = userData?.work_permits && Array.isArray(userData.work_permits) ? userData.work_permits[0] : null;
+  // 🛡️ เช็คความปลอดภัยชั้นที่ 3: กันพังตอนดึง Work Permit (✅ อัปเกรดให้ตรงกับ URL)
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlPermitNo = urlParams.get('permit');
+  let activePermit = null;
+  
+  if (userData?.work_permits && Array.isArray(userData.work_permits) && userData.work_permits.length > 0) {
+      if (urlPermitNo) {
+          // ถ้าสแกน QR โค้ดที่มีเลข Permit ให้แสดงใบนั้นเป๊ะๆ
+          activePermit = userData.work_permits.find((p: any) => p.permit_no === urlPermitNo) || userData.work_permits[0];
+      } else {
+          // ถ้าไม่มี ให้แสดงใบใหม่ล่าสุด
+          activePermit = userData.work_permits[0];
+      }
+  }
 
   return (
     <div className={`min-h-screen p-4 md:p-6 flex flex-col items-center justify-center transition-colors duration-700 ${status === 'VALID' ? 'bg-emerald-500' : 'bg-rose-500'}`}>

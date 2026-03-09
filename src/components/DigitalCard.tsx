@@ -47,9 +47,10 @@ const DigitalCard: React.FC<DigitalCardProps> = ({
 
   const issueDate = new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' });
 
+  // 🔥 จุดที่ถูกแก้ไขให้ QR Code ทำงานได้ 100%
   const qrValue = isPermit 
-    ? `https://safetypass.app/verify/${user.id}?permit=${permit?.permit_no}`
-    : `https://safetypass.app/verify/${user.id}`;
+    ? `${window.location.origin}/verify?id=${user.national_id}&permit=${permit?.permit_no}`
+    : `${window.location.origin}/verify?id=${user.national_id}`;
 
   const handleDownload = async () => {
     if (!cardRef.current) return;
