@@ -172,7 +172,7 @@ export default async function handler(req, res) {
                 action: {
                   type: "uri",
                   label: "ดูใบเซอร์ / Digital Pass",
-                  uri: `${BASE_URL}/verify?id=${national_id}`
+                  "uri": `https://safetypass-enterprise.vercel.app/verify?id=${national_id}&permit=${permitNo}`
                 }
               },
               {

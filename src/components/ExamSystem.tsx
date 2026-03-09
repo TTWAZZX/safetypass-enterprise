@@ -18,7 +18,8 @@ import {
   Check,
   Award,
   BadgeCheck,
-  ListChecks 
+  ListChecks,
+  BookOpen
 } from 'lucide-react';
 
 interface ExamSystemProps {
@@ -302,32 +303,72 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
   /* ================= 📖 READ STEP ================= */
   if (step === 'READ') {
     const pdfUrl = `https://qdodmxrecioltwdryhec.supabase.co/storage/v1/object/public/manuals/${type.toLowerCase()}.pdf`;
-    const googleDocsViewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(pdfUrl)}&embedded=true`;
 
     return (
       <div className="max-w-2xl mx-auto p-4 md:p-6 animate-in slide-in-from-bottom-4 duration-500 text-left select-none">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-slate-400 hover:text-blue-600 mb-4 font-black text-[10px] uppercase tracking-widest transition-all">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-slate-400 hover:text-blue-600 mb-6 font-black text-[10px] uppercase tracking-widest transition-all">
           <ArrowLeft size={16} /> {t('common.back')}
         </button>
-        <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[85vh]">
-          <div className="p-5 border-b border-slate-100 bg-slate-50 flex items-center justify-between flex-shrink-0">
-            <div><h2 className="text-lg font-black text-slate-900 leading-tight">{t('user.manual')}</h2><p className="text-[10px] text-blue-600 font-bold uppercase tracking-widest mt-0.5">{type} Safety Training</p></div>
-            <a href={pdfUrl} target="_blank" rel="noopener noreferrer" className="p-2 bg-white text-blue-600 hover:bg-blue-50 rounded-xl border border-slate-200 shadow-sm transition-all"><Maximize2 size={20} /></a>
+        
+        <div className="bg-white rounded-[2rem] shadow-[0_20px_50px_-12px_rgba(0,0,0,0.1)] border border-slate-100 overflow-hidden flex flex-col">
+          
+          {/* Header */}
+          <div className="p-8 text-center bg-gradient-to-b from-slate-50 to-white border-b border-slate-100 relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-4 opacity-5"><BookOpen size={100} /></div>
+            <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-blue-100 shadow-inner relative z-10">
+               <BookOpen size={28} />
+            </div>
+            <h2 className="text-xl md:text-2xl font-black text-slate-900 leading-tight uppercase tracking-tight relative z-10">
+              {t('user.manual')}
+            </h2>
+            <p className="text-[10px] md:text-xs text-slate-400 font-bold uppercase tracking-[0.2em] mt-2 relative z-10">
+              {type} Safety Training Protocol
+            </p>
           </div>
           
-          <div className="flex-grow bg-slate-200 relative overflow-hidden">
-            <iframe src={googleDocsViewerUrl} className="w-full h-full border-none absolute inset-0" title="Manual Viewer" />
-          </div>
+          {/* Action Area */}
+          <div className="p-6 md:p-8 flex flex-col gap-6">
+            
+            {/* 💡 ไอเดียใหม่: ปุ่มกดเพื่อเปิด PDF แบบ Pop-out ทันใจกว่าการฝัง iframe */}
+            <div className="bg-blue-50/50 border-2 border-dashed border-blue-200 rounded-2xl p-6 text-center transition-all hover:bg-blue-50">
+                <p className="text-xs font-bold text-slate-600 mb-4">
+                  กรุณาศึกษาเนื้อหาในคู่มือความปลอดภัยก่อนเริ่มทำแบบทดสอบ<br/>
+                  <span className="text-[10px] text-slate-400">(คลิกปุ่มด้านล่างเพื่อเปิดคู่มือ)</span>
+                </p>
+                <a 
+                  href={pdfUrl} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="inline-flex items-center justify-center gap-2 bg-white text-blue-600 border border-blue-200 shadow-sm px-6 py-3.5 rounded-xl font-black text-[11px] uppercase tracking-widest hover:border-blue-300 hover:shadow-md active:scale-95 transition-all"
+                  onClick={() => setHasReadManual(true)} // แอบติ๊กให้เลยถ้าเขากดเข้าไปอ่าน
+                >
+                  <Maximize2 size={16} /> เปิดอ่านคู่มือความปลอดภัย
+                </a>
+            </div>
 
-          <div className="p-5 bg-white text-center space-y-4 flex-shrink-0 border-t border-slate-100 z-10">
-            <label className="flex items-start gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-100 cursor-pointer active:bg-blue-50 transition-all text-left">
-              <input type="checkbox" checked={hasReadManual} onChange={(e) => setHasReadManual(e.target.checked)} className="mt-1 w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 flex-shrink-0" />
-              <span className="text-[11px] text-slate-600 font-bold leading-relaxed select-none">ข้าพเจ้ายืนยันว่าได้ศึกษาเนื้อหาคู่มือความปลอดภัยครบถ้วนแล้ว และพร้อมเข้าทำแบบทดสอบ</span>
-            </label>
-            <button disabled={!hasReadManual} onClick={() => setStep('EXAM')} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-2xl shadow-lg transition-all text-sm uppercase tracking-wider disabled:opacity-50 flex items-center justify-center gap-2 active:scale-95">
-              {t('exam.start')} <ChevronRight size={18} />
-            </button>
+            <div className="space-y-4">
+              <label className="flex items-start gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200 cursor-pointer hover:border-blue-300 transition-all text-left group">
+                <input 
+                  type="checkbox" 
+                  checked={hasReadManual} 
+                  onChange={(e) => setHasReadManual(e.target.checked)} 
+                  className="mt-1 w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 flex-shrink-0 cursor-pointer" 
+                />
+                <span className="text-[11px] md:text-xs text-slate-600 font-bold leading-relaxed select-none group-hover:text-slate-800 transition-colors">
+                  ข้าพเจ้ายืนยันว่าได้เปิดอ่านและทำความเข้าใจเนื้อหาในคู่มือความปลอดภัยครบถ้วนแล้ว และพร้อมเข้าทำแบบทดสอบ
+                </span>
+              </label>
+
+              <button 
+                disabled={!hasReadManual} 
+                onClick={() => setStep('EXAM')} 
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-black py-4 md:py-5 rounded-2xl shadow-lg shadow-blue-200 transition-all text-xs uppercase tracking-widest disabled:shadow-none flex items-center justify-center gap-2 active:scale-95"
+              >
+                {t('exam.start')} <ChevronRight size={16} />
+              </button>
+            </div>
           </div>
+          
         </div>
       </div>
     );
