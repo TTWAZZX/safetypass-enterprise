@@ -14,15 +14,21 @@ import {
 } from 'lucide-react';
 
 const VerifyPage: React.FC = () => {
+  // ✅ มีสถานะ EXPIRED แยกออกมาให้ชัดเจน
   const [status, setStatus] = useState<'LOADING' | 'VALID' | 'EXPIRED' | 'NOT_FOUND' | 'SUSPENDED'>('LOADING');
   const [userData, setUserData] = useState<any>(null);
-  const [errorMsg, setErrorMsg] = useState<string>(''); // เอาไว้จับ Error โชว์บนหน้าจอแทนหน้าขาว
+  const [errorMsg, setErrorMsg] = useState<string>(''); 
+
+  // ✅ เพิ่ม State สำหรับแยกว่ากำลังตรวจบัตรประเภทไหน และวันหมดอายุคือวันไหน
+  const [verifyMode, setVerifyMode] = useState<'INDUCTION' | 'WORK_PERMIT'>('INDUCTION');
+  const [verifiedExpiryDate, setVerifiedExpiryDate] = useState<string | null>(null);
+  const [activePermitObj, setActivePermitObj] = useState<any>(null);
 
   useEffect(() => {
     try {
       const urlParams = new URLSearchParams(window.location.search);
       let userId = urlParams.get('id');
-      const permitId = urlParams.get('permit'); // ✅ ดึงพารามิเตอร์ permit ที่เราแนบมาจาก QR Code ด้วย
+      const permitId = urlParams.get('permit'); 
 
       if (!userId) {
         const pathParts = window.location.pathname.split('/');
@@ -33,7 +39,7 @@ const VerifyPage: React.FC = () => {
       }
 
       if (userId) {
-        checkUserStatus(decodeURIComponent(userId), permitId); // ✅ ส่ง permitId ไปตรวจสอบด้วย
+        checkUserStatus(decodeURIComponent(userId), permitId); 
       } else {
         setStatus('NOT_FOUND');
       }
@@ -48,7 +54,6 @@ const VerifyPage: React.FC = () => {
     try {
       let targetUser = null;
 
-      // สเต็ป A: ค้นหาจาก National ID
       const { data: userById } = await supabase
         .from('users')
         .select(`
@@ -62,7 +67,6 @@ const VerifyPage: React.FC = () => {
 
       targetUser = userById;
 
-      // สเต็ป B: ถ้าไม่เจอ ลองหาจาก Work Permit Number
       if (!targetUser) {
         const { data: permitData } = await supabase
           .from('work_permits')
@@ -86,7 +90,6 @@ const VerifyPage: React.FC = () => {
         }
       }
 
-      // สเต็ป C: ถ้ายังไม่เจออีก ให้ลองหาจาก id (UUID) ตรงๆ
       if (!targetUser) {
         const { data: userByUUID } = await supabase
           .from('users')
@@ -102,7 +105,6 @@ const VerifyPage: React.FC = () => {
         targetUser = userByUUID;
       }
 
-      // --- ส่วนเช็คผลลัพธ์เหมือนเดิม ---
       if (!targetUser) {
         setStatus('NOT_FOUND');
         return;
@@ -116,22 +118,43 @@ const VerifyPage: React.FC = () => {
       }
 
       const today = new Date().getTime();
-      const isInductionValid = targetUser.induction_expiry && new Date(targetUser.induction_expiry).getTime() > today;
       
-      // ✅ ฉลาดขึ้น: ถ้ามี permit แนบมาใน URL ให้ตรวจใบนั้น ถ้าไม่มีให้ตรวจใบใหม่สุด
-      let targetPermit = targetUser.work_permits?.[0];
-      if (permitId && targetUser.work_permits) {
-          const specificPermit = targetUser.work_permits.find((p: any) => p.permit_no === permitId);
-          if (specificPermit) targetPermit = specificPermit;
+      // 🔥 ลอจิกใหม่: แยกการเช็คตามประเภทบัตร 100%
+      let mode: 'INDUCTION' | 'WORK_PERMIT' = 'INDUCTION';
+      let isValid = false;
+      let expiryToStore: string | null = null;
+      let permitObj = null;
+
+      if (permitId) {
+          // 📌 กรณีสแกน Work Permit (5 วัน)
+          mode = 'WORK_PERMIT';
+          if (targetUser.work_permits && targetUser.work_permits.length > 0) {
+              permitObj = targetUser.work_permits.find((p: any) => p.permit_no === permitId);
+          }
+          
+          if (!permitObj) {
+              setStatus('NOT_FOUND');
+              return;
+          }
+          expiryToStore = permitObj.expire_date;
+          isValid = new Date(permitObj.expire_date).getTime() > today;
+      } else {
+          // 📌 กรณีสแกน Induction (รายปี)
+          mode = 'INDUCTION';
+          expiryToStore = targetUser.induction_expiry;
+          isValid = targetUser.induction_expiry && new Date(targetUser.induction_expiry).getTime() > today;
       }
 
-      const isPermitValid = targetPermit && new Date(targetPermit.expire_date).getTime() > today;
+      // บันทึกค่าลง State เพื่อให้ UI เอาไปแสดงผลให้ตรงกับบริบท
+      setVerifyMode(mode);
+      setVerifiedExpiryDate(expiryToStore);
+      setActivePermitObj(permitObj);
 
       setTimeout(() => {
-        if (isInductionValid || isPermitValid) {
+        if (isValid) {
           setStatus('VALID');
         } else {
-          setStatus('EXPIRED');
+          setStatus('EXPIRED'); // ถ้าหมดอายุให้ขึ้น EXPIRED เลย
         }
       }, 100);
 
@@ -142,7 +165,6 @@ const VerifyPage: React.FC = () => {
     }
   };
 
-  // 🛡️ เช็คความปลอดภัยชั้นที่ 1: ถ้ากำลังโหลด หรือ ข้อมูลยังไม่มา ให้โชว์โหลดหมุนๆ ห้ามแครช!
   if (status === 'LOADING' || (status !== 'NOT_FOUND' && status !== 'SUSPENDED' && !userData)) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-6">
@@ -157,7 +179,6 @@ const VerifyPage: React.FC = () => {
     );
   }
 
-  // 🛡️ เช็คความปลอดภัยชั้นที่ 2: ถ้าหาไม่เจอ หรือโดนแบน
   if (status === 'NOT_FOUND' || status === 'SUSPENDED') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#f8fafc] p-8 text-center">
@@ -169,13 +190,10 @@ const VerifyPage: React.FC = () => {
               {status === 'SUSPENDED' ? 'Account Suspended' : 'Record Not Found'}
           </h1>
           <p className="text-sm text-slate-400 font-bold mt-2 leading-relaxed">
-            {status === 'SUSPENDED' ? 'สิทธิ์ของคุณถูกระงับชั่วคราว โปรดติดต่อเจ้าหน้าที่' : 'ข้อมูลไม่ถูกต้อง หรือไม่มีรหัสพนักงานนี้อยู่ในระบบ'}
+            {status === 'SUSPENDED' ? 'สิทธิ์ของคุณถูกระงับชั่วคราว โปรดติดต่อเจ้าหน้าที่' : 'ข้อมูลไม่ถูกต้อง หรือไม่มีรหัสนี้อยู่ในระบบ'}
           </p>
           {errorMsg && <p className="text-[9px] text-red-400 mt-2 font-mono break-words">{errorMsg}</p>}
-          <button 
-            onClick={() => window.location.href = '/'}
-            className="mt-8 w-full py-4 bg-slate-900 text-white font-black rounded-2xl text-[10px] uppercase tracking-widest active:scale-95 transition-all"
-          >
+          <button onClick={() => window.location.href = '/'} className="mt-8 w-full py-4 bg-slate-900 text-white font-black rounded-2xl text-[10px] uppercase tracking-widest active:scale-95 transition-all">
             Back to Home
           </button>
         </div>
@@ -183,59 +201,60 @@ const VerifyPage: React.FC = () => {
     );
   }
 
-  // 🛡️ เช็คความปลอดภัยชั้นที่ 3: กันพังตอนดึง Work Permit (✅ อัปเกรดให้ตรงกับ URL)
-  const urlParams = new URLSearchParams(window.location.search);
-  const urlPermitNo = urlParams.get('permit');
-  let activePermit = null;
-  
-  if (userData?.work_permits && Array.isArray(userData.work_permits) && userData.work_permits.length > 0) {
-      if (urlPermitNo) {
-          // ถ้าสแกน QR โค้ดที่มีเลข Permit ให้แสดงใบนั้นเป๊ะๆ
-          activePermit = userData.work_permits.find((p: any) => p.permit_no === urlPermitNo) || userData.work_permits[0];
-      } else {
-          // ถ้าไม่มี ให้แสดงใบใหม่ล่าสุด
-          activePermit = userData.work_permits[0];
-      }
-  }
+  // ✅ ตัวแปรคุมธีมสี (แบ่งเป็น 3 โทน: ผ่าน = เขียว, หมดอายุ = ส้ม, อื่นๆ = แดง)
+  const isSuccess = status === 'VALID';
+  const isExpired = status === 'EXPIRED';
+
+  const mainBg = isSuccess ? 'bg-emerald-500' : isExpired ? 'bg-amber-500' : 'bg-rose-500';
+  const headerBg = isSuccess ? 'bg-gradient-to-b from-emerald-500 to-emerald-600' : isExpired ? 'bg-gradient-to-b from-amber-500 to-amber-600' : 'bg-gradient-to-b from-rose-500 to-rose-600';
+  const iconColor = isSuccess ? 'text-emerald-500' : isExpired ? 'text-amber-500' : 'text-rose-500';
+  const boxBg = isSuccess ? 'bg-emerald-50' : isExpired ? 'bg-amber-50' : 'bg-rose-50';
+  const boxBorder = isSuccess ? 'border-emerald-100' : isExpired ? 'border-amber-100' : 'border-rose-100';
+  const textMuted = isSuccess ? 'text-emerald-600/60' : isExpired ? 'text-amber-600/60' : 'text-rose-600/60';
+  const textBold = isSuccess ? 'text-emerald-700' : isExpired ? 'text-amber-700' : 'text-rose-700';
 
   return (
-    <div className={`min-h-screen p-4 md:p-6 flex flex-col items-center justify-center transition-colors duration-700 ${status === 'VALID' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
+    <div className={`min-h-screen p-4 md:p-6 flex flex-col items-center justify-center transition-colors duration-700 ${mainBg}`}>
       
       <div className="mb-6 flex flex-col items-center gap-2 text-white animate-in slide-in-from-top-4">
          <div className="bg-white/20 p-2 rounded-full backdrop-blur-md border border-white/30">
             <ShieldCheck size={20} />
          </div>
-         <span className="text-[10px] font-black uppercase tracking-[0.4em]">Official Verification</span>
+         {/* เปลี่ยน Title ด้านบนให้ตรงกับประเภทบัตร */}
+         <span className="text-[10px] font-black uppercase tracking-[0.4em] text-center">
+            {verifyMode === 'WORK_PERMIT' ? 'Work Permit Verification' : 'Safety Pass Verification'}
+         </span>
       </div>
 
       <div className="bg-white w-full max-w-[360px] rounded-[3rem] shadow-[0_40px_80px_-15px_rgba(0,0,0,0.3)] overflow-hidden relative border-4 border-white/50 animate-in zoom-in duration-500">
         
-        <div className={`pt-10 pb-8 text-center px-6 ${status === 'VALID' ? 'bg-gradient-to-b from-emerald-500 to-emerald-600' : 'bg-gradient-to-b from-rose-500 to-rose-600'}`}>
+        <div className={`pt-10 pb-8 text-center px-6 ${headerBg}`}>
           <div className="bg-white/10 w-24 h-24 rounded-[2rem] flex items-center justify-center mx-auto mb-4 backdrop-blur-md border border-white/20 shadow-xl">
-            {status === 'VALID' ? (
+            {isSuccess ? (
               <ShieldCheck className="w-14 h-14 text-white drop-shadow-lg" strokeWidth={1.5} />
+            ) : isExpired ? (
+              <Clock className="w-14 h-14 text-white drop-shadow-lg animate-pulse" strokeWidth={1.5} />
             ) : (
               <ShieldAlert className="w-14 h-14 text-white drop-shadow-lg" strokeWidth={1.5} />
             )}
           </div>
           <h1 className="text-4xl font-black text-white uppercase tracking-tighter">
-            {status === 'VALID' ? 'AUTHORIZED' : 'ACCESS DENIED'}
+            {isSuccess ? 'AUTHORIZED' : isExpired ? 'EXPIRED' : 'DENIED'}
           </h1>
           <p className="text-white/80 font-black text-[10px] uppercase tracking-[0.2em] mt-2">
-            {status === 'VALID' ? 'อนุญาตให้เข้าปฏิบัติงาน' : 'ไม่อนุญาต - ตรวจพบข้อผิดพลาด'}
+            {isSuccess 
+              ? 'อนุญาตให้เข้าปฏิบัติงาน' 
+              : isExpired 
+                ? (verifyMode === 'WORK_PERMIT' ? 'ใบอนุญาตทำงานหมดอายุ' : 'ประวัติการอบรมหมดอายุ')
+                : 'ไม่อนุญาต - ตรวจพบข้อผิดพลาด'}
           </p>
         </div>
 
         <div className="p-8 space-y-4">
           <div className="text-center relative mb-6">
             <div className="w-20 h-20 bg-slate-50 rounded-[1.5rem] mx-auto mb-4 flex items-center justify-center border border-slate-100 shadow-inner relative overflow-hidden group">
-               {/* ✅ แก้ไข: ดึงรูปโปรไฟล์จาก LINE มาแสดงในหน้า Verify ด้วย */}
                {userData?.avatar_url ? (
-                  <img 
-                    src={userData.avatar_url} 
-                    alt="Profile" 
-                    className="w-full h-full object-cover" 
-                  />
+                  <img src={userData.avatar_url} alt="Profile" className="w-full h-full object-cover" />
                ) : (
                   <User className="w-8 h-8 text-slate-300" />
                )}
@@ -254,22 +273,27 @@ const VerifyPage: React.FC = () => {
               </div>
             </div>
 
-            {activePermit && activePermit.permit_no && (
+            {/* โชว์กล่องเลข Permit เฉพาะเวลาที่เป็น Work Permit เท่านั้น */}
+            {verifyMode === 'WORK_PERMIT' && activePermitObj && (
                <div className="flex items-center gap-4 p-4 bg-blue-50/50 rounded-2xl border border-blue-100">
                   <div className="bg-white p-2.5 rounded-xl shadow-sm border border-blue-100"><FileText className="w-4 h-4 text-blue-500"/></div>
                   <div className="min-w-0">
                     <p className="text-[8px] uppercase text-blue-400 font-black tracking-widest">Work Permit Number</p>
-                    <p className="font-bold text-blue-700 text-sm truncate">{activePermit.permit_no}</p>
+                    <p className="font-bold text-blue-700 text-sm truncate">{activePermitObj.permit_no}</p>
                   </div>
                </div>
             )}
 
-            <div className={`flex items-center gap-4 p-4 rounded-2xl border transition-all ${status === 'VALID' ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'}`}>
-              <div className="bg-white p-2.5 rounded-xl shadow-sm border border-white"><CalendarDays className={`w-4 h-4 ${status === 'VALID' ? 'text-emerald-500' : 'text-rose-500'}`}/></div>
+            <div className={`flex items-center gap-4 p-4 rounded-2xl border transition-all ${boxBg} ${boxBorder}`}>
+              <div className="bg-white p-2.5 rounded-xl shadow-sm border border-white">
+                <CalendarDays className={`w-4 h-4 ${iconColor}`}/>
+              </div>
               <div>
-                <p className={`text-[8px] uppercase font-black tracking-widest ${status === 'VALID' ? 'text-emerald-600/60' : 'text-rose-600/60'}`}>Compliance Valid Until</p>
-                <p className={`font-black text-sm ${status === 'VALID' ? 'text-emerald-700' : 'text-rose-700'}`}>
-                  {userData?.induction_expiry ? new Date(userData.induction_expiry).toLocaleDateString('th-TH', { 
+                <p className={`text-[8px] uppercase font-black tracking-widest ${textMuted}`}>
+                  {verifyMode === 'WORK_PERMIT' ? 'Permit Valid Until' : 'Induction Valid Until'}
+                </p>
+                <p className={`font-black text-sm ${textBold}`}>
+                  {verifiedExpiryDate ? new Date(verifiedExpiryDate).toLocaleDateString('th-TH', { 
                     day: 'numeric', month: 'short', year: 'numeric' 
                   }) : 'Not Available'}
                 </p>
