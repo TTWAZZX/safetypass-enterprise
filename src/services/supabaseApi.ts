@@ -405,23 +405,44 @@ export const api = {
       
       if (passed) {
         if (type === 'INDUCTION') {
+          
+          // 🔥 1. ลอจิกใหม่: สั่งยกเลิก (EXPIRED) ประวัติการสอบ Induction ครั้งเก่าๆ ที่เคยสอบผ่าน
+          await supabase
+            .from('exam_history')
+            .update({ status: 'EXPIRED' })
+            .eq('user_id', user.id)
+            .eq('exam_type', 'INDUCTION')
+            .eq('status', 'PASSED');
+
+          // 🔥 2. สร้างเวลาหมดอายุใหม่ (+1 ปี)
           const nextYear = new Date();
           nextYear.setFullYear(nextYear.getFullYear() + 1);
-          // ✅ ล็อกเวลาให้หมดอายุตอน 23:59:59 ของวันนั้นเป๊ะๆ (กันปัญหาเวลาเหลื่อมจนข้ามวัน)
+          // ล็อกเวลาให้หมดอายุตอน 23:59:59 ของวันนั้นเป๊ะๆ
           nextYear.setHours(23, 59, 59, 999);
+          
+          // 🔥 3. อัปเดตตาราง user ให้จำวันหมดอายุใหม่
           await supabase.from('users').update({ induction_expiry: nextYear.toISOString() }).eq('id', user.id);
+          
         } else if (type === 'WORK_PERMIT') {
-          const expireDate = new Date();
-          // ✅ นับแบบรวมวันปัจจุบัน (เช่น สอบวันที่ 4 -> บวกเพิ่มแค่ 4 วัน = หมดวันที่ 8)
-          expireDate.setDate(expireDate.getDate() + 4); 
-          // ✅ ล็อกเวลาให้บัตรหมดอายุตอน 23:59:59 ของวันที่ 8 พอดี
-          expireDate.setHours(23, 59, 59, 999); 
+          
+          // 🔥 1. สั่งยกเลิก (EXPIRED) ใบอนุญาต Work Permit เดิมทั้งหมด
+          await supabase
+            .from('work_permits')
+            .update({ status: 'EXPIRED' })
+            .eq('user_id', user.id)
+            .eq('status', 'ACTIVE');
 
+          // 🔥 2. สร้างเวลาหมดอายุใหม่ (บวกแค่ 4 วัน รวมวันนี้เป็น 5 วัน)
+          const expireDate = new Date();
+          expireDate.setDate(expireDate.getDate() + 4); 
+          expireDate.setHours(23, 59, 59, 999);
+
+          // 🔥 3. สร้างใบใหม่ให้เป็น ACTIVE เพียงใบเดียว
           await supabase.from('work_permits').insert([{
             user_id: user.id,
             permit_no: permitNo || `WP-${Date.now().toString().slice(-6)}`,
             expire_date: expireDate.toISOString(),
-            status: 'ACTIVE'
+            status: 'ACTIVE' 
           }]);
         }
       }
@@ -635,8 +656,8 @@ export const api = {
       .from('work_permits')
       .select('*')
       .eq('user_id', userId)
+      .eq('status', 'ACTIVE') // 🔥 เพิ่มบรรทัดนี้: บังคับให้ดึงเฉพาะใบที่ถูกระบุว่า ACTIVE เท่านั้น
       .gt('expire_date', new Date().toISOString())
-      // ✅ เพิ่มบรรทัดนี้: บังคับให้เรียงลำดับเวลา เพื่อดึงใบอนุญาต "ใหม่ล่าสุด" มาโชว์เสมอ
       .order('created_at', { ascending: false }) 
       .limit(1)
       .maybeSingle()
