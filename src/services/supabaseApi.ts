@@ -388,6 +388,50 @@ export const api = {
     const { data: { user } } = await supabase.auth.getUser();
 
     if (user) {
+      
+      // 🔥 ย้ายการเคลียร์ของเก่า (EXPIRED) มาไว้ด้านบนก่อน
+      if (passed) {
+        if (type === 'INDUCTION') {
+          // 1. สั่งยกเลิก (EXPIRED) ประวัติการสอบ Induction ครั้งเก่าๆ ที่เคยสอบผ่าน
+          await supabase
+            .from('exam_history')
+            .update({ status: 'EXPIRED' })
+            .eq('user_id', user.id)
+            .eq('exam_type', 'INDUCTION')
+            .eq('status', 'PASSED');
+
+          // 2. สร้างเวลาหมดอายุใหม่ (+1 ปี)
+          const nextYear = new Date();
+          nextYear.setFullYear(nextYear.getFullYear() + 1);
+          nextYear.setHours(23, 59, 59, 999);
+          
+          // 3. อัปเดตตาราง user ให้จำวันหมดอายุใหม่
+          await supabase.from('users').update({ induction_expiry: nextYear.toISOString() }).eq('id', user.id);
+          
+        } else if (type === 'WORK_PERMIT') {
+          // 1. สั่งยกเลิก (EXPIRED) ใบอนุญาต Work Permit เดิมทั้งหมด
+          await supabase
+            .from('work_permits')
+            .update({ status: 'EXPIRED' })
+            .eq('user_id', user.id)
+            .eq('status', 'ACTIVE');
+
+          // 2. สร้างเวลาหมดอายุใหม่ (บวก 4 วัน)
+          const expireDate = new Date();
+          expireDate.setDate(expireDate.getDate() + 4); 
+          expireDate.setHours(23, 59, 59, 999);
+
+          // 3. สร้างใบใหม่ให้เป็น ACTIVE เพียงใบเดียว
+          await supabase.from('work_permits').insert([{
+            user_id: user.id,
+            permit_no: permitNo || `WP-${Date.now().toString().slice(-6)}`,
+            expire_date: expireDate.toISOString(),
+            status: 'ACTIVE' 
+          }]);
+        }
+      }
+
+      // 🔥 ย้ายการ Insert ประวัติใหม่ล่าสุด มาไว้ล่างสุด! (เพื่อป้องกันการโดนเขียนทับ)
       await supabase.from('exam_history').insert([{
         user_id: user.id,
         exam_type: type,
@@ -402,50 +446,6 @@ export const api = {
         score, 
         passed 
       });
-      
-      if (passed) {
-        if (type === 'INDUCTION') {
-          
-          // 🔥 1. ลอจิกใหม่: สั่งยกเลิก (EXPIRED) ประวัติการสอบ Induction ครั้งเก่าๆ ที่เคยสอบผ่าน
-          await supabase
-            .from('exam_history')
-            .update({ status: 'EXPIRED' })
-            .eq('user_id', user.id)
-            .eq('exam_type', 'INDUCTION')
-            .eq('status', 'PASSED');
-
-          // 🔥 2. สร้างเวลาหมดอายุใหม่ (+1 ปี)
-          const nextYear = new Date();
-          nextYear.setFullYear(nextYear.getFullYear() + 1);
-          // ล็อกเวลาให้หมดอายุตอน 23:59:59 ของวันนั้นเป๊ะๆ
-          nextYear.setHours(23, 59, 59, 999);
-          
-          // 🔥 3. อัปเดตตาราง user ให้จำวันหมดอายุใหม่
-          await supabase.from('users').update({ induction_expiry: nextYear.toISOString() }).eq('id', user.id);
-          
-        } else if (type === 'WORK_PERMIT') {
-          
-          // 🔥 1. สั่งยกเลิก (EXPIRED) ใบอนุญาต Work Permit เดิมทั้งหมด
-          await supabase
-            .from('work_permits')
-            .update({ status: 'EXPIRED' })
-            .eq('user_id', user.id)
-            .eq('status', 'ACTIVE');
-
-          // 🔥 2. สร้างเวลาหมดอายุใหม่ (บวกแค่ 4 วัน รวมวันนี้เป็น 5 วัน)
-          const expireDate = new Date();
-          expireDate.setDate(expireDate.getDate() + 4); 
-          expireDate.setHours(23, 59, 59, 999);
-
-          // 🔥 3. สร้างใบใหม่ให้เป็น ACTIVE เพียงใบเดียว
-          await supabase.from('work_permits').insert([{
-            user_id: user.id,
-            permit_no: permitNo || `WP-${Date.now().toString().slice(-6)}`,
-            expire_date: expireDate.toISOString(),
-            status: 'ACTIVE' 
-          }]);
-        }
-      }
     }
     return { success: true };
   },
