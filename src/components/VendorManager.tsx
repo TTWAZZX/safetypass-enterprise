@@ -432,9 +432,12 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     if (error) showToast(error.message, 'error'); else { showToast('Reset Complete', 'success'); logAction('RESET_TRAINING', name); loadData(); }
   };
 
-  const isCertified = (item: any) => {
-    return item.induction_expiry && new Date(item.induction_expiry) > new Date();
+  const getCertStatus = (item: any): 'valid' | 'expired' | 'none' => {
+    if (!item.induction_expiry) return 'none';
+    return new Date(item.induction_expiry) > new Date() ? 'valid' : 'expired';
   };
+
+  const isCertified = (item: any) => getCertStatus(item) === 'valid';
 
   const filteredRaw = activeTab === 'LOGS' ? logs : dataList.filter(item => {
     const matchesSearch = (item.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -458,10 +461,15 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
 
   const filtered = activeTab === 'USERS'
     ? [...filteredRaw].sort((a, b) => {
-        const aCert = isCertified(a);
-        const bCert = isCertified(b);
-        if (aCert === bCert) return 0;
-        return aCert ? 1 : -1; // No Cert ขึ้นก่อน
+        const sortKey = (item: any) => {
+          const cert = getCertStatus(item);
+          const active = !!item.last_login;
+          if (cert !== 'valid' && active) return 0;  // No/expired cert + Active
+          if (cert !== 'valid' && !active) return 1; // No/expired cert + Pending
+          if (cert === 'expired') return 2;
+          return 3;                                   // Valid cert
+        };
+        return sortKey(a) - sortKey(b);
       })
     : filteredRaw;
 
@@ -570,30 +578,24 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
               {/* ตัวกรองใบเซอร์ */}
               {activeTab === 'USERS' && (
                 <div className="flex items-center gap-1.5 w-full md:w-auto">
-                  {(
-                    [
-                      { value: '', label: 'ทั้งหมด', icon: '👥' },
-                      { value: 'NO_CERT', label: 'ไม่มีใบเซอร์', icon: '⚠️' },
-                      { value: 'HAS_CERT', label: 'มีใบเซอร์', icon: '✅' },
-                    ] as const
-                  ).map(opt => (
-                    <button
-                      key={opt.value}
-                      onClick={() => setCertFilter(opt.value)}
-                      className={`flex-1 md:flex-none flex items-center justify-center gap-1 px-3 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-wide border transition-all active:scale-95 ${
-                        certFilter === opt.value
-                          ? opt.value === 'NO_CERT'
-                            ? 'bg-amber-500 text-white border-amber-500 shadow-md'
-                            : opt.value === 'HAS_CERT'
-                            ? 'bg-emerald-500 text-white border-emerald-500 shadow-md'
-                            : 'bg-slate-900 text-white border-slate-900 shadow-md'
-                          : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
-                      }`}
-                    >
-                      <span>{opt.icon}</span>
-                      <span className="hidden sm:inline">{opt.label}</span>
-                    </button>
-                  ))}
+                  <button
+                    onClick={() => setCertFilter('')}
+                    className={`flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-wide border transition-all active:scale-95 ${certFilter === '' ? 'bg-slate-900 text-white border-slate-900 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
+                  >
+                    <Users size={13}/><span className="hidden sm:inline">ทั้งหมด</span>
+                  </button>
+                  <button
+                    onClick={() => setCertFilter('NO_CERT')}
+                    className={`flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-wide border transition-all active:scale-95 ${certFilter === 'NO_CERT' ? 'bg-amber-500 text-white border-amber-500 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
+                  >
+                    <ShieldAlert size={13}/><span className="hidden sm:inline">ไม่มีใบเซอร์</span>
+                  </button>
+                  <button
+                    onClick={() => setCertFilter('HAS_CERT')}
+                    className={`flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-wide border transition-all active:scale-95 ${certFilter === 'HAS_CERT' ? 'bg-emerald-500 text-white border-emerald-500 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
+                  >
+                    <ShieldCheck size={13}/><span className="hidden sm:inline">มีใบเซอร์</span>
+                  </button>
                 </div>
               )}
             </div>
@@ -694,13 +696,17 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                                 <span className="text-slate-500 font-black text-[10px] uppercase bg-slate-50 px-3 py-1 rounded-xl border w-fit shadow-sm truncate max-w-[180px]">{item.vendors?.name || 'EXTERNAL'}</span>
                                 {item.is_active === false ? (
                                     <span className="text-[9px] font-black text-red-500 flex items-center gap-1 ml-1 whitespace-nowrap"><Ban size={10}/> Account Suspended</span>
-                                ) : item.induction_expiry ? (
+                                ) : getCertStatus(item) === 'valid' ? (
                                     <span className="text-[9px] font-black text-emerald-600 flex items-center gap-1 ml-1 whitespace-nowrap">
-                                        <CheckCircle size={10}/> Certified Exp: {new Date(item.induction_expiry).toLocaleDateString('th-TH')}
+                                        <ShieldCheck size={10}/> Exp: {new Date(item.induction_expiry).toLocaleDateString('th-TH')}
+                                    </span>
+                                ) : getCertStatus(item) === 'expired' ? (
+                                    <span className="text-[9px] font-black text-amber-500 flex items-center gap-1 ml-1 whitespace-nowrap">
+                                        <CalendarClock size={10}/> Expired: {new Date(item.induction_expiry).toLocaleDateString('th-TH')}
                                     </span>
                                 ) : (
                                     <span className="text-[9px] font-black text-rose-400 flex items-center gap-1 ml-1 whitespace-nowrap">
-                                        <Ban size={10}/> No Certification
+                                        <ShieldAlert size={10}/> No Certification
                                     </span>
                                 )}
                               </div>
@@ -805,10 +811,12 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                                  <span className="text-[9px] font-black text-slate-400 uppercase">Status</span>
                                  {item.is_active === false ? (
                                     <span className="text-[9px] font-black text-red-500 flex items-center gap-1"><Ban size={10}/> Suspended</span>
-                                 ) : item.induction_expiry ? (
-                                    <span className="text-[9px] font-black text-emerald-600 flex items-center gap-1"><CheckCircle size={10}/> Certified</span>
+                                 ) : getCertStatus(item) === 'valid' ? (
+                                    <span className="text-[9px] font-black text-emerald-600 flex items-center gap-1"><ShieldCheck size={10}/> Certified</span>
+                                 ) : getCertStatus(item) === 'expired' ? (
+                                    <span className="text-[9px] font-black text-amber-500 flex items-center gap-1"><CalendarClock size={10}/> Expired</span>
                                  ) : (
-                                    <span className="text-[9px] font-black text-rose-400 flex items-center gap-1"><Ban size={10}/> No Cert</span>
+                                    <span className="text-[9px] font-black text-rose-400 flex items-center gap-1"><ShieldAlert size={10}/> No Cert</span>
                                  )}
                                </div>
                              </>

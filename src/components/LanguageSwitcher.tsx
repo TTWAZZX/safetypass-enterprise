@@ -9,11 +9,11 @@ const LanguageSwitcher: React.FC = () => {
     <div className="flex items-center gap-2">
       {/* Icon Globe - ปรับให้พรีเมียมและแสดงผลเฉพาะบนจอที่ใหญ่ขึ้นเล็กน้อย */}
       <div className="hidden md:block">
-        <Globe size={14} className="text-slate-500 animate-pulse" />
+        <Globe size={14} className="text-slate-500" />
       </div>
 
       {/* 💊 Sliding Pill Switcher Container */}
-      <div className="relative flex items-center bg-slate-900/60 backdrop-blur-xl rounded-full p-1 border border-white/10 w-[86px] md:w-[100px] h-8 md:h-9 shadow-inner overflow-hidden">
+      <div className="relative flex items-center bg-slate-800 rounded-full p-1 border border-white/10 w-[86px] md:w-[100px] h-8 md:h-9 shadow-inner overflow-hidden">
         
         {/* 🚀 Sliding Highlight Layer: ตัวเลื่อนที่จะสไลด์ไปมาตามภาษาที่เลือก */}
         <div 

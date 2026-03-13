@@ -195,7 +195,7 @@ const AppContent: React.FC = () => {
             {/* ปุ่มปิดเมนูเล็กๆ ด้านบน */}
             <button 
               onClick={() => setIsNavOpen(false)}
-              className="absolute -top-10 left-1/2 -translate-x-1/2 bg-white/80 backdrop-blur text-slate-500 p-2 rounded-full shadow-sm border border-slate-100 hover:bg-white active:scale-90 transition-all"
+              className="absolute -top-10 left-1/2 -translate-x-1/2 bg-white text-slate-500 p-2 rounded-full shadow-sm border border-slate-100 hover:bg-slate-50 active:scale-90 transition-all"
             >
                <ChevronDown size={20} />
             </button>
