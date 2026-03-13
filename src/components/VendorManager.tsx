@@ -63,8 +63,9 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
   
   const [activeTab, setActiveTab] = useState<'USERS' | 'VENDORS' | 'LOGS'>(initialSearch ? 'USERS' : 'VENDORS');
   const [searchQuery, setSearchQuery] = useState(initialSearch || '');
-  const [selectedVendorFilter, setSelectedVendorFilter] = useState(''); 
-  
+  const [selectedVendorFilter, setSelectedVendorFilter] = useState('');
+  const [certFilter, setCertFilter] = useState<'' | 'NO_CERT' | 'HAS_CERT'>('');
+
   const [loading, setLoading] = useState(true);
   const [dataList, setDataList] = useState<any[]>([]);
   const [allVendors, setAllVendors] = useState<any[]>([]);
@@ -89,7 +90,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeTab, searchQuery, selectedVendorFilter, itemsPerPage]);
+  }, [activeTab, searchQuery, selectedVendorFilter, certFilter, itemsPerPage]);
 
   const logAction = async (action: string, target: string, details: string = '') => {
     try {
@@ -431,18 +432,38 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     if (error) showToast(error.message, 'error'); else { showToast('Reset Complete', 'success'); logAction('RESET_TRAINING', name); loadData(); }
   };
 
-  const filtered = activeTab === 'LOGS' ? logs : dataList.filter(item => {
-    const matchesSearch = (item.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
+  const isCertified = (item: any) => {
+    return item.induction_expiry && new Date(item.induction_expiry) > new Date();
+  };
+
+  const filteredRaw = activeTab === 'LOGS' ? logs : dataList.filter(item => {
+    const matchesSearch = (item.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                           (item.national_id || '').includes(searchQuery);
-    
+
     if (activeTab === 'USERS' && selectedVendorFilter) {
       if (selectedVendorFilter === 'EXTERNAL') {
-        return matchesSearch && !item.vendor_id; 
+        if (!matchesSearch || item.vendor_id) return false;
+      } else {
+        if (!matchesSearch || item.vendor_id !== selectedVendorFilter) return false;
       }
-      return matchesSearch && item.vendor_id === selectedVendorFilter; 
+    } else if (!matchesSearch) return false;
+
+    if (activeTab === 'USERS' && certFilter) {
+      if (certFilter === 'NO_CERT') return !isCertified(item);
+      if (certFilter === 'HAS_CERT') return isCertified(item);
     }
-    return matchesSearch;
+
+    return true;
   });
+
+  const filtered = activeTab === 'USERS'
+    ? [...filteredRaw].sort((a, b) => {
+        const aCert = isCertified(a);
+        const bCert = isCertified(b);
+        if (aCert === bCert) return 0;
+        return aCert ? 1 : -1; // No Cert ขึ้นก่อน
+      })
+    : filteredRaw;
 
   const totalItems = filtered.length;
   const totalPages = itemsPerPage === -1 ? 1 : Math.ceil(totalItems / itemsPerPage);
@@ -509,9 +530,9 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
           </div>
         </div>
         <div className="flex w-full lg:w-auto bg-slate-100 p-1 rounded-2xl border border-slate-200 shadow-inner overflow-x-auto no-scrollbar">
-          <TabButton active={activeTab === 'VENDORS'} onClick={() => {setActiveTab('VENDORS'); setSearchQuery(''); setSelectedVendorFilter('');}} icon={<Building2 size={14}/>} label="Vendors" />
-          <TabButton active={activeTab === 'USERS'} onClick={() => {setActiveTab('USERS'); setSearchQuery(''); setSelectedVendorFilter('');}} icon={<Users size={14}/>} label="Personnel" />
-          <TabButton active={activeTab === 'LOGS'} onClick={() => {setActiveTab('LOGS'); setSearchQuery(''); setSelectedVendorFilter('');}} icon={<History size={14}/>} label="Audit" />
+          <TabButton active={activeTab === 'VENDORS'} onClick={() => {setActiveTab('VENDORS'); setSearchQuery(''); setSelectedVendorFilter(''); setCertFilter('');}} icon={<Building2 size={14}/>} label="Vendors" />
+          <TabButton active={activeTab === 'USERS'} onClick={() => {setActiveTab('USERS'); setSearchQuery(''); setSelectedVendorFilter(''); setCertFilter('');}} icon={<Users size={14}/>} label="Personnel" />
+          <TabButton active={activeTab === 'LOGS'} onClick={() => {setActiveTab('LOGS'); setSearchQuery(''); setSelectedVendorFilter(''); setCertFilter('');}} icon={<History size={14}/>} label="Audit" />
         </div>
       </div>
 
@@ -532,7 +553,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
               {activeTab === 'USERS' && (
                 <div className="relative w-full md:w-64">
                   <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                  <select 
+                  <select
                     className="w-full pl-10 pr-8 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-[11px] text-slate-600 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all shadow-sm appearance-none cursor-pointer truncate"
                     value={selectedVendorFilter}
                     onChange={(e) => setSelectedVendorFilter(e.target.value)}
@@ -543,6 +564,36 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                     ))}
                     <option value="EXTERNAL">⚠️ ไม่ระบุสังกัด (EXTERNAL)</option>
                   </select>
+                </div>
+              )}
+
+              {/* ตัวกรองใบเซอร์ */}
+              {activeTab === 'USERS' && (
+                <div className="flex items-center gap-1.5 w-full md:w-auto">
+                  {(
+                    [
+                      { value: '', label: 'ทั้งหมด', icon: '👥' },
+                      { value: 'NO_CERT', label: 'ไม่มีใบเซอร์', icon: '⚠️' },
+                      { value: 'HAS_CERT', label: 'มีใบเซอร์', icon: '✅' },
+                    ] as const
+                  ).map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setCertFilter(opt.value)}
+                      className={`flex-1 md:flex-none flex items-center justify-center gap-1 px-3 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-wide border transition-all active:scale-95 ${
+                        certFilter === opt.value
+                          ? opt.value === 'NO_CERT'
+                            ? 'bg-amber-500 text-white border-amber-500 shadow-md'
+                            : opt.value === 'HAS_CERT'
+                            ? 'bg-emerald-500 text-white border-emerald-500 shadow-md'
+                            : 'bg-slate-900 text-white border-slate-900 shadow-md'
+                          : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <span>{opt.icon}</span>
+                      <span className="hidden sm:inline">{opt.label}</span>
+                    </button>
+                  ))}
                 </div>
               )}
             </div>

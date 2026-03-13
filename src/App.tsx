@@ -200,7 +200,7 @@ const AppContent: React.FC = () => {
                <ChevronDown size={20} />
             </button>
 
-            <div className="bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-full p-2 flex items-center justify-around shadow-[0_20px_40px_rgba(0,0,0,0.4)]">
+            <div className="bg-slate-900 border border-white/10 rounded-full p-2 flex items-center justify-around shadow-[0_20px_40px_rgba(0,0,0,0.4)] will-change-transform">
               
               <button 
                 onClick={() => { setActiveTab('HOME'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}

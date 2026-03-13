@@ -509,7 +509,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
     <div className="max-w-2xl mx-auto p-4 md:p-6 animate-in slide-in-from-bottom-4 duration-500 text-left pb-32 select-none">
       
       {/* Tracker */}
-      <div className="sticky top-[-1px] bg-slate-50/95 backdrop-blur-md pt-2 pb-6 mb-8 z-20 border-b border-slate-200">
+      <div className="sticky top-0 bg-slate-50 pt-2 pb-6 mb-8 z-20 border-b border-slate-200 will-change-transform">
         <div className="flex justify-between items-end mb-4">
           <div><h2 className="text-[11px] font-black text-slate-900 uppercase tracking-tight">Exam Module: {type}</h2><p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">{answeredCount === totalQuestions ? 'Ready for submission' : `Progress: ${answeredCount}/${totalQuestions} Completed`}</p></div>
           <div className="flex items-center gap-2"><Clock size={12} className="text-slate-300" /><span className="text-[10px] font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-full border border-blue-100">{progressPercent}%</span></div>
@@ -633,7 +633,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
         ))}
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 p-4 md:p-6 bg-white/80 backdrop-blur-xl border-t border-slate-100 flex justify-center z-50">
+      <div className="fixed bottom-0 left-0 right-0 p-4 md:p-6 bg-white border-t border-slate-100 flex justify-center z-50 will-change-transform">
         <div className="max-w-2xl w-full flex justify-between items-center gap-4">
           <button disabled={currentPage === 0} onClick={handlePrevPage} className={`flex items-center gap-2 px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all ${currentPage === 0 ? 'opacity-0 pointer-events-none' : 'text-slate-400 hover:text-slate-800'}`}><ChevronLeft size={16} /> Back</button>
           {currentPage === totalPages - 1 ? (
