@@ -646,11 +646,11 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                     value={selectedVendorFilter}
                     onChange={(e) => setSelectedVendorFilter(e.target.value)}
                   >
-                    <option value="">🏢 ทุกบริษัท (All Vendors)</option>
+                    <option value="">ทุกบริษัท (All Vendors)</option>
                     {allVendors.map(v => (
                       <option key={v.id} value={v.id}>{v.name}</option>
                     ))}
-                    <option value="EXTERNAL">⚠️ ไม่ระบุสังกัด (EXTERNAL)</option>
+                    <option value="EXTERNAL">ไม่ระบุสังกัด (EXTERNAL)</option>
                   </select>
                 </div>
               )}
