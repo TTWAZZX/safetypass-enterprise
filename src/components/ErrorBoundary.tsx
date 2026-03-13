@@ -13,7 +13,10 @@ interface ErrorBoundaryState {
 
 // ✅ ระบุ Generic <Props, State> ที่หัว Class
 class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  
+
+  // ✅ Explicit declaration เพื่อให้ TypeScript 5.8 strict mode รู้จัก this.props
+  declare readonly props: Readonly<ErrorBoundaryProps>;
+
   // ✅ วิธีแก้จุดแดงที่ State: ประกาศ Type และค่าเริ่มต้นที่นี่เลย (ไม่ผ่าน constructor)
   public state: ErrorBoundaryState = {
     hasError: false,

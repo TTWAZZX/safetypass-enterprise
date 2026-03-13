@@ -1,22 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { User } from './types';
+import { supabase } from './services/supabaseClient';
 import { LanguageProvider, useTranslation } from './context/LanguageContext';
 import Auth from './components/Auth';
 import UserPanel from './components/UserPanel';
 import AdminPanel from './components/AdminPanel';
 import LanguageSwitcher from './components/LanguageSwitcher';
 import ExamHistory from './components/ExamHistory'; 
-import { 
-  Shield, 
-  Loader2, 
-  LogOut, 
-  LayoutDashboard, 
-  History, 
+import {
+  Shield,
+  LogOut,
+  History,
   QrCode,
   Home,
-  Menu,       // ✅ เพิ่มไอคอน Menu
-  X,          // ✅ เพิ่มไอคอน X
-  ChevronDown // ✅ เพิ่มไอคอนลูกศรลง
+  Menu,
+  ChevronDown
 } from 'lucide-react';
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -42,18 +40,30 @@ const AppContent: React.FC = () => {
     window.addEventListener('popstate', handleLocationChange);
     handleLocationChange();
 
-    try {
-      document.documentElement.classList.remove('dark');
-      localStorage.removeItem('safety_pass_theme');
-      const savedUser = localStorage.getItem('safety_pass_current_user');
-      if (savedUser) {
-        setCurrentUser(JSON.parse(savedUser));
+    const init = async () => {
+      try {
+        document.documentElement.classList.remove('dark');
+        localStorage.removeItem('safety_pass_theme');
+        const savedUser = localStorage.getItem('safety_pass_current_user');
+        if (savedUser) {
+          // 🛡️ SESSION FALLBACK: ตรวจสอบว่า Supabase Session ยังใช้งานได้อยู่ไหม
+          // ป้องกันกรณีที่ localStorage มีข้อมูลเหลือค้างแต่ Session หมดอายุแล้ว
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session) {
+            setCurrentUser(JSON.parse(savedUser));
+          } else {
+            // Session หมดอายุ → เคลียร์ข้อมูลเก่าออก บังคับ Login ใหม่
+            localStorage.removeItem('safety_pass_current_user');
+          }
+        }
+      } catch (err) {
+        console.error('Init error:', err);
+      } finally {
+        setTimeout(() => setLoading(false), 800);
       }
-    } catch (err) {
-      console.error('Init error:', err);
-    } finally {
-      setTimeout(() => setLoading(false), 800);
-    }
+    };
+
+    init();
     return () => window.removeEventListener('popstate', handleLocationChange);
   }, []);
 
@@ -64,9 +74,10 @@ const AppContent: React.FC = () => {
 
   const handleLogout = () => {
     if(window.confirm(language === 'th' ? "คุณต้องการออกจากระบบใช่หรือไม่?" : "Are you sure you want to logout?")) {
+      supabase.auth.signOut();
       setCurrentUser(null);
       localStorage.removeItem('safety_pass_current_user');
-      setActiveTab('HOME'); 
+      setActiveTab('HOME');
     }
   };
 

@@ -105,6 +105,7 @@ export interface WorkPermitSession {
   user_id: string;
   permit_no: string;
   expire_date: string;
+  status?: 'ACTIVE' | 'EXPIRED';
   created_at?: string;
 }
 

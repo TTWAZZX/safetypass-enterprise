@@ -226,11 +226,11 @@ const QuestionManager: React.FC = () => {
                 </div>
                 <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Question (Thai)</label>
-                    <input placeholder="โจทย์ภาษาไทย" value={th} onChange={e=>setTh(e.target.value)} className="w-full p-4 border border-slate-200 rounded-2xl text-sm font-bold bg-white outline-none focus:border-blue-500" />
+                    <input placeholder="โจทย์ภาษาไทย" value={th} onChange={e=>setTh(e.target.value)} className="w-full p-4 border border-slate-200 rounded-2xl text-base md:text-sm font-bold bg-white outline-none focus:border-blue-500" />
                 </div>
                 <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Question (English)</label>
-                    <input placeholder="Question in English" value={en} onChange={e=>setEn(e.target.value)} className="w-full p-4 border border-slate-200 rounded-2xl text-sm font-bold bg-white outline-none focus:border-blue-500" />
+                    <input placeholder="Question in English" value={en} onChange={e=>setEn(e.target.value)} className="w-full p-4 border border-slate-200 rounded-2xl text-base md:text-sm font-bold bg-white outline-none focus:border-blue-500" />
                 </div>
                 <div className="flex bg-slate-100 p-1.5 rounded-2xl">
                     <button onClick={() => setExamType('INDUCTION')} className={`flex-1 py-3 rounded-xl font-black text-[10px] transition-all ${examType === 'INDUCTION' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>INDUCTION</button>
@@ -288,8 +288,8 @@ const QuestionManager: React.FC = () => {
                             <div className="flex justify-between items-center mb-1">
                                 <span className={`px-2 py-0.5 rounded-md text-[8px] font-black border ${q.type === 'INDUCTION' ? 'text-blue-600 border-blue-100 bg-blue-50' : 'text-purple-600 border-purple-100 bg-purple-50'}`}>{q.type}</span>
                                 <div className="flex gap-1 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button onClick={() => handleEdit(q)} className="p-1.5 text-slate-400 hover:text-blue-600 transition-colors"><Edit3 size={16}/></button>
-                                    <button onClick={() => handleDelete(q.id)} className="p-1.5 text-slate-400 hover:text-red-600 transition-colors"><Trash2 size={16}/></button>
+                                    <button onClick={() => handleEdit(q)} className="p-3 text-slate-400 hover:text-blue-600 transition-colors active:scale-90"><Edit3 size={16}/></button>
+                                    <button onClick={() => handleDelete(q.id)} className="p-3 text-slate-400 hover:text-red-600 transition-colors active:scale-90"><Trash2 size={16}/></button>
                                 </div>
                             </div>
                             <h4 className="font-black text-slate-800 text-sm truncate">{q.content_th}</h4>

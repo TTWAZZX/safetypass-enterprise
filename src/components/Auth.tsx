@@ -121,9 +121,9 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     try {
       const user = await api.login(loginId);
       
-      // แสตมป์เวลาเข้าสู่ระบบล่าสุด (ที่เราเพิ่งทำไป)
-      await supabase.from('users').update({ last_login: new Date().toISOString() }).eq('id', user.id);
-      
+      // แสตมป์เวลาเข้าสู่ระบบล่าสุด (fire-and-forget ไม่ block login flow)
+      supabase.from('users').update({ last_login: new Date().toISOString() }).eq('id', user.id);
+
       onLogin(user);
     } catch (err: any) {
       const errorMsg = err.message || '';
@@ -175,10 +175,10 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         }
       }
 
-      // ✅ แสตมป์เวลาเข้าสู่ระบบล่าสุด สำหรับคนที่เพิ่งสมัครใหม่
-      await supabase.from('users').update({ last_login: new Date().toISOString() }).eq('id', user.id);
+      // แสตมป์เวลาเข้าสู่ระบบล่าสุด (fire-and-forget ไม่ block login flow)
+      supabase.from('users').update({ last_login: new Date().toISOString() }).eq('id', user.id);
 
-      onLogin(user); // ✅ ยิง LINE และแสตมป์เวลาเสร็จค่อยรันคำสั่งล็อกอิน
+      onLogin(user);
 
     } catch (err: any) {
       const errorMsg = err.message || '';
@@ -249,7 +249,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               <input 
                 required 
                 autoFocus
-                className="w-full px-4 py-3.5 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-slate-700 transition-all shadow-inner"
+                className="w-full px-4 py-3.5 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-sm text-slate-700 transition-all shadow-inner"
                 value={loginId}
                 onChange={e => setLoginId(e.target.value)}
                 placeholder="13-digit National ID"
@@ -271,7 +271,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         {/* REGISTER FORM */}
         {mode === 'REGISTER' && (
           <form onSubmit={handleRegister} className="space-y-3.5 text-left relative z-10">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 
                 <div className="col-span-2 space-y-1">
                     <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex justify-between">
@@ -288,7 +288,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                                 if (val.length === 13) handleCheckID(val);
                             }} 
                             onBlur={() => handleCheckID()} 
-                            className="w-full pl-4 pr-24 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-xs shadow-inner transition-all" 
+                            className="w-full pl-4 pr-24 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs shadow-inner transition-all" 
                             placeholder="เลขบัตรประจำตัวประชาชน 13 หลัก" 
                         />
                         <button 
@@ -330,18 +330,18 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
                 <div className="col-span-2 space-y-1">
                     <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('auth.full_name')}</label>
-                    <input required value={name} onChange={e => setName(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-xs shadow-inner" placeholder="Full Name (EN/TH)" />
+                    <input required value={name} onChange={e => setName(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs shadow-inner" placeholder="Full Name (EN/TH)" />
                 </div>
                 <div className="space-y-1">
                     <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Age / อายุ</label>
-                    <input required type="number" value={age} onChange={e => setAge(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-xs shadow-inner" placeholder="25" />
+                    <input required type="number" value={age} onChange={e => setAge(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs shadow-inner" placeholder="25" />
                 </div>
                 <div className="space-y-1">
                     <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Nationality / สัญชาติ</label>
                     <select 
                       value={isOtherNationality ? 'OTHER' : nationality} 
                       onChange={e => handleNationalityChange(e.target.value)} 
-                      className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-xs appearance-none cursor-pointer"
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs appearance-none cursor-pointer"
                     >
                         <option value="ไทย (Thai)">ไทย (Thai)</option>
                         <option value="พม่า (Myanmar)">พม่า (Myanmar)</option>
@@ -362,7 +362,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                   autoFocus
                   value={nationality} 
                   onChange={e => setNationality(e.target.value)} 
-                  className="w-full px-4 py-3 rounded-2xl border-2 border-blue-100 bg-blue-50/30 focus:bg-white focus:border-blue-500 outline-none font-bold text-xs" 
+                  className="w-full px-4 py-3 rounded-2xl border-2 border-blue-100 bg-blue-50/30 focus:bg-white focus:border-blue-500 outline-none font-bold text-base md:text-xs" 
                   placeholder="เช่น เวียดนาม (Vietnamese)" 
                 />
               </div>
@@ -370,7 +370,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
             <div className="space-y-1">
               <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('auth.company')}</label>
-              <select required value={vendorId} onChange={e => setVendorId(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-xs appearance-none cursor-pointer shadow-inner">
+              <select required value={vendorId} onChange={e => setVendorId(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs appearance-none cursor-pointer shadow-inner">
                 <option value="">-- Select Company --</option>
                 {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                 <option value="OTHER">Other (ระบุเพิ่ม)</option>
@@ -380,7 +380,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             {vendorId === 'OTHER' && (
               <div className="space-y-1 animate-in slide-in-from-top-2 duration-300">
                 <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('auth.other_company')}</label>
-                <input required value={otherVendor} onChange={e => setOtherVendor(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-xs" />
+                <input required value={otherVendor} onChange={e => setOtherVendor(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs" />
               </div>
             )}
 

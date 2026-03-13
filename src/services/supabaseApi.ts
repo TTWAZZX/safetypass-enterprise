@@ -10,14 +10,15 @@ export const api = {
   ===================================================== */
 
   login: async (nationalId: string): Promise<User> => {
-    
+
     // 🔥 1. PRE-CHECK: ด่านตรวจก่อนเข้า Auth
     // วิ่งไปเช็คในตาราง users ก่อนว่า แอดมินสร้างชื่อคนนี้รอไว้หรือยัง?
+    const safeId = nationalId.replace(/[^0-9a-zA-Z\-]/g, '').slice(0, 20);
     const hash = SHA256(nationalId).toString();
     const { data: preCheckUsers } = await supabase
       .from('users')
       .select('pdpa_agreed, is_active')
-      .or(`national_id.eq.${nationalId},national_id_hash.eq.${hash}`)
+      .or(`national_id.eq.${safeId},national_id_hash.eq.${hash}`)
       .limit(1); // ✅ ใช้ limit(1) ป้องกัน Error กรณีฐานข้อมูลมีข้อมูลทับซ้อน
 
     if (preCheckUsers && preCheckUsers.length > 0) {
@@ -78,12 +79,13 @@ export const api = {
 
   checkUser: async (nationalId: string) => {
     // ✅ แก้ไขการเรียกใช้ Hash เป็น SHA256
+    const safeId = nationalId.replace(/[^0-9a-zA-Z\-]/g, '').slice(0, 20);
     const hash = SHA256(nationalId).toString();
-    
+
     const { data, error } = await supabase
       .from('users')
       .select('*, vendors(*)')
-      .or(`national_id.eq.${nationalId},national_id_hash.eq.${hash}`)
+      .or(`national_id.eq.${safeId},national_id_hash.eq.${hash}`)
       .limit(1); // ✅ ใช้ limit(1) ปลอดภัยกว่า
       
     if (error) {
@@ -146,10 +148,11 @@ export const api = {
     if (!authUser) throw new Error('ไม่สามารถเชื่อมต่อระบบยืนยันตัวตนได้');
 
     // 2. 🔍 ค้นหาให้ครอบคลุม! หาจาก ID แท้, ID แอดมิน หรือ Hash (ป้องกันแอดมินพิมพ์ตกหล่น)
+    const safeRegId = nationalId.replace(/[^0-9a-zA-Z\-]/g, '').slice(0, 20);
     const { data: existingUsers, error: fetchError } = await supabase
       .from('users')
       .select('*')
-      .or(`id.eq.${authUser.id},national_id.eq.${nationalId},national_id_hash.eq.${nationalIdHash}`);
+      .or(`id.eq.${authUser.id},national_id.eq.${safeRegId},national_id_hash.eq.${nationalIdHash}`);
 
     if (fetchError) throw new Error('ตรวจสอบข้อมูลเดิมไม่สำเร็จ');
 
@@ -387,8 +390,25 @@ export const api = {
   ) => {
     const { data: { user } } = await supabase.auth.getUser();
 
+    if (!user) throw new Error('Session หมดอายุ กรุณาเข้าสู่ระบบใหม่');
+
+    // 🛡️ RATE LIMIT: ป้องกันการส่งผลสอบซ้ำภายใน 60 วินาที
+    const since = new Date(Date.now() - 60 * 1000).toISOString();
+    const { data: recentSubmit } = await supabase
+      .from('exam_history')
+      .select('id, created_at')
+      .eq('user_id', user.id)
+      .eq('exam_type', type)
+      .gte('created_at', since)
+      .limit(1)
+      .maybeSingle();
+
+    if (recentSubmit) {
+      throw new Error('กรุณารอ 60 วินาทีก่อนส่งผลสอบอีกครั้ง (Rate limit exceeded)');
+    }
+
     if (user) {
-      
+
       // 🔥 ย้ายการเคลียร์ของเก่า (EXPIRED) มาไว้ด้านบนก่อน
       if (passed) {
         if (type === 'INDUCTION') {
@@ -453,9 +473,29 @@ export const api = {
   // ✅ เวอร์ชัน Super Compatible: ตรวจทั้งเลขข้อถูก และ Flag ใน Choice (จบปัญหาคะแนนไม่ตรง)
   submitExamWithAnswers: async (
     type: ExamType,
-    answers: Record<string, any>, 
+    answers: Record<string, any>,
     permitNo?: string
   ) => {
+    // 🛡️ GATE CHECK: Work Permit ต้องผ่าน Induction ที่ยังไม่หมดอายุก่อนเสมอ
+    if (type === 'WORK_PERMIT') {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) throw new Error('Session หมดอายุ กรุณาเข้าสู่ระบบใหม่');
+
+      const { data: userData } = await supabase
+        .from('users')
+        .select('induction_expiry')
+        .eq('id', authUser.id)
+        .single();
+
+      const expiry = userData?.induction_expiry;
+      if (!expiry || new Date(expiry) < new Date()) {
+        throw new Error(
+          'คุณยังไม่ผ่านการทดสอบ Safety Induction หรือใบรับรองหมดอายุแล้ว\n' +
+          'กรุณาสอบ Induction ให้ผ่านก่อนจึงจะสามารถสอบ Work Permit ได้'
+        );
+      }
+    }
+
     // 1. ดึงเฉลยจาก Database
     const { data: questions, error } = await supabase
       .from('questions')
@@ -649,6 +689,27 @@ export const api = {
     const failed = total - passed;
 
     return { total, passed, failed };
+  },
+
+  logNotificationFailure: async (payload: {
+    user_id: string;
+    exam_type: string;
+    error_message: string;
+    context?: string;
+  }) => {
+    // บันทึก LINE notification failure ลงตาราง exam_logs ในฟิลด์ extra
+    // หรือถ้ามีตาราง audit_logs ก็ insert ได้เลย
+    try {
+      await supabase.from('exam_logs').insert({
+        user_id: payload.user_id,
+        exam_type: payload.exam_type,
+        score: -1,           // ค่า sentinel บอกว่านี่คือ notification log ไม่ใช่ผลสอบ
+        passed: false,
+        note: `LINE_NOTIFY_FAILED: ${payload.error_message}${payload.context ? ' | ' + payload.context : ''}`
+      });
+    } catch {
+      // ถ้า log ไม่สำเร็จก็ไม่ควร throw ออกไปรบกวน UX
+    }
   },
 
   getActiveWorkPermit: async (userId: string): Promise<WorkPermitSession | null> => {

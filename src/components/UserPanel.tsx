@@ -299,7 +299,21 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
             onUserUpdate(u);
             setActiveStage('IDLE');
             showToast('บันทึกผลการสอบเรียบร้อยแล้ว', 'success');
-            if (u.induction_expiry && activeStage === 'INDUCTION') { setCardType('INDUCTION'); setShowCard(true); }
+            if (activeStage === 'INDUCTION') {
+                // Verify จาก DB ก่อนแสดงบัตร เพื่อป้องกันการแสดงบัตรจากข้อมูล client
+                setTimeout(async () => {
+                    const { data: freshUser } = await supabase
+                        .from('users')
+                        .select('induction_expiry')
+                        .eq('id', user.id)
+                        .single();
+                    if (freshUser?.induction_expiry) {
+                        onUserUpdate({ ...u, induction_expiry: freshUser.induction_expiry });
+                        setCardType('INDUCTION');
+                        setShowCard(true);
+                    }
+                }, 1000);
+            }
             if (activeStage === 'WORK_PERMIT') {
                 setTimeout(async () => {
                     const data = await mockApi.getActiveWorkPermit(user.id);

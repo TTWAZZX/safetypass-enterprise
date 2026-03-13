@@ -525,7 +525,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
               {/* ช่องค้นหา */}
               <div className="relative flex-1 group w-full">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-                <input className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-sm outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all shadow-sm" placeholder={`Search ${activeTab.toLowerCase()}...`} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                <input className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-base md:text-sm outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all shadow-sm" placeholder={`Search ${activeTab.toLowerCase()}...`} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
               </div>
               
               {/* ตัวกรองบริษัท */}
@@ -817,21 +817,21 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                     <h3 className="text-lg md:text-xl font-black text-slate-900 uppercase">Edit Profile</h3>
                     <p className="text-[10px] text-blue-500 font-bold uppercase tracking-widest mt-1">ID: {maskNationalID(editingUser?.national_id)}</p>
                   </div>
-                  <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-red-500 transition-colors bg-slate-50 p-2 rounded-full"><X size={20}/></button>
+                  <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-red-500 transition-colors bg-slate-50 p-3 rounded-full"><X size={20}/></button>
               </div>
               <div className="space-y-4">
                   <div className="space-y-1">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Full Name</label>
-                      <input className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold shadow-inner outline-none focus:border-blue-500" value={editForm.name} onChange={e=>setEditForm({...editForm, name: e.target.value})}/>
+                      <input className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold text-base shadow-inner outline-none focus:border-blue-500" value={editForm.name} onChange={e=>setEditForm({...editForm, name: e.target.value})}/>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-1">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Age / อายุ</label>
-                          <input type="number" className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold shadow-inner outline-none focus:border-blue-500" value={editForm.age} onChange={e=>setEditForm({...editForm, age: e.target.value})}/>
+                          <input type="number" className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold text-base shadow-inner outline-none focus:border-blue-500" value={editForm.age} onChange={e=>setEditForm({...editForm, age: e.target.value})}/>
                       </div>
                       <div className="space-y-1">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nationality</label>
-                          <select className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold shadow-inner outline-none focus:border-blue-500" value={isOtherNationality ? 'OTHER' : editForm.nationality} onChange={(e) => {
+                          <select className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold text-base shadow-inner outline-none focus:border-blue-500" value={isOtherNationality ? 'OTHER' : editForm.nationality} onChange={(e) => {
                               const val = e.target.value;
                               if (val === 'OTHER') { setIsOtherNationality(true); setEditForm({...editForm, nationality: ''}); } 
                               else { setIsOtherNationality(false); setEditForm({...editForm, nationality: val}); }
@@ -847,7 +847,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                   <div className="space-y-1 mt-2">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2"><Building2 size={12}/> Company / Vendor</label>
                       <select 
-                          className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold shadow-inner outline-none focus:border-blue-500 cursor-pointer text-sm md:text-base truncate" 
+                          className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold shadow-inner outline-none focus:border-blue-500 cursor-pointer text-base truncate" 
                           value={editForm.vendor_id} 
                           onChange={(e) => setEditForm({...editForm, vendor_id: e.target.value})}
                       >
@@ -859,7 +859,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                   </div>
                   <div className="bg-amber-50 p-4 md:p-5 rounded-3xl border border-amber-100 shadow-sm mt-4 text-left">
                       <label className="text-[10px] font-black text-amber-600 uppercase flex items-center gap-2 mb-3"><CalendarClock size={16}/> Induction Expiry (Override)</label>
-                      <input type="date" className="w-full bg-white border border-amber-200 p-3 rounded-xl font-bold outline-none focus:border-amber-500 transition-all" value={editForm.induction_expiry} onChange={e=>setEditForm({...editForm, induction_expiry: e.target.value})}/>
+                      <input type="date" className="w-full bg-white border border-amber-200 p-3 rounded-xl font-bold text-base outline-none focus:border-amber-500 transition-all" value={editForm.induction_expiry} onChange={e=>setEditForm({...editForm, induction_expiry: e.target.value})}/>
                   </div>
               </div>
               <div className="flex gap-3 mt-6 md:mt-8">

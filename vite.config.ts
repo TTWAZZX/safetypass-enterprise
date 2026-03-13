@@ -1,6 +1,7 @@
 import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+/// <reference types="vitest" />
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
@@ -39,9 +40,16 @@ export default defineConfig(({ mode }) => {
       
       esbuild: {
         // 2. ลบ console.log และ debugger อัตโนมัติเมื่อขึ้นเซิร์ฟเวอร์จริง (Production)
-        // ทำให้ไม่มี Error หรือ Log ข้อมูลหลุดไปโผล่ใน Console ของผู้ใช้เลย 
+        // ทำให้ไม่มี Error หรือ Log ข้อมูลหลุดไปโผล่ใน Console ของผู้ใช้เลย
         // แต่ตอนรันในคอมเรา (npm run dev) ยังเห็น Log ปกติเพื่อใช้แก้บั๊กครับ
         drop: mode === 'production' ? ['console', 'debugger'] : [],
-      }
+      },
+
+      // 🧪 Vitest configuration
+      test: {
+        environment: 'node',
+        globals: true,
+        include: ['src/__tests__/**/*.test.ts'],
+      },
     };
 });

@@ -12,7 +12,7 @@ const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({ onClose }) => {
       <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={onClose} />
       
       {/* Modal Content */}
-      <div className="bg-white w-full max-w-3xl h-[85vh] rounded-[2rem] shadow-2xl border border-slate-100 overflow-hidden relative z-10 animate-in zoom-in-95 duration-300 flex flex-col">
+      <div className="bg-white w-full max-w-3xl max-h-[90svh] min-h-0 rounded-[2rem] shadow-2xl border border-slate-100 overflow-hidden relative z-10 animate-in zoom-in-95 duration-300 flex flex-col">
         
         {/* Header */}
         <div className="p-5 border-b border-slate-100 bg-slate-50 flex items-center justify-between flex-shrink-0">

@@ -63,7 +63,7 @@ const Toast: React.FC<ToastProps> = ({
 
       <button 
         onClick={() => onClose(id)}
-        className="flex-shrink-0 p-1.5 hover:bg-white/20 rounded-xl transition-all active:scale-75 group"
+        className="flex-shrink-0 p-3 hover:bg-white/20 rounded-xl transition-all active:scale-75 group"
       >
         <X size={16} className="opacity-60 group-hover:opacity-100 transition-opacity" />
       </button>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../services/supabaseApi';
 import { User, Question, ExamType, QuestionPattern } from '../types';
 import { useTranslation } from '../context/LanguageContext';
@@ -54,6 +54,8 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
 
   const [currentPage, setCurrentPage] = useState(0);
   const questionsPerPage = 5;
+  // 🛡️ Client-side rate limit: ป้องกัน double-submit (30 วินาที)
+  const lastSubmitRef = useRef<number>(0);
 
   const STORAGE_KEY = `exam_progress_${user.id}_${type}`;
 
@@ -189,6 +191,13 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
   // 6. Submit & Grading Logic
   const handleSubmit = async () => {
     if (loading) return;
+    // 🛡️ Client-side rate limit: ป้องกัน double-submit (30 วินาที)
+    const now = Date.now();
+    if (now - lastSubmitRef.current < 30_000) {
+      alert('⚠️ กรุณารอ 30 วินาทีก่อนส่งผลสอบอีกครั้ง');
+      return;
+    }
+    lastSubmitRef.current = now;
     setLoading(true);
     
     try {
@@ -235,36 +244,52 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
         });
       });
 
-      // ✅ แก้ไข: ใช้เกณฑ์คะแนนผ่านแบบ Dynamic (ดึงค่ามาจากหน้า Admin)
-      const calculatedPassed = (correctCount / questions.length) * 100 >= passThreshold;
+      // ส่งคำตอบไปตรวจที่ Server และใช้ผลลัพธ์จาก Server เป็นหลัก
+      const serverResult = await api.submitExamWithAnswers(type, answers, permitNo);
 
-      await api.submitExamWithAnswers(type, answers, permitNo);
+      setScore(serverResult.score);
+      setPassed(serverResult.passed);
+      setDetailedResults(details);
 
-      setScore(correctCount);
-      setPassed(calculatedPassed); 
-      setDetailedResults(details); 
-      
-      if (type === 'WORK_PERMIT') {
-        try {
-          fetch('/api/notify-work-permit', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              name: user.name,
-              national_id: user.national_id, 
-              vendor: user.vendors?.name || 'EXTERNAL (ไม่มีสังกัด)',
-              score: correctCount,
-              maxScore: questions.length,
-              permitNo: permitNo,
-              status: calculatedPassed ? 'PASSED' : 'FAILED' 
-            })
-          }).catch(e => console.error("LINE Notification Trigger Error:", e));
-        } catch (err) {
-          console.error("Fail to trigger LINE API:", err);
-        }
+      if (type === 'WORK_PERMIT' && serverResult.passed) {
+        fetch('/api/notify-work-permit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: user.name,
+            national_id: user.national_id,
+            vendor: user.vendors?.name || 'EXTERNAL (ไม่มีสังกัด)',
+            score: serverResult.score,
+            maxScore: questions.length,
+            permitNo: permitNo,
+            status: serverResult.passed ? 'PASSED' : 'FAILED'
+          })
+        })
+          .then(res => {
+            if (!res.ok) {
+              return res.text().then(body => {
+                // 📋 บันทึก LINE API failure ลง Supabase
+                api.logNotificationFailure({
+                  user_id: user.id,
+                  exam_type: type,
+                  error_message: `HTTP ${res.status}`,
+                  context: body.slice(0, 200)
+                });
+              });
+            }
+          })
+          .catch(err => {
+            // 📋 บันทึก network error ลง Supabase
+            api.logNotificationFailure({
+              user_id: user.id,
+              exam_type: type,
+              error_message: err?.message || 'Network error',
+              context: 'fetch failed'
+            });
+          });
       }
 
-      if (calculatedPassed) {
+      if (serverResult.passed) {
         const updatedUser = { ...user };
         const now = new Date();
         if (type === 'INDUCTION') {
@@ -274,12 +299,13 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
         }
         setUpdatedUserData(updatedUser);
       }
-      
+
       setStep('RESULT');
       localStorage.removeItem(STORAGE_KEY);
 
     } catch (err: any) {
       console.error("Submission Error:", err);
+      localStorage.removeItem(STORAGE_KEY);
       alert("ไม่สามารถบันทึกผลสอบได้: " + err.message);
     } finally {
       setLoading(false);
@@ -448,17 +474,23 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
                 <BadgeCheck size={18} /> รับบัตรประจำตัว (Get Card)
             </button>
         ) : (
-            <button 
-                onClick={async () => { 
+            <button
+                onClick={async () => {
+                  // รีเฟรช passThreshold ใหม่จาก DB ทุกครั้งที่สอบซ้ำ
+                  try {
+                    const config = await api.getSystemSettings();
+                    const configKey = type === 'INDUCTION' ? 'PASSING_SCORE_INDUCTION' : 'PASSING_SCORE_WORK_PERMIT';
+                    if (config[configKey]) setPassThreshold(Number(config[configKey]));
+                  } catch {}
                   localStorage.removeItem(STORAGE_KEY);
-                  setDetailedResults([]); 
-                  setStep('READ'); 
-                  setCurrentPage(0); 
-                  setAnswers({}); 
+                  setDetailedResults([]);
+                  setStep('READ');
+                  setCurrentPage(0);
+                  setAnswers({});
                   setHasReadManual(false);
                   setPermitNo('');
                   await fetchNewQuestions();
-                }} 
+                }}
                 className="w-full py-4 md:py-5 bg-slate-900 text-white font-black rounded-2xl hover:bg-slate-800 transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2 uppercase text-[11px] md:text-xs tracking-widest"
             >
                 <RotateCcw size={16} /> สอบใหม่อีกครั้ง (Try Again)
@@ -493,7 +525,16 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
       {type === 'WORK_PERMIT' && currentPage === 0 && (
         <div className="mb-8 p-5 bg-white rounded-2xl border-2 border-blue-100 shadow-sm text-left animate-in fade-in">
            <label className="block text-[9px] font-black uppercase text-slate-400 tracking-widest mb-2 ml-1">Work Permit Number (เลขใบอนุญาต)</label>
-           <input value={permitNo} onChange={e => setPermitNo(e.target.value)} className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 font-black text-blue-600 outline-none focus:border-blue-500 focus:bg-white transition-all text-sm" placeholder="WP-XXXXX" />
+           <input
+             value={permitNo}
+             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPermitNo(e.target.value.replace(/\D/g, '').slice(0, 10))}
+             className={`w-full p-3 border rounded-xl bg-slate-50 font-black text-blue-600 outline-none focus:bg-white transition-all text-base md:text-sm ${permitNo.length > 0 && permitNo.length !== 10 ? 'border-red-300 focus:border-red-400' : 'border-slate-200 focus:border-blue-500'}`}
+             placeholder="เช่น 2026010012 (10 หลัก)"
+             maxLength={10}
+           />
+           {permitNo.length > 0 && permitNo.length !== 10 && (
+             <p className="text-[9px] text-red-500 font-bold mt-1.5 ml-1">⚠ เลขใบอนุญาตต้องเป็นตัวเลข 10 หลัก</p>
+           )}
         </div>
       )}
 
@@ -518,7 +559,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
                       value={answers[q.id] || ''} 
                       onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })} 
                       placeholder="Type answer here..." 
-                      className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl font-bold text-sm focus:border-blue-500 outline-none transition-all shadow-inner" 
+                      className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl font-bold text-base md:text-sm focus:border-blue-500 outline-none transition-all shadow-inner" 
                     />
                 ) : q.pattern === QuestionPattern.MATCHING ? (
                     <div className="space-y-3">
@@ -596,7 +637,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
         <div className="max-w-2xl w-full flex justify-between items-center gap-4">
           <button disabled={currentPage === 0} onClick={handlePrevPage} className={`flex items-center gap-2 px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all ${currentPage === 0 ? 'opacity-0 pointer-events-none' : 'text-slate-400 hover:text-slate-800'}`}><ChevronLeft size={16} /> Back</button>
           {currentPage === totalPages - 1 ? (
-            <button onClick={handleSubmit} disabled={loading || answeredCount !== totalQuestions || (type === 'WORK_PERMIT' && !permitNo)} className="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-emerald-100 transition-all disabled:opacity-50 disabled:grayscale flex items-center justify-center gap-3 active:scale-95">{loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Send size={16} /> Submit Exam</>}</button>
+            <button onClick={handleSubmit} disabled={loading || answeredCount !== totalQuestions || (type === 'WORK_PERMIT' && permitNo.length !== 10)} className="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-emerald-100 transition-all disabled:opacity-50 disabled:grayscale flex items-center justify-center gap-3 active:scale-95">{loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Send size={16} /> Submit Exam</>}</button>
           ) : (
             <button onClick={handleNextPage} className="flex-1 md:flex-none bg-blue-600 hover:bg-blue-700 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-blue-200 transition-all flex items-center justify-center gap-3 active:scale-95 group">Next Page <ChevronRight size={16} className="group-hover:translate-x-1 transition-transform" /></button>
           )}

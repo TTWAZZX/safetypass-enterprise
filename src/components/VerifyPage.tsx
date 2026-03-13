@@ -13,6 +13,11 @@ import {
   FileText
 } from 'lucide-react';
 
+const maskNationalId = (id: string): string => {
+  if (!id || id.length < 13) return id;
+  return `${id.slice(0, 1)}-${id.slice(1, 5)}-XXXXX-${id.slice(10, 12)}-${id.slice(12)}`;
+};
+
 const VerifyPage: React.FC = () => {
   // ✅ มีสถานะ EXPIRED แยกออกมาให้ชัดเจน
   const [status, setStatus] = useState<'LOADING' | 'VALID' | 'EXPIRED' | 'NOT_FOUND' | 'SUSPENDED'>('LOADING');
@@ -261,7 +266,7 @@ const VerifyPage: React.FC = () => {
                <div className="absolute inset-0 bg-blue-600/5 opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
             <h2 className="text-xl font-black text-slate-900 leading-tight uppercase tracking-tight">{userData?.name || 'Unknown User'}</h2>
-            <p className="text-[10px] text-slate-400 font-bold mt-1.5 tracking-widest font-mono">{userData?.national_id || '-'}</p>
+            <p className="text-[10px] text-slate-400 font-bold mt-1.5 tracking-widest font-mono">{userData?.national_id ? maskNationalId(userData.national_id) : '-'}</p>
           </div>
 
           <div className="grid grid-cols-1 gap-3">
