@@ -1,12 +1,12 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { api } from '../services/supabaseApi'; 
 import { supabase } from '../services/supabaseClient'; 
-import { 
-  Users, CheckCircle, XCircle, FileSpreadsheet, 
+import {
+  Users, CheckCircle, XCircle, FileSpreadsheet,
   Search, Calendar, TrendingUp,
   Loader2, AlertCircle, RotateCcw, Filter, ChevronRight, ChevronLeft,
   ShieldCheck, AlertTriangle, UserX, Activity, PieChart as PieChartIcon,
-  LineChart as LineChartIcon, Building2
+  LineChart as LineChartIcon, Building2, ShieldAlert, Clock, ArrowRight
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -16,9 +16,10 @@ import {
   LineChart, Line
 } from 'recharts';
 
-const AdminDashboard: React.FC = () => {
+const AdminDashboard: React.FC<{ onNavigateToUsers?: () => void }> = ({ onNavigateToUsers }) => {
   const [history, setHistory] = useState<any[]>([]);
   const [stats, setStats] = useState({ total: 0, passed: 0, failed: 0, suspended: 0 });
+  const [complianceStats, setComplianceStats] = useState<{ noCert: number; expired: number; expiring: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -66,12 +67,32 @@ const AdminDashboard: React.FC = () => {
       const failedExams = validHistory.filter(h => h.status !== 'PASSED').length;
 
       setHistory(validHistory);
-      setStats({ 
-        total: totalExams, 
-        passed: passedExams, 
-        failed: failedExams, 
+      setStats({
+        total: totalExams,
+        passed: passedExams,
+        failed: failedExams,
         suspended: suspendedCount
       });
+
+      // Compliance stats
+      try {
+        const { data: usersData } = await supabase
+          .from('users')
+          .select('induction_expiry')
+          .eq('is_active', true);
+        if (usersData) {
+          const now = Date.now();
+          const soon = now + 30 * 24 * 60 * 60 * 1000;
+          let noCert = 0, expired = 0, expiring = 0;
+          for (const u of usersData) {
+            if (!u.induction_expiry) { noCert++; continue; }
+            const exp = new Date(u.induction_expiry).getTime();
+            if (exp <= now) expired++;
+            else if (exp <= soon) expiring++;
+          }
+          setComplianceStats({ noCert, expired, expiring });
+        }
+      } catch { /* non-critical */ }
 
     } catch (err: any) {
       console.error("Dashboard fetch error:", err);
@@ -321,6 +342,46 @@ const AdminDashboard: React.FC = () => {
           glow="glow-red"
         />
       </div>
+
+      {/* 2.5 Compliance Alert Widget */}
+      {complianceStats && (complianceStats.noCert + complianceStats.expired + complianceStats.expiring) > 0 && (
+        <div className="bg-gradient-to-r from-rose-50 to-amber-50 border border-rose-200 rounded-[2rem] p-4 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in fade-in duration-500">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-rose-100 rounded-2xl shrink-0">
+              <ShieldAlert size={22} className="text-rose-500" />
+            </div>
+            <div>
+              <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest mb-1">Compliance Alert</p>
+              <p className="text-sm font-black text-slate-800">พนักงานที่ต้องดำเนินการ</p>
+              <div className="flex flex-wrap gap-3 mt-2">
+                {complianceStats.noCert > 0 && (
+                  <span className="text-[10px] font-black text-rose-600 bg-rose-100 px-2 py-1 rounded-lg flex items-center gap-1">
+                    <ShieldAlert size={11}/> ไม่มีใบเซอร์: {complianceStats.noCert} คน
+                  </span>
+                )}
+                {complianceStats.expired > 0 && (
+                  <span className="text-[10px] font-black text-orange-600 bg-orange-100 px-2 py-1 rounded-lg flex items-center gap-1">
+                    <AlertTriangle size={11}/> หมดอายุแล้ว: {complianceStats.expired} คน
+                  </span>
+                )}
+                {complianceStats.expiring > 0 && (
+                  <span className="text-[10px] font-black text-amber-600 bg-amber-100 px-2 py-1 rounded-lg flex items-center gap-1">
+                    <Clock size={11}/> ใกล้หมดอายุ: {complianceStats.expiring} คน
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+          {onNavigateToUsers && (
+            <button
+              onClick={onNavigateToUsers}
+              className="flex items-center gap-2 bg-rose-500 hover:bg-rose-600 text-white px-5 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-rose-200 whitespace-nowrap shrink-0"
+            >
+              จัดการ <ArrowRight size={14}/>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* 3. Data Visualization Charts */}
       {history.length > 0 && (

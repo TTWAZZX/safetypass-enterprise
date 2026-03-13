@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { api } from '../services/supabaseApi';
 import { useToastContext } from './ToastProvider';
@@ -64,7 +64,9 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
   const [activeTab, setActiveTab] = useState<'USERS' | 'VENDORS' | 'LOGS'>(initialSearch ? 'USERS' : 'VENDORS');
   const [searchQuery, setSearchQuery] = useState(initialSearch || '');
   const [selectedVendorFilter, setSelectedVendorFilter] = useState('');
-  const [certFilter, setCertFilter] = useState<'' | 'NO_CERT' | 'HAS_CERT'>('');
+  const [certFilter, setCertFilter] = useState<'' | 'NO_CERT' | 'EXPIRING' | 'HAS_CERT'>('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [dataList, setDataList] = useState<any[]>([]);
@@ -90,6 +92,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
 
   useEffect(() => {
     setCurrentPage(1);
+    setSelectedIds(new Set());
   }, [activeTab, searchQuery, selectedVendorFilter, certFilter, itemsPerPage]);
 
   const logAction = async (action: string, target: string, details: string = '') => {
@@ -131,6 +134,13 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
   };
 
   useEffect(() => { loadData(); }, [activeTab]);
+
+  // Auto-refresh every 60s (skip LOGS tab to avoid noise)
+  useEffect(() => {
+    if (activeTab === 'LOGS') return;
+    const timer = setInterval(() => { loadData(); }, 60000);
+    return () => clearInterval(timer);
+  }, [activeTab]);
 
   const handleUpdateVendorStatus = async (id: string, name: string, newStatus: 'APPROVED' | 'REJECTED') => {
     const confirmMsg = newStatus === 'APPROVED' ? `ยืนยันการอนุมัติบริษัท ${name}?` : `ยืนยันการปฏิเสธบริษัท ${name}?`;
@@ -432,12 +442,68 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     if (error) showToast(error.message, 'error'); else { showToast('Reset Complete', 'success'); logAction('RESET_TRAINING', name); loadData(); }
   };
 
-  const getCertStatus = (item: any): 'valid' | 'expired' | 'none' => {
-    if (!item.induction_expiry) return 'none';
-    return new Date(item.induction_expiry) > new Date() ? 'valid' : 'expired';
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const n = new Set(prev);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
   };
 
-  const isCertified = (item: any) => getCertStatus(item) === 'valid';
+  const handleBulkExport = (currentFiltered: any[]) => {
+    const selected = currentFiltered.filter(u => selectedIds.has(u.id));
+    const exportData = selected.map(user => ({
+      'Name': user.name,
+      'National ID': user.national_id ? "'" + user.national_id : '-',
+      'Vendor': user.vendors?.name || 'N/A',
+      'Cert Status': getCertStatus(user).toUpperCase(),
+      'Induction Expiry': user.induction_expiry ? new Date(user.induction_expiry).toLocaleDateString() : '-',
+      'Last Login': user.last_login ? new Date(user.last_login).toLocaleString('th-TH') : 'Never',
+    }));
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Selected');
+    XLSX.writeFile(wb, `Selected_Users_${new Date().toISOString().split('T')[0]}.xlsx`);
+    showToast(`Exported ${selected.length} users`, 'success');
+  };
+
+  const handleBulkReset = async () => {
+    if (!window.confirm(`Reset training for ${selectedIds.size} selected users?`)) return;
+    setBulkLoading(true);
+    try {
+      const ids = Array.from(selectedIds);
+      const { error } = await supabase.from('users').update({ induction_expiry: null }).in('id', ids);
+      if (error) throw error;
+      showToast(`Reset ${ids.length} users`, 'success');
+      logAction('BULK_RESET', `${ids.length} users`, 'Bulk training reset');
+      setSelectedIds(new Set());
+      loadData();
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
+  const getCertStatus = (item: any): 'valid' | 'expiring' | 'expired' | 'none' => {
+    if (!item.induction_expiry) return 'none';
+    const expiry = new Date(item.induction_expiry);
+    const now = new Date();
+    if (expiry <= now) return 'expired';
+    const soon = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    return expiry <= soon ? 'expiring' : 'valid';
+  };
+
+  const isCertified = (item: any) => {
+    const s = getCertStatus(item);
+    return s === 'valid' || s === 'expiring';
+  };
+
+  const getCertDaysLabel = (item: any): string => {
+    if (!item.induction_expiry) return '';
+    const diffDays = Math.round((new Date(item.induction_expiry).getTime() - Date.now()) / 86400000);
+    return diffDays > 0 ? `หมดอายุอีก ${diffDays} วัน` : `หมดไปแล้ว ${Math.abs(diffDays)} วัน`;
+  };
 
   const filteredRaw = activeTab === 'LOGS' ? logs : dataList.filter(item => {
     const matchesSearch = (item.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -452,8 +518,10 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     } else if (!matchesSearch) return false;
 
     if (activeTab === 'USERS' && certFilter) {
-      if (certFilter === 'NO_CERT') return !isCertified(item);
-      if (certFilter === 'HAS_CERT') return isCertified(item);
+      const cs = getCertStatus(item);
+      if (certFilter === 'NO_CERT') return cs === 'none' || cs === 'expired';
+      if (certFilter === 'EXPIRING') return cs === 'expiring';
+      if (certFilter === 'HAS_CERT') return cs === 'valid';
     }
 
     return true;
@@ -464,14 +532,26 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
         const sortKey = (item: any) => {
           const cert = getCertStatus(item);
           const active = !!item.last_login;
-          if (cert !== 'valid' && active) return 0;  // No/expired cert + Active
-          if (cert !== 'valid' && !active) return 1; // No/expired cert + Pending
-          if (cert === 'expired') return 2;
-          return 3;                                   // Valid cert
+          if ((cert === 'none' || cert === 'expired') && active) return 0;
+          if ((cert === 'none' || cert === 'expired') && !active) return 1;
+          if (cert === 'expiring') return 2;
+          return 3; // valid
         };
         return sortKey(a) - sortKey(b);
       })
     : filteredRaw;
+
+  const userStats = useMemo(() => {
+    if (activeTab !== 'USERS') return null;
+    return {
+      total: dataList.length,
+      noCert: dataList.filter(u => getCertStatus(u) === 'none').length,
+      expired: dataList.filter(u => getCertStatus(u) === 'expired').length,
+      expiring: dataList.filter(u => getCertStatus(u) === 'expiring').length,
+      valid: dataList.filter(u => getCertStatus(u) === 'valid').length,
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataList, activeTab]);
 
   const totalItems = filtered.length;
   const totalPages = itemsPerPage === -1 ? 1 : Math.ceil(totalItems / itemsPerPage);
@@ -577,24 +657,34 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
 
               {/* ตัวกรองใบเซอร์ */}
               {activeTab === 'USERS' && (
-                <div className="flex items-center gap-1.5 w-full md:w-auto">
+                <div className="flex items-center gap-1.5 w-full md:w-auto flex-wrap">
                   <button
                     onClick={() => setCertFilter('')}
                     className={`flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-wide border transition-all active:scale-95 ${certFilter === '' ? 'bg-slate-900 text-white border-slate-900 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
                   >
                     <Users size={13}/><span className="hidden sm:inline">ทั้งหมด</span>
+                    {userStats && <span className="ml-1 opacity-60 font-medium text-[9px]">{userStats.total}</span>}
                   </button>
                   <button
                     onClick={() => setCertFilter('NO_CERT')}
-                    className={`flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-wide border transition-all active:scale-95 ${certFilter === 'NO_CERT' ? 'bg-amber-500 text-white border-amber-500 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
+                    className={`flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-wide border transition-all active:scale-95 ${certFilter === 'NO_CERT' ? 'bg-rose-500 text-white border-rose-500 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
                   >
-                    <ShieldAlert size={13}/><span className="hidden sm:inline">ไม่มีใบเซอร์</span>
+                    <ShieldAlert size={13}/><span className="hidden sm:inline">ไม่มี/หมดอายุ</span>
+                    {userStats && <span className="ml-1 opacity-60 font-medium text-[9px]">{userStats.noCert + userStats.expired}</span>}
+                  </button>
+                  <button
+                    onClick={() => setCertFilter('EXPIRING')}
+                    className={`flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-wide border transition-all active:scale-95 ${certFilter === 'EXPIRING' ? 'bg-amber-500 text-white border-amber-500 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
+                  >
+                    <Clock size={13}/><span className="hidden sm:inline">ใกล้หมด</span>
+                    {userStats && <span className="ml-1 opacity-60 font-medium text-[9px]">{userStats.expiring}</span>}
                   </button>
                   <button
                     onClick={() => setCertFilter('HAS_CERT')}
                     className={`flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-wide border transition-all active:scale-95 ${certFilter === 'HAS_CERT' ? 'bg-emerald-500 text-white border-emerald-500 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
                   >
                     <ShieldCheck size={13}/><span className="hidden sm:inline">มีใบเซอร์</span>
+                    {userStats && <span className="ml-1 opacity-60 font-medium text-[9px]">{userStats.valid}</span>}
                   </button>
                 </div>
               )}
@@ -623,6 +713,24 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
           </div>
         </div>
 
+        {/* Bulk Actions Bar */}
+        {activeTab === 'USERS' && selectedIds.size > 0 && (
+          <div className="mx-4 mt-3 bg-slate-900 text-white px-4 py-3 rounded-2xl flex items-center justify-between gap-3 shadow-lg animate-in fade-in duration-200">
+            <span className="text-xs font-black">{selectedIds.size} รายการที่เลือก</span>
+            <div className="flex gap-2">
+              <button onClick={() => handleBulkExport(filtered)} disabled={bulkLoading} className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95">
+                <Download size={12}/> Export ที่เลือก
+              </button>
+              <button onClick={handleBulkReset} disabled={bulkLoading} className="flex items-center gap-1.5 bg-amber-500/80 hover:bg-amber-500 text-white px-3 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95">
+                {bulkLoading ? <Loader2 size={12} className="animate-spin"/> : <RotateCcw size={12}/>} Reset Training
+              </button>
+              <button onClick={() => setSelectedIds(new Set())} className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 transition-all active:scale-95">
+                <X size={14}/>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* 🟢 Data Presentation Area */}
         <div className="flex-1 p-2 md:p-0 bg-slate-50 md:bg-white flex flex-col">
           {loading ? (
@@ -640,6 +748,18 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                 <table className="w-full text-left min-w-[900px]">
                   <thead className="bg-slate-50/50 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100 sticky top-0 z-10">
                     <tr>
+                      {activeTab === 'USERS' && (
+                        <th className="pl-6 pr-2 py-5 w-10">
+                          <input
+                            type="checkbox"
+                            className="w-4 h-4 rounded border-slate-300 cursor-pointer accent-blue-600"
+                            checked={paginatedData.length > 0 && paginatedData.every((i: any) => selectedIds.has(i.id))}
+                            onChange={() => setSelectedIds(prev =>
+                              prev.size === paginatedData.length ? new Set() : new Set(paginatedData.map((i: any) => i.id))
+                            )}
+                          />
+                        </th>
+                      )}
                       <th className="px-8 py-5 text-left whitespace-nowrap">Profile / Identity</th>
                       <th className="px-8 py-5 text-left whitespace-nowrap">Compliance / Status</th>
                       <th className="px-8 py-5 text-center whitespace-nowrap">Protocol Actions</th>
@@ -656,8 +776,26 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                         </tr>
                       ))
                     ) : (
-                      paginatedData.map(item => (
-                        <tr key={item.id} className={`hover:bg-slate-50/30 transition-colors group text-left ${item.is_active === false ? 'bg-red-50/50' : ''}`}>
+                      paginatedData.map(item => {
+                        const itemCs = activeTab === 'USERS' ? getCertStatus(item) : '';
+                        const rowBorder = activeTab !== 'USERS' ? '' :
+                          item.is_active === false ? 'border-l-4 border-l-red-400' :
+                          itemCs === 'none' ? 'border-l-4 border-l-rose-400' :
+                          itemCs === 'expired' ? 'border-l-4 border-l-orange-400' :
+                          itemCs === 'expiring' ? 'border-l-4 border-l-amber-300' :
+                          'border-l-4 border-l-transparent';
+                        return (
+                        <tr key={item.id} className={`hover:bg-slate-50/30 transition-colors group text-left ${item.is_active === false ? 'bg-red-50/50' : ''} ${rowBorder}`}>
+                          {activeTab === 'USERS' && (
+                            <td className="pl-6 pr-2 py-5 w-10">
+                              <input
+                                type="checkbox"
+                                className="w-4 h-4 rounded border-slate-300 cursor-pointer accent-blue-600"
+                                checked={selectedIds.has(item.id)}
+                                onChange={() => toggleSelect(item.id)}
+                              />
+                            </td>
+                          )}
                           <td className="px-8 py-5">
                             <div className="flex items-center gap-3">
                                <div className={`w-10 h-10 shrink-0 rounded-2xl text-white transition-all flex items-center justify-center font-black text-xs shadow-inner uppercase ${item.is_active === false ? 'bg-red-400' : 'bg-slate-200 text-slate-500 group-hover:bg-blue-600'}`}>
@@ -665,16 +803,15 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                                </div>
                                <div className="min-w-0 flex flex-col gap-0.5">
                                  <div className="font-black text-slate-800 uppercase text-xs truncate max-w-[200px] flex items-center gap-2">
-                                    {item.name} 
+                                    {item.name}
                                     {item.is_active === false && <span className="bg-red-500 text-white px-1.5 py-0.5 rounded text-[8px] tracking-widest shrink-0">BANNED</span>}
                                  </div>
                                  {activeTab === 'USERS' && (
                                     <div className="flex items-center gap-2">
                                         <p className="text-[10px] text-slate-400 font-mono tracking-tighter">ID: {maskNationalID(item.national_id)}</p>
-                                        {/* 🔥 ✅ โชว์ Badge สถานะการเข้าสู่ระบบ */}
                                         {item.last_login ? (
                                             <span className="text-[8px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded flex items-center gap-1 border border-emerald-100">
-                                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div> Active
+                                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> Active
                                             </span>
                                         ) : (
                                             <span className="text-[8px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded flex items-center gap-1 border border-slate-200">
@@ -696,12 +833,16 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                                 <span className="text-slate-500 font-black text-[10px] uppercase bg-slate-50 px-3 py-1 rounded-xl border w-fit shadow-sm truncate max-w-[180px]">{item.vendors?.name || 'EXTERNAL'}</span>
                                 {item.is_active === false ? (
                                     <span className="text-[9px] font-black text-red-500 flex items-center gap-1 ml-1 whitespace-nowrap"><Ban size={10}/> Account Suspended</span>
-                                ) : getCertStatus(item) === 'valid' ? (
-                                    <span className="text-[9px] font-black text-emerald-600 flex items-center gap-1 ml-1 whitespace-nowrap">
+                                ) : itemCs === 'valid' ? (
+                                    <span title={getCertDaysLabel(item)} className="text-[9px] font-black text-emerald-600 flex items-center gap-1 ml-1 whitespace-nowrap cursor-help">
                                         <ShieldCheck size={10}/> Exp: {new Date(item.induction_expiry).toLocaleDateString('th-TH')}
                                     </span>
-                                ) : getCertStatus(item) === 'expired' ? (
-                                    <span className="text-[9px] font-black text-amber-500 flex items-center gap-1 ml-1 whitespace-nowrap">
+                                ) : itemCs === 'expiring' ? (
+                                    <span title={getCertDaysLabel(item)} className="text-[9px] font-black text-amber-500 flex items-center gap-1 ml-1 whitespace-nowrap cursor-help">
+                                        <Clock size={10}/> Expiring: {new Date(item.induction_expiry).toLocaleDateString('th-TH')}
+                                    </span>
+                                ) : itemCs === 'expired' ? (
+                                    <span title={getCertDaysLabel(item)} className="text-[9px] font-black text-orange-500 flex items-center gap-1 ml-1 whitespace-nowrap cursor-help">
                                         <CalendarClock size={10}/> Expired: {new Date(item.induction_expiry).toLocaleDateString('th-TH')}
                                     </span>
                                 ) : (
@@ -720,16 +861,13 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                               {activeTab === 'VENDORS' && item.status === 'PENDING' && (
                                 <button onClick={() => handleUpdateVendorStatus(item.id, item.name, 'REJECTED')} title="Reject" className="p-2.5 rounded-xl border text-red-500 hover:bg-red-50 active:scale-90 transition-all"><Ban size={16} /></button>
                               )}
-                              
                               <button onClick={() => activeTab === 'VENDORS' ? handleEditVendor(item.id, item.name) : handleEditUser(item)} className="p-2.5 rounded-xl border border-slate-100 text-slate-400 hover:text-blue-600 hover:bg-blue-50 active:scale-90 transition-all shadow-sm"><Edit3 size={16} /></button>
-                              
                               {activeTab === 'USERS' && (
                                 <>
                                   <button onClick={() => handleResetTraining(item.id, item.name)} title="Reset Compliance" className="p-2.5 rounded-xl border border-amber-100 text-amber-500 hover:bg-amber-50 transition-all active:scale-90 shadow-sm"><RotateCcw size={16} /></button>
-                                  
-                                  <button 
-                                      onClick={() => handleToggleUserBan(item.id, item.name, item.is_active !== false)} 
-                                      title={item.is_active !== false ? "Suspend Account" : "Unban Account"} 
+                                  <button
+                                      onClick={() => handleToggleUserBan(item.id, item.name, item.is_active !== false)}
+                                      title={item.is_active !== false ? "Suspend Account" : "Unban Account"}
                                       className={`p-2.5 rounded-xl border transition-all active:scale-90 shadow-sm ${item.is_active !== false ? 'border-red-100 text-red-500 hover:bg-red-50' : 'bg-red-500 text-white hover:bg-red-600 shadow-red-200 shadow-lg'}`}
                                   >
                                       {item.is_active !== false ? <ShieldAlert size={16} /> : <CheckCircle2 size={16} />}
@@ -740,7 +878,8 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                             </div>
                           </td>
                         </tr>
-                      ))
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
@@ -766,8 +905,16 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                       </div>
                     ))
                  ) : (
-                    paginatedData.map((item: any) => (
-                      <div key={item.id} className={`bg-white p-4 rounded-2xl border shadow-sm flex flex-col gap-4 relative overflow-hidden ${item.is_active === false ? 'border-red-200 bg-red-50/30' : 'border-slate-200'}`}>
+                    paginatedData.map((item: any) => {
+                      const cardCs = activeTab === 'USERS' ? getCertStatus(item) : '';
+                      const cardBorder = activeTab !== 'USERS' ? 'border-slate-200' :
+                        item.is_active === false ? 'border-red-200' :
+                        cardCs === 'none' ? 'border-l-4 border-l-rose-400 border-slate-200' :
+                        cardCs === 'expired' ? 'border-l-4 border-l-orange-400 border-slate-200' :
+                        cardCs === 'expiring' ? 'border-l-4 border-l-amber-300 border-slate-200' :
+                        'border-slate-200';
+                      return (
+                      <div key={item.id} className={`bg-white p-4 rounded-2xl border shadow-sm flex flex-col gap-4 relative overflow-hidden ${item.is_active === false ? 'bg-red-50/30' : ''} ${cardBorder}`}>
                          {/* Card Header */}
                          <div className="flex items-center gap-3">
                             <div className={`w-12 h-12 shrink-0 rounded-[1rem] text-white flex items-center justify-center font-black text-lg shadow-inner uppercase ${item.is_active === false ? 'bg-red-400' : 'bg-blue-600'}`}>
@@ -778,14 +925,12 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                                  <h4 className="font-black text-slate-800 uppercase text-sm truncate">{item.name}</h4>
                                  {item.is_active === false && <span className="bg-red-500 text-white px-1.5 py-0.5 rounded text-[8px] tracking-widest shrink-0">BANNED</span>}
                                </div>
-                               
                                {activeTab === 'USERS' && (
                                    <div className="flex items-center justify-between mt-1">
                                       <p className="text-[10px] text-slate-400 font-mono truncate">ID: {maskNationalID(item.national_id)}</p>
-                                      {/* 🔥 ✅ โชว์ Badge ในมือถือด้วย */}
                                       {item.last_login ? (
                                         <span className="text-[8px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded flex items-center gap-1">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div> Active
+                                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> Active
                                         </span>
                                       ) : (
                                         <span className="text-[8px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded flex items-center gap-1">
@@ -794,9 +939,16 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                                       )}
                                    </div>
                                )}
-
                                {activeTab === 'VENDORS' && <p className="text-[10px] text-slate-400 font-mono mt-0.5 truncate">Reg: {new Date(item.created_at).toLocaleDateString()}</p>}
                             </div>
+                            {activeTab === 'USERS' && (
+                              <input
+                                type="checkbox"
+                                className="w-4 h-4 rounded border-slate-300 cursor-pointer accent-blue-600 shrink-0"
+                                checked={selectedIds.has(item.id)}
+                                onChange={() => toggleSelect(item.id)}
+                              />
+                            )}
                          </div>
 
                          {/* Card Body */}
@@ -808,13 +960,15 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                                  <span className="text-[10px] font-black text-slate-700 truncate max-w-[60%] text-right">{item.vendors?.name || 'EXTERNAL'}</span>
                                </div>
                                <div className="flex justify-between items-center">
-                                 <span className="text-[9px] font-black text-slate-400 uppercase">Status</span>
+                                 <span className="text-[9px] font-black text-slate-400 uppercase">Cert</span>
                                  {item.is_active === false ? (
                                     <span className="text-[9px] font-black text-red-500 flex items-center gap-1"><Ban size={10}/> Suspended</span>
-                                 ) : getCertStatus(item) === 'valid' ? (
-                                    <span className="text-[9px] font-black text-emerald-600 flex items-center gap-1"><ShieldCheck size={10}/> Certified</span>
-                                 ) : getCertStatus(item) === 'expired' ? (
-                                    <span className="text-[9px] font-black text-amber-500 flex items-center gap-1"><CalendarClock size={10}/> Expired</span>
+                                 ) : cardCs === 'valid' ? (
+                                    <span title={getCertDaysLabel(item)} className="text-[9px] font-black text-emerald-600 flex items-center gap-1 cursor-help"><ShieldCheck size={10}/> Certified</span>
+                                 ) : cardCs === 'expiring' ? (
+                                    <span title={getCertDaysLabel(item)} className="text-[9px] font-black text-amber-500 flex items-center gap-1 cursor-help"><Clock size={10}/> Expiring Soon</span>
+                                 ) : cardCs === 'expired' ? (
+                                    <span title={getCertDaysLabel(item)} className="text-[9px] font-black text-orange-500 flex items-center gap-1 cursor-help"><CalendarClock size={10}/> Expired</span>
                                  ) : (
                                     <span className="text-[9px] font-black text-rose-400 flex items-center gap-1"><ShieldAlert size={10}/> No Cert</span>
                                  )}
@@ -838,14 +992,12 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                             {activeTab === 'VENDORS' && item.status === 'PENDING' && (
                               <button onClick={() => handleUpdateVendorStatus(item.id, item.name, 'REJECTED')} className="p-2.5 rounded-xl border border-red-200 text-red-500 bg-red-50 active:scale-90 transition-all"><Ban size={14} /></button>
                             )}
-                            
                             <button onClick={() => activeTab === 'VENDORS' ? handleEditVendor(item.id, item.name) : handleEditUser(item)} className="p-2.5 rounded-xl border border-slate-200 text-slate-500 bg-white active:scale-90 transition-all"><Edit3 size={14} /></button>
-                            
                             {activeTab === 'USERS' && (
                               <>
                                 <button onClick={() => handleResetTraining(item.id, item.name)} className="p-2.5 rounded-xl border border-amber-200 text-amber-500 bg-amber-50 active:scale-90 transition-all"><RotateCcw size={14} /></button>
-                                <button 
-                                    onClick={() => handleToggleUserBan(item.id, item.name, item.is_active !== false)} 
+                                <button
+                                    onClick={() => handleToggleUserBan(item.id, item.name, item.is_active !== false)}
                                     className={`p-2.5 rounded-xl border transition-all active:scale-90 ${item.is_active !== false ? 'border-red-200 text-red-500 bg-red-50' : 'bg-red-500 text-white'}`}
                                 >
                                     {item.is_active !== false ? <ShieldAlert size={14} /> : <CheckCircle2 size={14} />}
@@ -855,7 +1007,8 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                             <button onClick={() => activeTab === 'VENDORS' ? handleDeleteVendor(item.id, item.name) : handleDeleteUser(item.id, item.name)} className="p-2.5 rounded-xl border border-slate-200 text-slate-400 bg-slate-50 active:scale-90 transition-all"><Trash2 size={14} /></button>
                          </div>
                       </div>
-                    ))
+                      );
+                    })
                  )}
               </div>
               

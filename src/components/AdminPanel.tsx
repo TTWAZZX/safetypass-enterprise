@@ -104,7 +104,7 @@ const AdminPanel: React.FC = () => {
 
         {/* ✅ ส่ง searchQuery ต่อไปยัง Component ย่อย */}
         <div className="animate-in fade-in duration-500 w-full h-full">
-            {activePage === 'DASHBOARD' && <AdminDashboard />}
+            {activePage === 'DASHBOARD' && <AdminDashboard onNavigateToUsers={() => setActivePage('VENDORS')} />}
             {activePage === 'QUESTIONS' && <QuestionManager />}
             {activePage === 'VENDORS' && <VendorManager initialSearch={searchQuery} />}
             {activePage === 'SETTINGS' && <SettingsManager />}
