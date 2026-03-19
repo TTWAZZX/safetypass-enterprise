@@ -328,16 +328,25 @@ export const api = {
   getQuestions: async (type: ExamType): Promise<Question[]> => {
     const { data, error } = await supabase
       .from('questions')
-      .select('*') 
+      .select('id, type, pattern, content_th, content_en, choices_json, image_url, is_active')
       .eq('type', type)
       .eq('is_active', true);
 
     if (error) return [];
 
-    return (data || []).map((q: any) => ({
-      ...q,
-      choices_json: typeof q.choices_json === 'string' ? JSON.parse(q.choices_json) : q.choices_json
-    } as Question));
+    return (data || []).map((q: any) => {
+      let choices = typeof q.choices_json === 'string' ? JSON.parse(q.choices_json) : q.choices_json;
+
+      // 🔒 Strip เฉลยออกก่อนส่งให้ client — ป้องกันการเปิด DevTools ดูเฉลย
+      if (Array.isArray(choices)) {
+        choices = choices.map((c: any) => {
+          const { is_correct, correct_answer, ...safeChoice } = c;
+          return safeChoice;
+        });
+      }
+
+      return { ...q, choices_json: choices } as Question;
+    });
   },
 
   getAllQuestions: async (): Promise<Question[]> => {
@@ -510,85 +519,50 @@ export const api = {
     const threshold = Number(config[thresholdKey] || 80);
 
     let score = 0;
+    const perQuestion: Record<string, boolean> = {};
 
-    console.log("🔥 START GRADING DEBUG 🔥");
-
-    // 3. เริ่มตรวจคำตอบ
-    questions.forEach((q, index) => {
+    // 3. เริ่มตรวจคำตอบ (ทำที่ server เท่านั้น — ไม่ส่ง is_correct ออกไป)
+    questions.forEach((q: any) => {
       const userAns = answers[q.id];
-      
-      // ถ้า User ไม่ตอบ -> ข้าม (ผิด)
-      if (userAns === undefined || userAns === null) {
-          console.log(`Q${index+1}: No Answer (FAIL)`);
-          return;
-      }
-
-      // เตรียมข้อมูลเฉลย
-      let choices = q.choices_json;
-      if (typeof choices === 'string') {
-        try { choices = JSON.parse(choices); } catch (e) { choices = []; }
-      }
-
       let isCorrect = false;
 
-      // ---------------------------------------------------------
-      // 🔍 วิธีที่ 1: ตรวจแบบ Text (สำหรับ Short Answer)
-      // ---------------------------------------------------------
-      if (q.pattern === 'SHORT_ANSWER' || q.pattern === 'short_answer') {
+      if (userAns !== undefined && userAns !== null) {
+        let choices = q.choices_json;
+        if (typeof choices === 'string') {
+          try { choices = JSON.parse(choices); } catch { choices = []; }
+        }
+
+        if (q.pattern === 'SHORT_ANSWER' || q.pattern === 'short_answer') {
           const correctText = choices[0]?.correct_answer?.toString().toLowerCase().trim();
-          const userText = userAns.toString().toLowerCase().trim();
-          if (userText === correctText) isCorrect = true;
-      } 
-      // ---------------------------------------------------------
-      // 🔍 วิธีที่ 2: ตรวจแบบ Matching (จับคู่)
-      // ---------------------------------------------------------
-      else if (q.pattern === 'MATCHING' || q.pattern === 'matching') {
+          if (userAns.toString().toLowerCase().trim() === correctText) isCorrect = true;
+        } else if (q.pattern === 'MATCHING' || q.pattern === 'matching') {
           if (Array.isArray(userAns)) {
             isCorrect = choices.every((p: any, idx: number) => Number(userAns[idx]) === idx);
           }
-      }
-      // ---------------------------------------------------------
-      // 🔍 วิธีที่ 3: ตรวจแบบ Choice (Multiple Choice / True-False)
-      // ---------------------------------------------------------
-      else {
-          const userIndex = Number(userAns); // แปลงคำตอบ User เป็นตัวเลข (Index)
-          
-          // ✅ CHECK 3.1: เทียบกับคอลัมน์ correct_answer ใน Database (ถ้ามี)
-          // เช่น DB เก็บ "0" แล้ว User ส่งมา 0
+        } else {
+          const userIndex = Number(userAns);
           if (q.correct_answer !== null && q.correct_answer !== undefined) {
-              if (Number(q.correct_answer) === userIndex) {
-                  isCorrect = true;
-              }
+            if (Number(q.correct_answer) === userIndex) isCorrect = true;
           }
-
-          // ✅ CHECK 3.2: ถ้ายังไม่ถูก ให้ลองไปดูใน JSON Choice ว่ามี is_correct: true ไหม
           if (!isCorrect && choices[userIndex]) {
-              const val = choices[userIndex].is_correct;
-              const isFlagged = 
-                  val === true || 
-                  String(val).toLowerCase() === 'true'; // รองรับ "true"
-              
-              if (isFlagged) isCorrect = true;
+            const val = choices[userIndex].is_correct;
+            if (val === true || String(val).toLowerCase() === 'true') isCorrect = true;
           }
+        }
       }
 
       if (isCorrect) score++;
-      
-      // 🛑 LOG ดูผลการตรวจรายข้อ (กด F12 ดูได้เลย)
-      console.log(`Q${index+1} (${q.id}): UserAns=${userAns}, DB_Correct=${q.correct_answer} -> ${isCorrect ? '✅ PASS' : '❌ FAIL'}`);
+      perQuestion[q.id] = isCorrect;
     });
-
-    console.log(`🏁 FINAL SCORE: ${score}/${questions.length}`);
-    console.log("🔥 END GRADING DEBUG 🔥");
 
     // 4. คำนวณผลลัพธ์ผ่าน/ไม่ผ่าน
     const passedPercent = questions.length > 0 ? (score / questions.length) * 100 : 0;
-    const passed = passedPercent >= threshold; 
-    
+    const passed = passedPercent >= threshold;
+
     // 5. บันทึกลง Database
     await api.submitExamResult(type, score, questions.length, passed, permitNo);
 
-    return { score, passed };
+    return { score, passed, perQuestion };
   },
 
   /* =====================================================

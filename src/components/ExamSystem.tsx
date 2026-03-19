@@ -201,54 +201,18 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
     setLoading(true);
     
     try {
-      let correctCount = 0;
-      const details: {question: Question, userAns: any, isCorrect: boolean}[] = [];
-      
-      questions.forEach((q) => {
-        const userAns = answers[q.id];
-        let isCorrect = false;
-
-        if (userAns !== undefined && userAns !== null) {
-            if (q.pattern === 'SHORT_ANSWER' || q.pattern === 'short_answer') {
-                const correctText = q.choices_json[0]?.correct_answer?.toString().toLowerCase().trim();
-                const userText = userAns.toString().toLowerCase().trim();
-                if (userText === correctText) isCorrect = true;
-            } 
-            else if (q.pattern === 'MATCHING' || q.pattern === 'matching') {
-                const pairs = q.choices_json;
-                if (Array.isArray(userAns)) {
-                    isCorrect = pairs.every((p: any, idx: number) => Number(userAns[idx]) === idx);
-                }
-            }
-            else {
-                const selectedChoice = q.choices_json[Number(userAns)];
-                if (selectedChoice) {
-                    const isCorrectFlag = selectedChoice.is_correct;
-                    const isReallyCorrect = 
-                        isCorrectFlag === true || 
-                        String(isCorrectFlag) === 'true' || 
-                        String(isCorrectFlag) === 'True' ||
-                        String(isCorrectFlag) === 'TRUE';
-
-                    if (isReallyCorrect) isCorrect = true;
-                }
-            }
-        }
-
-        if (isCorrect) correctCount++;
-        
-        details.push({
-            question: q,
-            userAns: userAns,
-            isCorrect: isCorrect
-        });
-      });
-
-      // ส่งคำตอบไปตรวจที่ Server และใช้ผลลัพธ์จาก Server เป็นหลัก
+      // ส่งคำตอบไปตรวจที่ Server — เฉลยอยู่ที่ server เท่านั้น
       const serverResult = await api.submitExamWithAnswers(type, answers, permitNo);
 
       setScore(serverResult.score);
       setPassed(serverResult.passed);
+
+      // สร้าง detailedResults จากผล server (ไม่มี is_correct ที่ client)
+      const details = questions.map((q: Question) => ({
+        question: q,
+        userAns: answers[q.id],
+        isCorrect: serverResult.perQuestion?.[q.id] ?? false,
+      }));
       setDetailedResults(details);
 
       if (type === 'WORK_PERMIT' && serverResult.passed) {
