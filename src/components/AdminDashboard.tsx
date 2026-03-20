@@ -185,7 +185,7 @@ const AdminDashboard: React.FC<{ onNavigateToUsers?: () => void }> = ({ onNaviga
       return [
         new Date(item.created_at),                                       // A – Date object → Excel date
         item.status === 'PASSED' ? 'ผ่าน (PASS)' : 'ไม่ผ่าน (FAIL)',  // B
-        `${item.score}/${item.total_questions}`,                         // C
+        item.score ?? 0,                                                 // C – คะแนนที่ได้ (ตัวเลขเดียว)
         item.users?.name || '-',                                          // D
         item.users?.age ?? '-',                                           // E
         item.users?.nationality || '-',                                   // F
@@ -206,9 +206,9 @@ const AdminDashboard: React.FC<{ onNavigateToUsers?: () => void }> = ({ onNaviga
     // Apply cell formats row by row (skip header row r=0)
     const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
     for (let r = 1; r <= range.e.r; r++) {
-      // คอลัมน์ A → Date format dd/mm/yyyy
+      // คอลัมน์ A → Date format dd/mm/yyyy (อย่าแก้ .t เพราะ SheetJS set serial ไว้แล้ว)
       const dateCell = ws[XLSX.utils.encode_cell({ r, c: 0 })];
-      if (dateCell) { dateCell.t = 'd'; dateCell.z = 'dd/mm/yyyy'; }
+      if (dateCell) { dateCell.z = 'dd/mm/yyyy'; }
 
       // คอลัมน์ G (index 6) → Custom 13-digit number format
       const idCell = ws[XLSX.utils.encode_cell({ r, c: 6 })];
