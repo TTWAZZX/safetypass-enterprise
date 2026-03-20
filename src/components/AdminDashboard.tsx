@@ -172,31 +172,48 @@ const AdminDashboard: React.FC<{ onNavigateToUsers?: () => void }> = ({ onNaviga
   const exportToExcel = () => {
     if (filteredHistory.length === 0) return;
 
-    // ส่งออกข้อมูลทั้งหมดตามตัวกรอง (ไม่จำกัดเฉพาะหน้าปัจจุบัน)
-    const reportData = filteredHistory.map(item => {
-      const d = new Date(item.created_at);
-      const formattedDate = `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
+    // Header row (ลำดับคอลัมน์ตามที่กำหนด)
+    const headers = [
+      'วันที่ทำแบบทดสอบ', 'ผลการสอบ', 'คะแนน',
+      'ชื่อ-นามสกุล', 'อายุ', 'สัญชาติ',
+      'เลขบัตรประชาชน', 'สังกัดบริษัท', 'ประเภทการสอบ'
+    ];
 
-      return {
-        'วันที่ทำแบบทดสอบ': formattedDate,
-        'ผลการสอบ': item.status === 'PASSED' ? 'ผ่าน (PASS)' : 'ไม่ผ่าน (FAIL)',
-        'คะแนน': `${item.score}/${item.total_questions}`,
-        'ชื่อ-นามสกุล': item.users?.name || '-',
-        'อายุ': item.users?.age || '-',
-        'สัญชาติ': item.users?.nationality || '-',
-        'เลขบัตรประชาชน': item.users?.national_id || '-', 
-        'สังกัดบริษัท': item.users?.vendors?.name || '-',
-        'ประเภทการสอบ': item.exam_type || '-'
-      };
+    // Data rows — ใช้ array เพื่อควบคุมลำดับคอลัมน์ได้แน่นอน
+    const rows = filteredHistory.map(item => {
+      const idNum = parseInt((item.users?.national_id || '').replace(/\D/g, '') || '0', 10);
+      return [
+        new Date(item.created_at),                                       // A – Date object → Excel date
+        item.status === 'PASSED' ? 'ผ่าน (PASS)' : 'ไม่ผ่าน (FAIL)',  // B
+        `${item.score}/${item.total_questions}`,                         // C
+        item.users?.name || '-',                                          // D
+        item.users?.age ?? '-',                                           // E
+        item.users?.nationality || '-',                                   // F
+        idNum,                                                             // G – number → custom 13-digit format
+        item.users?.vendors?.name || '-',                                 // H
+        item.exam_type || '-',                                             // I
+      ];
     });
 
-    const ws = XLSX.utils.json_to_sheet(reportData);
-    
-    const wscols = [
-        { wch: 15 }, { wch: 15 }, { wch: 10 }, { wch: 25 }, { wch: 8 },  
-        { wch: 15 }, { wch: 20 }, { wch: 30 }, { wch: 15 }  
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+
+    // Column widths
+    ws['!cols'] = [
+      { wch: 16 }, { wch: 16 }, { wch: 10 }, { wch: 26 }, { wch: 8 },
+      { wch: 15 }, { wch: 20 }, { wch: 32 }, { wch: 15 },
     ];
-    ws['!cols'] = wscols;
+
+    // Apply cell formats row by row (skip header row r=0)
+    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+    for (let r = 1; r <= range.e.r; r++) {
+      // คอลัมน์ A → Date format dd/mm/yyyy
+      const dateCell = ws[XLSX.utils.encode_cell({ r, c: 0 })];
+      if (dateCell) { dateCell.t = 'd'; dateCell.z = 'dd/mm/yyyy'; }
+
+      // คอลัมน์ G (index 6) → Custom 13-digit number format
+      const idCell = ws[XLSX.utils.encode_cell({ r, c: 6 })];
+      if (idCell) { idCell.t = 'n'; idCell.z = '0000000000000'; }
+    }
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Safety_Report");
