@@ -1,4 +1,5 @@
 import { cleanText, isRateLimited, requireAuthenticatedUser } from './_auth.js';
+import { createLoginButton } from './_lineMessages.js';
 
 export default async function handler(req, res) {
   // รับเฉพาะ Method POST
@@ -222,7 +223,8 @@ export default async function handler(req, res) {
                   label: "ระงับสิทธิ์สอบ (Admin)",
                   uri: `${BASE_URL}/admin?search=${encodeURIComponent(permitNo)}`
                 }
-              }
+              },
+              createLoginButton()
             ]
           }
         }

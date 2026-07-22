@@ -217,11 +217,15 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
       }));
       setDetailedResults(details);
 
-      if (type === 'WORK_PERMIT' && serverResult.passed) {
+      if (serverResult.passed) {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session?.access_token) throw new Error('No active session');
 
-        fetch('/api/notify-work-permit', {
+        const notificationEndpoint = type === 'INDUCTION'
+          ? '/api/notify-induction'
+          : '/api/notify-work-permit';
+
+        fetch(notificationEndpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

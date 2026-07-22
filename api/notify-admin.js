@@ -1,5 +1,6 @@
 // ไฟล์: api/notify-admin.js
 import { cleanText, isRateLimited, requireAuthenticatedUser } from './_auth.js';
+import { createLoginButton } from './_lineMessages.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -162,6 +163,7 @@ export default async function handler(req, res) {
       footer: {
         type: "box",
         layout: "vertical",
+        spacing: "sm",
         contents: [
           {
             type: "box",
@@ -179,7 +181,8 @@ export default async function handler(req, res) {
             backgroundColor: "#ECFDF5",
             paddingAll: "10px",
             cornerRadius: "8px"
-          }
+          },
+          createLoginButton()
         ],
         paddingAll: "20px",
         paddingTop: "0px"
