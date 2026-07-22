@@ -1,9 +1,22 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join, extname } from 'node:path';
 
-const textExtensions = new Set(['.css', '.html', '.js', '.json', '.md', '.mjs', '.ts', '.tsx']);
+const textExtensions = new Set([
+  '.css', '.html', '.js', '.json', '.md', '.mjs', '.prisma', '.sql', '.ts', '.tsx', '.txt', '.yaml', '.yml',
+]);
 const ignoredDirectories = new Set(['.git', 'dist', 'node_modules']);
 const violations = [];
+const mojibakePattern = new RegExp([
+  '\\u00C3.',
+  '\\u00C2.',
+  '\\u00E2\\u20AC',
+  '\\u00F0\\u0178',
+  '\\u00E0\\u00B8',
+  '\\u00E0\\u00B9',
+  '\\u0E42\\u20AC',
+  '\\u0E50\\u009F',
+  '\\u00EF\\u00BB\\u00BF',
+].join('|'), 'u');
 
 async function scanDirectory(directory) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -20,6 +33,12 @@ async function scanDirectory(directory) {
     if (badCharacter) {
       const line = text.slice(0, badCharacter.index).split('\n').length;
       violations.push(`${file}:${line} contains an invalid or replacement character`);
+    }
+
+    const mojibake = mojibakePattern.exec(text);
+    if (mojibake) {
+      const line = text.slice(0, mojibake.index).split('\n').length;
+      violations.push(`${file}:${line} contains suspicious mojibake text`);
     }
   }
 }
