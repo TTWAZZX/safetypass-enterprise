@@ -182,8 +182,8 @@ const DigitalCard: React.FC<DigitalCardProps> = ({
              <div className="bg-white p-1 rounded-xl shadow-lg border-[3px] border-white/10">
                 <QRCode 
                   value={qrValue} 
-                  size={96}
-                  level="H" 
+                  size={72}
+                  level="M"
                 />
              </div>
              <div className="text-right">
