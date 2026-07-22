@@ -137,7 +137,7 @@ const DigitalCard: React.FC<DigitalCardProps> = ({
             </div>
           </div>
 
-          <div className="px-6 relative z-10 text-center mt-2">
+          <div className="px-6 relative z-10 text-center mt-0">
             <div className={`w-20 h-20 mx-auto bg-gradient-to-b p-[2.5px] rounded-[1.8rem] shadow-2xl mb-4 ${isPermit ? 'from-pink-400 to-indigo-500' : 'from-blue-400 to-emerald-400'}`}>
               <div className="w-full h-full bg-slate-900 rounded-[1.6rem] overflow-hidden flex items-center justify-center border border-white/10">
                 {user.avatar_url ? (
@@ -157,7 +157,7 @@ const DigitalCard: React.FC<DigitalCardProps> = ({
             
             <h3 className="text-lg font-black mb-1 truncate tracking-tight uppercase px-2">{user.name}</h3>
             {/* 🔥 แก้ไขคำสั่ง CSS ที่ทำให้ html2canvas ตัดข้อความแหว่ง เปลี่ยนมาใช้ break-words แทน */}
-            <div className="flex items-center justify-center gap-1.5 text-slate-400 text-[9px] mb-6 font-bold uppercase tracking-wide px-4">
+            <div className="flex items-center justify-center gap-1.5 text-slate-400 text-[9px] mb-2 font-bold uppercase tracking-wide px-4">
                <Building2 size={10} className="opacity-50 flex-shrink-0" />
                <span className="break-words text-center leading-tight">{user.vendors?.name || 'Authorized Contractor'}</span>
             </div>
