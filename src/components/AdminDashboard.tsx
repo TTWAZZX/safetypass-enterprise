@@ -8,7 +8,7 @@ import {
   ShieldCheck, AlertTriangle, UserX, Activity, PieChart as PieChartIcon,
   LineChart as LineChartIcon, Building2, ShieldAlert, Clock, ArrowRight
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
+import { downloadWorkbook } from '../services/excelExport';
 
 import {
   PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
@@ -169,7 +169,7 @@ const AdminDashboard: React.FC<{ onNavigateToUsers?: () => void }> = ({ onNaviga
     ? filteredHistory 
     : filteredHistory.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-  const exportToExcel = () => {
+  const exportToExcel = async () => {
     if (filteredHistory.length === 0) return;
 
     // Header row (ลำดับคอลัมน์ตามที่กำหนด)
@@ -195,33 +195,17 @@ const AdminDashboard: React.FC<{ onNavigateToUsers?: () => void }> = ({ onNaviga
       ];
     });
 
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-
-    // Column widths
-    ws['!cols'] = [
-      { wch: 16 }, { wch: 16 }, { wch: 10 }, { wch: 26 }, { wch: 8 },
-      { wch: 15 }, { wch: 20 }, { wch: 32 }, { wch: 15 },
-    ];
-
-    // Apply cell formats row by row (skip header row r=0)
-    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
-    for (let r = 1; r <= range.e.r; r++) {
-      // คอลัมน์ A → Date format dd/mm/yyyy (อย่าแก้ .t เพราะ SheetJS set serial ไว้แล้ว)
-      const dateCell = ws[XLSX.utils.encode_cell({ r, c: 0 })];
-      if (dateCell) { dateCell.z = 'dd/mm/yyyy'; }
-
-      // คอลัมน์ G (index 6) → Custom 13-digit number format
-      const idCell = ws[XLSX.utils.encode_cell({ r, c: 6 })];
-      if (idCell) { idCell.t = 'n'; idCell.z = '0000000000000'; }
-    }
-
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Safety_Report");
     const dateSuffix = filterDate || new Date().toISOString().split('T')[0];
-    XLSX.writeFile(wb, `Safety_Report_${filterType}_${filterStatus}_${dateSuffix}.xlsx`);
+    await downloadWorkbook(
+      'Safety_Report',
+      headers,
+      rows,
+      `Safety_Report_${filterType}_${filterStatus}_${dateSuffix}.xlsx`,
+      [16, 16, 10, 26, 8, 15, 20, 32, 15],
+      { 1: 'dd/mm/yyyy', 7: '0000000000000' },
+    );
   };
 
-  // ✅ ฟังก์ชันสำหรับแสดงแถบ Pagination (ใช้ซ้ำได้ทั้งข้างบนและข้างล่าง)
   const renderPagination = (position: 'top' | 'bottom') => {
     if (filteredHistory.length === 0) return null;
     return (

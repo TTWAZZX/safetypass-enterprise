@@ -2,7 +2,8 @@ import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { api } from '../services/supabaseApi';
 import { useToastContext } from './ToastProvider';
-import * as XLSX from 'xlsx';
+import { downloadWorkbook } from '../services/excelExport';
+import { readFirstWorksheetRows } from '../services/excelImport';
 import { 
   Users, Building2, Search, Plus, RotateCcw, CheckCircle, Loader2,
   Trash2, Edit3, UserPlus, Upload, Download, History, ShieldCheck,
@@ -219,7 +220,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
       }
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
     let exportData = [];
     let fileName = '';
 
@@ -247,26 +248,25 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
 
     if(exportData.length === 0) return showToast('ไม่พบข้อมูลที่จะส่งออก', 'error');
 
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, activeTab);
-    XLSX.writeFile(wb, fileName);
-    showToast('Exported Successfully', 'success');
+    const headers = Object.keys(exportData[0]);
+    const rows = exportData.map((item) => headers.map((header) => item[header]));
+    try {
+      await downloadWorkbook(activeTab, headers, rows, fileName);
+      showToast('Exported Successfully', 'success');
+    } catch (err) {
+      console.error('Excel export error:', err);
+      showToast('Export failed', 'error');
+    }
   };
 
-  const handleUserImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUserImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
+    e.target.value = '';
     setImportingUsers(true); 
-    
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      try {
-        const bstr = evt.target?.result;
-        const wb = XLSX.read(bstr, { type: 'binary', cellDates: false });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const data: any[] = XLSX.utils.sheet_to_json(ws);
+
+    try {
+        const data = await readFirstWorksheetRows(file);
         
         let success = 0; let fail = 0;
 
@@ -313,30 +313,22 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
         }
         showToast(`นำเข้าพนักงานสำเร็จ ${success} รายการ`, fail > 0 ? 'error' : 'success');
         loadData();
-      } catch (err) { 
+      } catch (err) {
         console.error("❌ Import Error:", err); 
         showToast('รูปแบบไฟล์ไม่ถูกต้อง', 'error'); 
       } finally {
         setImportingUsers(false); 
       }
-    };
-    reader.readAsBinaryString(file);
-    e.target.value = ''; 
   };
 
-  const handleVendorImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleVendorImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
+    e.target.value = '';
     setImportingVendors(true); 
-    
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      try {
-        const bstr = evt.target?.result;
-        const wb = XLSX.read(bstr, { type: 'binary' });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const data: any[] = XLSX.utils.sheet_to_json(ws);
+
+    try {
+        const data = await readFirstWorksheetRows(file);
         
         let successCount = 0; let skipCount = 0;
 
@@ -353,15 +345,12 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
         if (successCount > 0) { showToast(`นำเข้าบริษัทสำเร็จ ${successCount} บริษัท (ซ้ำ ${skipCount} รายการ)`, 'success'); loadData(); } 
         else if (skipCount > 0) { showToast(`ข้อมูลทั้งหมด ${skipCount} รายการมีอยู่ในระบบแล้ว`, 'info'); } 
         else { showToast('ไม่พบข้อมูลที่จะนำเข้า', 'error'); }
-      } catch (err) { 
+      } catch (err) {
         console.error("❌ Error:", err); 
         showToast('รูปแบบไฟล์ไม่ถูกต้อง', 'error'); 
       } finally {
         setImportingVendors(false); 
       }
-    };
-    reader.readAsBinaryString(file);
-    e.target.value = '';
   };
 
   const handleAddVendor = async () => {
@@ -450,8 +439,9 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     });
   };
 
-  const handleBulkExport = (currentFiltered: any[]) => {
+  const handleBulkExport = async (currentFiltered: any[]) => {
     const selected = currentFiltered.filter(u => selectedIds.has(u.id));
+    if (selected.length === 0) return showToast('ไม่พบข้อมูลที่จะส่งออก', 'error');
     const exportData = selected.map(user => ({
       'Name': user.name,
       'National ID': user.national_id ? "'" + user.national_id : '-',
@@ -460,11 +450,15 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
       'Induction Expiry': user.induction_expiry ? new Date(user.induction_expiry).toLocaleDateString() : '-',
       'Last Login': user.last_login ? new Date(user.last_login).toLocaleString('th-TH') : 'Never',
     }));
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Selected');
-    XLSX.writeFile(wb, `Selected_Users_${new Date().toISOString().split('T')[0]}.xlsx`);
-    showToast(`Exported ${selected.length} users`, 'success');
+    const headers = Object.keys(exportData[0]);
+    const rows = exportData.map((item) => headers.map((header) => item[header]));
+    try {
+      await downloadWorkbook('Selected', headers, rows, `Selected_Users_${new Date().toISOString().split('T')[0]}.xlsx`);
+      showToast(`Exported ${selected.length} users`, 'success');
+    } catch (err) {
+      console.error('Excel export error:', err);
+      showToast('Export failed', 'error');
+    }
   };
 
   const handleBulkReset = async () => {
@@ -694,7 +688,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
           <div className="flex flex-wrap gap-2 w-full md:w-auto md:ml-auto">
             {activeTab !== 'LOGS' && (
               <>
-                <input type="file" ref={activeTab === 'USERS' ? userFileInputRef : vendorFileInputRef} className="hidden" accept=".xlsx, .xls" onChange={activeTab === 'USERS' ? handleUserImport : handleVendorImport} />
+                <input type="file" ref={activeTab === 'USERS' ? userFileInputRef : vendorFileInputRef} className="hidden" accept=".xlsx" onChange={activeTab === 'USERS' ? handleUserImport : handleVendorImport} />
                 
                 <button 
                   onClick={() => (activeTab === 'USERS' ? userFileInputRef : vendorFileInputRef).current?.click()} 

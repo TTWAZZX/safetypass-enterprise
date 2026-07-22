@@ -20,6 +20,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   
   // Login State
   const [loginId, setLoginId] = useState('');
+  const [loginPin, setLoginPin] = useState('');
 
   // Register State
   const [regId, setRegId] = useState('');
@@ -33,6 +34,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [showPolicyModal, setShowPolicyModal] = useState(false);
   
   const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [vendorSearch, setVendorSearch] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [fetchingUser, setFetchingUser] = useState(false);
@@ -43,6 +45,10 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   // Support Links State
   const [manualUrl, setManualUrl] = useState<string>('');
   const [supportUrl, setSupportUrl] = useState<string>('');
+
+  const filteredVendors = vendors.filter((vendor) =>
+    vendor.name.toLocaleLowerCase().includes(vendorSearch.trim().toLocaleLowerCase())
+  );
 
   useEffect(() => {
     if (mode === 'REGISTER') {
@@ -119,7 +125,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     setError("");
     setInfoMsg("");
     try {
-      const user = await api.login(loginId);
+      const user = await api.login(loginId, loginPin || undefined);
       
       // แสตมป์เวลาเข้าสู่ระบบล่าสุด (fire-and-forget ไม่ block login flow)
       supabase.from('users').update({ last_login: new Date().toISOString() }).eq('id', user.id);
@@ -162,9 +168,15 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       // 🔥 ✅ แก้ไข: เติมคำว่า await เพื่อให้ระบบ "รอ" ส่ง LINE ให้เสร็จก่อนเปลี่ยนหน้า
       if (vendorId === 'OTHER' && otherVendor.trim() !== '') {
         try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (!session?.access_token) throw new Error('No active session');
+
           await fetch('/api/notify-admin', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${session.access_token}`,
+            },
             body: JSON.stringify({
               vendorName: otherVendor.trim(),
               adminEmail: `พนักงานสมัครใหม่ (${name})`
@@ -260,6 +272,21 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                   Secure encrypted authentication
                 </span>
               </div>
+            </div>
+
+            <div className="space-y-1.5 text-left">
+              <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">PIN 4 หลักท้ายบัตรประชาชน</label>
+              <input
+                required
+                inputMode="numeric"
+                maxLength={4}
+                type="password"
+                className="w-full px-4 py-3.5 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-sm text-slate-700 transition-all shadow-inner"
+                value={loginPin}
+                onChange={e => setLoginPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                placeholder="4 หลักท้ายบัตรประชาชน"
+              />
+              <p className="text-[8px] font-bold text-slate-400 ml-1">ผู้ใช้เดิมใช้เลข 4 หลักท้ายบัตรประชาชนเพื่อย้ายบัญชีครั้งแรก</p>
             </div>
             
             <button disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-2xl shadow-lg shadow-blue-100 transition-all flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95 text-xs uppercase tracking-widest">
@@ -370,9 +397,20 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
             <div className="space-y-1">
               <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('auth.company')}</label>
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <input
+                  type="search"
+                  value={vendorSearch}
+                  onChange={(e) => setVendorSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs shadow-inner"
+                  placeholder="ค้นหาชื่อบริษัท"
+                  aria-label="ค้นหาชื่อบริษัท"
+                />
+              </div>
               <select required value={vendorId} onChange={e => setVendorId(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs appearance-none cursor-pointer shadow-inner">
                 <option value="">-- Select Company --</option>
-                {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                {filteredVendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                 <option value="OTHER">Other (ระบุเพิ่ม)</option>
               </select>
             </div>

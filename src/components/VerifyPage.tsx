@@ -43,8 +43,10 @@ const VerifyPage: React.FC = () => {
         }
       }
 
-      if (userId) {
-        checkUserStatus(decodeURIComponent(userId), permitId); 
+      if (permitId) {
+        checkPermitStatus(permitId);
+      } else if (userId) {
+        checkUserStatus(decodeURIComponent(userId));
       } else {
         setStatus('NOT_FOUND');
       }
@@ -55,114 +57,62 @@ const VerifyPage: React.FC = () => {
     }
   }, []);
 
-  const checkUserStatus = async (id: string, permitId: string | null) => {
+  const checkPermitStatus = async (permitNo: string) => {
     try {
-      let targetUser = null;
-
-      const { data: userById } = await supabase
-        .from('users')
-        .select(`
-          *,
-          vendors(name),
-          work_permits(permit_no, expire_date)
-        `)
-        .eq('national_id', id)
-        .order('created_at', { foreignTable: 'work_permits', ascending: false })
-        .maybeSingle();
-
-      targetUser = userById;
-
-      if (!targetUser) {
-        const { data: permitData } = await supabase
-          .from('work_permits')
-          .select('user_id')
-          .eq('permit_no', id)
-          .maybeSingle();
-
-        if (permitData) {
-          const { data: userByPermit } = await supabase
-            .from('users')
-            .select(`
-              *,
-              vendors(name),
-              work_permits(permit_no, expire_date)
-            `)
-            .eq('id', permitData.user_id)
-            .order('created_at', { foreignTable: 'work_permits', ascending: false })
-            .single();
-            
-          targetUser = userByPermit;
-        }
-      }
-
-      if (!targetUser) {
-        const { data: userByUUID } = await supabase
-          .from('users')
-          .select(`
-            *,
-            vendors(name),
-            work_permits(permit_no, expire_date)
-          `)
-          .eq('id', id)
-          .order('created_at', { foreignTable: 'work_permits', ascending: false })
-          .maybeSingle();
-          
-        targetUser = userByUUID;
-      }
-
-      if (!targetUser) {
+      const { data, error } = await supabase.rpc('verify_safety_pass', { permit_no_param: permitNo });
+      if (error || !data?.[0]) {
         setStatus('NOT_FOUND');
         return;
       }
 
-      setUserData(targetUser);
+      const pass = data[0];
+      const permit = { permit_no: pass.permit_no, expire_date: pass.expire_date };
+      setUserData({ name: pass.name, vendors: { name: pass.vendor_name }, national_id: '' });
+      setVerifyMode('WORK_PERMIT');
+      setVerifiedExpiryDate(pass.expire_date);
+      setActivePermitObj(permit);
+      setStatus(pass.is_active ? 'VALID' : 'EXPIRED');
+    } catch (err: any) {
+      setErrorMsg(err.message);
+      setStatus('NOT_FOUND');
+    }
+  };
 
-      if (targetUser.is_active === false) {
-          setStatus('SUSPENDED');
-          return;
+  const checkUserStatus = async (id: string) => {
+    try {
+      const normalizedId = id.trim();
+      if (!/^\d{13}$/.test(normalizedId)) {
+        setStatus('NOT_FOUND');
+        return;
       }
 
-      const today = new Date().getTime();
-      
-      // 🔥 ลอจิกใหม่: แยกการเช็คตามประเภทบัตร 100%
-      let mode: 'INDUCTION' | 'WORK_PERMIT' = 'INDUCTION';
-      let isValid = false;
-      let expiryToStore: string | null = null;
-      let permitObj = null;
+      const { data, error } = await supabase.rpc('verify_induction_pass', {
+        national_id_param: normalizedId,
+      });
+      if (error) throw error;
 
-      if (permitId) {
-          // 📌 กรณีสแกน Work Permit (5 วัน)
-          mode = 'WORK_PERMIT';
-          if (targetUser.work_permits && targetUser.work_permits.length > 0) {
-              permitObj = targetUser.work_permits.find((p: any) => p.permit_no === permitId);
-          }
-          
-          if (!permitObj) {
-              setStatus('NOT_FOUND');
-              return;
-          }
-          expiryToStore = permitObj.expire_date;
-          isValid = new Date(permitObj.expire_date).getTime() > today;
-      } else {
-          // 📌 กรณีสแกน Induction (รายปี)
-          mode = 'INDUCTION';
-          expiryToStore = targetUser.induction_expiry;
-          isValid = targetUser.induction_expiry && new Date(targetUser.induction_expiry).getTime() > today;
+      const pass = data?.[0];
+      if (!pass) {
+        setStatus('NOT_FOUND');
+        return;
       }
 
-      // บันทึกค่าลง State เพื่อให้ UI เอาไปแสดงผลให้ตรงกับบริบท
-      setVerifyMode(mode);
-      setVerifiedExpiryDate(expiryToStore);
-      setActivePermitObj(permitObj);
+      setUserData({
+        name: pass.name,
+        vendors: { name: pass.vendor_name },
+        masked_national_id: pass.masked_national_id,
+      });
+      setVerifyMode('INDUCTION');
+      setVerifiedExpiryDate(pass.induction_expiry);
+      setActivePermitObj(null);
 
-      setTimeout(() => {
-        if (isValid) {
-          setStatus('VALID');
-        } else {
-          setStatus('EXPIRED'); // ถ้าหมดอายุให้ขึ้น EXPIRED เลย
-        }
-      }, 100);
+      if (!pass.is_active) {
+        setStatus('SUSPENDED');
+        return;
+      }
 
+      const expiryTime = pass.induction_expiry ? new Date(pass.induction_expiry).getTime() : 0;
+      setStatus(expiryTime > Date.now() ? 'VALID' : 'EXPIRED');
     } catch (err: any) {
       console.error('Verification error:', err);
       setErrorMsg(err.message);
@@ -266,7 +216,9 @@ const VerifyPage: React.FC = () => {
                <div className="absolute inset-0 bg-blue-600/5 opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
             <h2 className="text-xl font-black text-slate-900 leading-tight uppercase tracking-tight">{userData?.name || 'Unknown User'}</h2>
-            <p className="text-[10px] text-slate-400 font-bold mt-1.5 tracking-widest font-mono">{userData?.national_id ? maskNationalId(userData.national_id) : '-'}</p>
+            <p className="text-[10px] text-slate-400 font-bold mt-1.5 tracking-widest font-mono">
+              {userData?.masked_national_id || (userData?.national_id ? maskNationalId(userData.national_id) : '-')}
+            </p>
           </div>
 
           <div className="grid grid-cols-1 gap-3">

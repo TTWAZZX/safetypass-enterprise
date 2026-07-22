@@ -1,10 +1,18 @@
 // ไฟล์: api/notify-admin.js
+import { cleanText, isRateLimited, requireAuthenticatedUser } from './_auth.js';
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ message: 'Method Not Allowed' });
   }
 
-  const { vendorName, adminEmail } = req.body;
+  const auth = await requireAuthenticatedUser(req, res);
+  if (!auth) return;
+  if (isRateLimited(`vendor-request:${auth.user.id}`, 5 * 60 * 1000)) {
+    return res.status(429).json({ message: 'Please wait before sending another request' });
+  }
+  const vendorName = cleanText(req.body?.vendorName, 120);
+  if (!vendorName) return res.status(400).json({ message: 'Invalid vendor name' });
 
   // 🔒 ดึงค่าจาก Vercel Environment Variables
   const LINE_TOKEN = process.env.LINE_ACCESS_TOKEN; 
@@ -115,7 +123,7 @@ export default async function handler(req, res) {
                   },
                   {
                     type: "text",
-                    text: adminEmail || 'User',
+                    text: 'Newly registered user',
                     color: "#0F172A",
                     size: "sm",
                     weight: "bold",

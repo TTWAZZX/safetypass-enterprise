@@ -59,8 +59,8 @@ const DigitalCard: React.FC<DigitalCardProps> = ({
 
   // 🔥 แก้ไขตัวบั๊ก! ใช้ encodeURIComponent ครอบ permit_no เผื่อมันเป็นภาษาไทยแบบคำว่า "ทดสอบ"
   const qrValue = isPermit 
-    ? `${window.location.origin}/verify?id=${user.national_id}&permit=${encodeURIComponent(permit?.permit_no || '')}`
-    : `${window.location.origin}/verify?id=${user.national_id}`;
+    ? `${window.location.origin}/verify?id=${encodeURIComponent(user.national_id)}&permit=${encodeURIComponent(permit?.permit_no || '')}`
+    : `${window.location.origin}/verify?id=${encodeURIComponent(user.national_id)}`;
 
   // ✅ อัปเกรดระบบ Download ล็อกขนาดและแก้อาการภาพเบี้ยว/ตัวหนังสือขาด
   const handleDownload = async () => {
@@ -182,7 +182,7 @@ const DigitalCard: React.FC<DigitalCardProps> = ({
              <div className="bg-white p-1 rounded-xl shadow-lg border-[3px] border-white/10">
                 <QRCode 
                   value={qrValue} 
-                  size={50}
+                  size={96}
                   level="H" 
                 />
              </div>

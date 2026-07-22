@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../services/supabaseApi';
 import { supabase } from '../services/supabaseClient';
-import * as XLSX from 'xlsx';
 import { QuestionPattern } from '../types'; 
 import { 
   Plus, Save, Trash2, BookOpen, Ticket, Loader2, 

@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../services/supabaseApi';
+import { normalizeMatchingAnswer } from '../services/examScoring';
+import { supabase } from '../services/supabaseClient';
 import { User, Question, ExamType, QuestionPattern } from '../types';
 import { useTranslation } from '../context/LanguageContext';
 import {
@@ -216,17 +218,18 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
       setDetailedResults(details);
 
       if (type === 'WORK_PERMIT' && serverResult.passed) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) throw new Error('No active session');
+
         fetch('/api/notify-work-permit', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
           body: JSON.stringify({
-            name: user.name,
-            national_id: user.national_id,
             vendor: user.vendors?.name || 'EXTERNAL (ไม่มีสังกัด)',
-            score: serverResult.score,
-            maxScore: questions.length,
             permitNo: permitNo,
-            status: serverResult.passed ? 'PASSED' : 'FAILED'
           })
         })
           .then(res => {
@@ -534,8 +537,8 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
                                 <select 
                                     value={answers[q.id]?.[pIdx] ?? ""} 
                                     onChange={(e) => {
-                                        const newAns = { ...(answers[q.id] || {}) };
-                                        newAns[pIdx] = parseInt(e.target.value);
+                                        const newAns = normalizeMatchingAnswer(answers[q.id], q.choices_json.length);
+                                        newAns[pIdx] = e.target.value === '' ? -1 : Number(e.target.value);
                                         setAnswers({ ...answers, [q.id]: newAns });
                                     }}
                                     className="flex-1 p-3 bg-white border-2 border-blue-50 rounded-xl text-[12px] font-black text-blue-600 outline-none focus:border-blue-500"

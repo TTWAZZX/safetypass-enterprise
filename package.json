@@ -4,6 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "check:text": "node scripts/check-text-encoding.mjs",
+    "prebuild": "npm run check:text",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
@@ -14,6 +16,7 @@
     "@line/liff": "^2.27.3",
     "@supabase/supabase-js": "^2.95.3",
     "crypto-js": "^4.2.0",
+    "exceljs": "^4.4.0",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.1.0",
     "jspdf-autotable": "^5.0.7",
@@ -22,8 +25,7 @@
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-qr-code": "^2.0.18",
-    "recharts": "^3.7.0",
-    "xlsx": "^0.18.5"
+    "recharts": "^3.7.0"
   },
   "devDependencies": {
     "@types/crypto-js": "^4.2.2",
@@ -31,6 +33,11 @@
     "@vitejs/plugin-react": "^5.0.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0",
-    "vitest": "^2.1.9"
+    "vitest": "^4.1.10"
+  },
+  "overrides": {
+    "exceljs": {
+      "uuid": "^11.1.1"
+    }
   }
 }

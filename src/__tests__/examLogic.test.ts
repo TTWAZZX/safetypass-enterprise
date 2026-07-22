@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { isMatchingAnswerCorrect, normalizeMatchingAnswer } from '../services/examScoring';
 
 // ─────────────────────────────────────────────
 // 1. Expiry Date Calculations
@@ -185,5 +186,26 @@ describe('Client-side Rate Limiting', () => {
   it('submitted 31 seconds ago → no longer limited', () => {
     const thirtyOneSecondsAgo = Date.now() - 31_000;
     expect(isRateLimited(thirtyOneSecondsAgo, 30_000)).toBe(false);
+  });
+});
+
+describe('Matching answers', () => {
+  const pairs = [{}, {}, {}];
+
+  it('accepts correctly ordered array answers', () => {
+    expect(isMatchingAnswerCorrect([0, 1, 2], pairs)).toBe(true);
+  });
+
+  it('supports saved legacy object answers', () => {
+    expect(isMatchingAnswerCorrect({ 0: 0, 1: 1, 2: 2 }, pairs)).toBe(true);
+  });
+
+  it('rejects incomplete or incorrectly matched answers', () => {
+    expect(isMatchingAnswerCorrect([0, 2, 1], pairs)).toBe(false);
+    expect(isMatchingAnswerCorrect([0, 1], pairs)).toBe(false);
+  });
+
+  it('normalizes unanswered selections to an invalid value', () => {
+    expect(normalizeMatchingAnswer({ 0: 0 }, 3)).toEqual([0, -1, -1]);
   });
 });

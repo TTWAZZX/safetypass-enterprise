@@ -1,3 +1,5 @@
+import { cleanText, isRateLimited, requireAuthenticatedUser } from './_auth.js';
+
 export default async function handler(req, res) {
   // รับเฉพาะ Method POST
   if (req.method !== 'POST') {
@@ -5,7 +7,43 @@ export default async function handler(req, res) {
   }
 
   // ✅ รับค่าจาก Frontend (ดึงมาครบถ้วนเหมือนเดิม)
-  const { name, vendor, score, maxScore, permitNo, status, national_id } = req.body;
+  const auth = await requireAuthenticatedUser(req, res);
+  if (!auth) return;
+
+  const permitNo = cleanText(req.body?.permitNo, 32);
+  if (!permitNo || !/^\d{10}$/.test(permitNo)) {
+    return res.status(400).json({ message: 'Invalid permit number' });
+  }
+  if (isRateLimited(`work-permit:${auth.user.id}:${permitNo}`, 60 * 1000)) {
+    return res.status(429).json({ message: 'Please wait before sending another notification' });
+  }
+
+  const permitQuery = new URLSearchParams({
+    select: 'permit_no,expire_date,status',
+    user_id: `eq.${auth.user.id}`,
+    permit_no: `eq.${permitNo}`,
+    status: 'eq.ACTIVE',
+    expire_date: `gt.${new Date().toISOString()}`,
+    limit: '1',
+  });
+  try {
+    const permitResponse = await fetch(`${auth.config.url}/rest/v1/work_permits?${permitQuery}`, {
+      headers: { apikey: auth.config.anonKey, Authorization: auth.authorization },
+    });
+    const permits = permitResponse.ok ? await permitResponse.json() : [];
+    if (!Array.isArray(permits) || permits.length !== 1) {
+      return res.status(403).json({ message: 'No active permit was found for this user' });
+    }
+  } catch {
+    return res.status(503).json({ message: 'Permit verification is unavailable' });
+  }
+
+  const name = 'Verified user';
+  const vendor = '-';
+  const score = '-';
+  const maxScore = '-';
+  const national_id = '';
+  const status = 'PASSED';
 
   // ตรวจสอบสถานะการสอบ
   const isPassed = status === 'PASSED';
@@ -172,7 +210,7 @@ export default async function handler(req, res) {
                 action: {
                   type: "uri",
                   label: "ดูใบเซอร์ / Digital Pass",
-                  "uri": `https://safetypass-enterprise.vercel.app/verify?id=${national_id}&permit=${permitNo}`
+                  "uri": `https://safetypass-enterprise.vercel.app/verify?permit=${encodeURIComponent(permitNo)}`
                 }
               },
               {
@@ -182,7 +220,7 @@ export default async function handler(req, res) {
                 action: {
                   type: "uri",
                   label: "ระงับสิทธิ์สอบ (Admin)",
-                  uri: `${BASE_URL}/admin?search=${national_id}`
+                  uri: `${BASE_URL}/admin?search=${encodeURIComponent(permitNo)}`
                 }
               }
             ]

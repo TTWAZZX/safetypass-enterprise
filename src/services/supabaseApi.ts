@@ -1,7 +1,10 @@
 import { supabase } from './supabaseClient'
 import { User, Vendor, ExamType, Question, WorkPermitSession, Choice } from '../types'
+import { isMatchingAnswerCorrect } from './examScoring'
 // ✅ แก้ไข Import ให้ถูกต้อง
 import SHA256 from 'crypto-js/sha256';
+
+const createPinPassword = (nationalId: string, pin: string) => `SafetyPass-${nationalId}-${pin}`;
 
 export const api = {
 
@@ -9,7 +12,7 @@ export const api = {
       1. AUTH & REGISTRATION (HYBRID SECURITY MODE 🔒)
   ===================================================== */
 
-  login: async (nationalId: string): Promise<User> => {
+  login: async (nationalId: string, pin?: string): Promise<User> => {
 
     // 🔥 1. PRE-CHECK: ด่านตรวจก่อนเข้า Auth
     // วิ่งไปเช็คในตาราง users ก่อนว่า แอดมินสร้างชื่อคนนี้รอไว้หรือยัง?
@@ -35,12 +38,30 @@ export const api = {
 
     // 2. ดำเนินการ Login กับ Supabase Auth ตามปกติ (สำหรับคนที่ PDPA = true แล้ว)
     const email = `${nationalId}@safetypass.com`
-    const password = nationalId 
+    const expectedPin = nationalId.slice(-4);
+    if (pin && pin !== expectedPin) {
+      throw new Error('PIN must match the last four digits of the national ID');
+    }
+    const password = pin ? createPinPassword(nationalId, pin) : nationalId;
 
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+    let { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email,
       password
     })
+
+    // Existing accounts used the national ID as their password. Allow a one-time
+    // migration after the user confirms the last four digits, then replace it.
+    if (authError && pin) {
+      const legacy = await supabase.auth.signInWithPassword({ email, password: nationalId });
+      if (!legacy.error) {
+        authData = legacy.data;
+        authError = null;
+        const { error: updateError } = await supabase.auth.updateUser({
+          password: createPinPassword(nationalId, pin),
+        });
+        if (updateError) throw updateError;
+      }
+    }
 
     if (authError) {
       // ดักจับคนแปลกหน้าที่ไม่เคยมีในระบบเลย พยายามจะมาล็อกอิน
@@ -121,7 +142,7 @@ export const api = {
 
     const nationalIdHash = SHA256(nationalId).toString();
     const email = `${nationalId}@safetypass.com`;
-    const password = nationalId; 
+    const password = createPinPassword(nationalId, nationalId.slice(-4));
 
     let authUser = null;
 
@@ -327,10 +348,7 @@ export const api = {
 
   getQuestions: async (type: ExamType): Promise<Question[]> => {
     const { data, error } = await supabase
-      .from('questions')
-      .select('id, type, pattern, content_th, content_en, choices_json, image_url, is_active')
-      .eq('type', type)
-      .eq('is_active', true);
+      .rpc('get_exam_questions', { exam_type_param: type });
 
     if (error) return [];
 
@@ -485,6 +503,14 @@ export const api = {
     answers: Record<string, any>,
     permitNo?: string
   ) => {
+    const { data, error: rpcError } = await supabase.rpc('submit_safety_exam', {
+      exam_type_param: type,
+      answers_param: answers,
+      permit_no_param: permitNo || null,
+    });
+    if (rpcError) throw rpcError;
+    return data as { score: number; passed: boolean; perQuestion: Record<string, boolean> };
+
     // 🛡️ GATE CHECK: Work Permit ต้องผ่าน Induction ที่ยังไม่หมดอายุก่อนเสมอ
     if (type === 'WORK_PERMIT') {
       const { data: { user: authUser } } = await supabase.auth.getUser();
@@ -536,9 +562,7 @@ export const api = {
           const correctText = choices[0]?.correct_answer?.toString().toLowerCase().trim();
           if (userAns.toString().toLowerCase().trim() === correctText) isCorrect = true;
         } else if (q.pattern === 'MATCHING' || q.pattern === 'matching') {
-          if (Array.isArray(userAns)) {
-            isCorrect = choices.every((p: any, idx: number) => Number(userAns[idx]) === idx);
-          }
+          isCorrect = isMatchingAnswerCorrect(userAns, choices);
         } else {
           const userIndex = Number(userAns);
           if (q.correct_answer !== null && q.correct_answer !== undefined) {
