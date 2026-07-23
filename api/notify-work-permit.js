@@ -27,6 +27,7 @@ export default async function handler(req, res) {
     expire_date: `gt.${new Date().toISOString()}`,
     limit: '1',
   });
+  let permitRecord;
   try {
     const permitResponse = await fetch(`${auth.config.url}/rest/v1/work_permits?${permitQuery}`, {
       headers: { apikey: auth.config.anonKey, Authorization: auth.authorization },
@@ -35,15 +36,54 @@ export default async function handler(req, res) {
     if (!Array.isArray(permits) || permits.length !== 1) {
       return res.status(403).json({ message: 'No active permit was found for this user' });
     }
+    permitRecord = permits[0];
   } catch {
     return res.status(503).json({ message: 'Permit verification is unavailable' });
   }
 
-  const name = 'Verified user';
-  const vendor = '-';
-  const score = '-';
-  const maxScore = '-';
-  const national_id = '';
+  const profileQuery = new URLSearchParams({
+    select: 'name,vendors(name)',
+    id: `eq.${auth.user.id}`,
+    limit: '1',
+  });
+  const historyQuery = new URLSearchParams({
+    select: 'score,total_questions',
+    user_id: `eq.${auth.user.id}`,
+    exam_type: 'eq.WORK_PERMIT',
+    status: 'eq.PASSED',
+    order: 'created_at.desc',
+    limit: '1',
+  });
+
+  let profile;
+  let examResult;
+  try {
+    const headers = { apikey: auth.config.anonKey, Authorization: auth.authorization };
+    const [profileResponse, historyResponse] = await Promise.all([
+      fetch(`${auth.config.url}/rest/v1/users?${profileQuery}`, { headers }),
+      fetch(`${auth.config.url}/rest/v1/exam_history?${historyQuery}`, { headers }),
+    ]);
+    if (!profileResponse.ok || !historyResponse.ok) {
+      return res.status(503).json({ message: 'Exam details are unavailable' });
+    }
+    const [profiles, history] = await Promise.all([profileResponse.json(), historyResponse.json()]);
+    profile = profiles?.[0];
+    examResult = history?.[0];
+    if (!profile || !examResult) {
+      return res.status(403).json({ message: 'Passed exam details were not found' });
+    }
+  } catch {
+    return res.status(503).json({ message: 'Exam details are unavailable' });
+  }
+
+  const vendorRelation = Array.isArray(profile.vendors) ? profile.vendors[0] : profile.vendors;
+  const name = cleanText(profile.name, 120) || 'Verified user';
+  const vendor = cleanText(vendorRelation?.name, 120) || 'ไม่มีสังกัด';
+  const score = Number(examResult.score);
+  const maxScore = Number(examResult.total_questions);
+  if (!Number.isFinite(score) || !Number.isFinite(maxScore) || maxScore <= 0) {
+    return res.status(422).json({ message: 'Invalid exam score' });
+  }
   const status = 'PASSED';
 
   // ตรวจสอบสถานะการสอบ
@@ -133,7 +173,7 @@ export default async function handler(req, res) {
                       { type: "text", text: "ใบอนุญาต", color: "#94A3B8", size: "sm", flex: 3 },
                       { 
                         type: "text", 
-                        text: permitNo || "-", 
+                        text: permitRecord.permit_no || "-",
                         wrap: true, 
                         color: "#0F172A", 
                         size: "sm", 
