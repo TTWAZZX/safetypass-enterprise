@@ -9,6 +9,9 @@ import {
   LineChart as LineChartIcon, Building2, ShieldAlert, Clock, ArrowRight, ChevronDown
 } from 'lucide-react';
 import { downloadSupplierOutsourceWorkbook, downloadWorkbook } from '../services/excelExport';
+import { SupplierOutsourceReportRow } from '../types';
+import AsyncState from './AsyncState';
+import { calculateSupplierDashboardMetrics } from '../services/dashboardMetrics';
 
 import {
   PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
@@ -16,7 +19,10 @@ import {
   LineChart, Line
 } from 'recharts';
 
-const AdminDashboard: React.FC<{ onNavigateToUsers?: () => void }> = ({ onNavigateToUsers }) => {
+const AdminDashboard: React.FC<{
+  onNavigateToUsers?: () => void;
+  onNavigateToSupplier?: () => void;
+}> = ({ onNavigateToUsers, onNavigateToSupplier }) => {
   const [history, setHistory] = useState<any[]>([]);
   const [stats, setStats] = useState({ total: 0, passed: 0, failed: 0, suspended: 0 });
   const [complianceStats, setComplianceStats] = useState<{ noCert: number; expired: number; expiring: number } | null>(null);
@@ -25,6 +31,9 @@ const AdminDashboard: React.FC<{ onNavigateToUsers?: () => void }> = ({ onNaviga
   const [error, setError] = useState<string | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [supplierExportLoading, setSupplierExportLoading] = useState(false);
+  const [supplierRows, setSupplierRows] = useState<SupplierOutsourceReportRow[]>([]);
+  const [supplierLaunchStatus, setSupplierLaunchStatus] = useState({ enabled: false, activeQuestionCount: 0 });
+  const [supplierLoadError, setSupplierLoadError] = useState('');
   const exportMenuRef = useRef<HTMLDivElement>(null);
 
   // Filtering States
@@ -65,12 +74,30 @@ const AdminDashboard: React.FC<{ onNavigateToUsers?: () => void }> = ({ onNaviga
     setCurrentPage(1);
   }, [searchTerm, filterDate, filterStatus, filterType, itemsPerPage]);
 
+  const loadSupplierSnapshot = async () => {
+    setSupplierLoadError('');
+    try {
+      const [supplierReport, launchStatus] = await Promise.all([
+        api.getSupplierOutsourceReport(),
+        api.getSupplierOutsourceLaunchStatus(),
+      ]);
+      setSupplierRows(supplierReport);
+      setSupplierLaunchStatus(launchStatus);
+    } catch (supplierError: any) {
+      console.error('Supplier dashboard metrics error:', supplierError);
+      setSupplierLoadError(supplierError?.message || 'ไม่สามารถโหลดข้อมูล Supplier & Outsource ได้');
+    }
+  };
+
   const fetchData = async () => {
     try {
       setLoading(true);
       setError(null);
       
-      const historyData = await api.getAllExamHistory();
+      const [historyData] = await Promise.all([
+        api.getAllExamHistory(),
+        loadSupplierSnapshot(),
+      ]);
 
       let suspendedCount = 0;
       try {
@@ -170,6 +197,11 @@ const AdminDashboard: React.FC<{ onNavigateToUsers?: () => void }> = ({ onNaviga
 
     return { pieData, barData, trendData, vendorData };
   }, [history]);
+
+  const supplierMetrics = useMemo(
+    () => calculateSupplierDashboardMetrics(supplierRows),
+    [supplierRows],
+  );
 
   // ✅ การกรองข้อมูล
   const filteredHistory = history.filter(item => {
@@ -292,22 +324,11 @@ const AdminDashboard: React.FC<{ onNavigateToUsers?: () => void }> = ({ onNaviga
   };
 
   if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] text-slate-400 gap-4">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-        <p className="font-black uppercase tracking-widest text-[10px]">กำลังประมวลผลข้อมูล (Syncing Data)...</p>
-      </div>
-    );
+    return <AsyncState variant="loading" title="กำลังโหลด Dashboard" description="ระบบกำลังรวบรวมสถิติผู้รับเหมาและ Supplier & Outsource" />;
   }
 
   if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] text-red-500 gap-4 animate-in fade-in p-4 text-center">
-        <AlertCircle className="w-12 h-12 opacity-20" />
-        <p className="font-bold text-sm">{error}</p>
-        <button onClick={fetchData} className="px-6 py-2 bg-slate-100 rounded-xl text-slate-600 font-black text-xs uppercase hover:bg-slate-200 transition-all">ลองใหม่อีกครั้ง (Retry)</button>
-      </div>
-    );
+    return <AsyncState variant="error" title="โหลด Dashboard ไม่สำเร็จ" description={error} onRetry={fetchData} />;
   }
 
   return (
@@ -421,6 +442,38 @@ const AdminDashboard: React.FC<{ onNavigateToUsers?: () => void }> = ({ onNaviga
           glow="glow-red"
         />
       </div>
+
+      {/* Supplier & Outsource snapshot */}
+      <section className="rounded-[2rem] border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-cyan-50 p-4 shadow-sm sm:p-6" aria-labelledby="supplier-dashboard-title">
+        {supplierLoadError ? <AsyncState compact variant="error" title="โหลดภาพรวม Supplier & Outsource ไม่สำเร็จ" description={supplierLoadError} onRetry={loadSupplierSnapshot} /> : <>
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 id="supplier-dashboard-title" className="text-sm font-black text-slate-900">ภาพรวม Supplier & Outsource</h3>
+              <span className={`rounded-full px-2.5 py-1 text-[8px] font-black ${supplierLaunchStatus.enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                {supplierLaunchStatus.enabled ? 'เปิดใช้งาน' : 'ปิดใช้งาน'}
+              </span>
+            </div>
+            <p className="mt-1 text-[10px] font-bold text-slate-500">
+              ข้อสอบที่เปิดใช้งาน {supplierLaunchStatus.activeQuestionCount} ข้อ · เกณฑ์ขั้นต่ำ 20 ข้อ · Supplier {supplierMetrics.suppliers} คน · Outsource {supplierMetrics.outsource} คน
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="rounded-xl border border-emerald-100 bg-white px-4 py-2 text-right shadow-sm">
+              <p className="text-[8px] font-black text-slate-400">อัตราสอบผ่าน</p>
+              <p className="text-2xl font-black tabular-nums text-emerald-600">{supplierMetrics.passRate}%</p>
+            </div>
+            {onNavigateToSupplier && <button type="button" onClick={onNavigateToSupplier} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-[9px] font-black text-white transition-colors hover:bg-emerald-700">ดูรายละเอียด <ArrowRight size={14}/></button>}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <SupplierMetricCard label="ผู้มีสิทธิ์" value={supplierMetrics.entitled} detail="รายชื่อทั้งหมด" color="blue" />
+          <SupplierMetricCard label="บัตรใช้งานได้" value={supplierMetrics.activePasses} detail="ผ่านและยังไม่หมดอายุ" color="emerald" />
+          <SupplierMetricCard label="ต้องดำเนินการ" value={supplierMetrics.actionRequired} detail="ยังไม่สอบ ไม่ผ่าน หรือหมดอายุ" color="amber" />
+          <SupplierMetricCard label="ใกล้หมดอายุ" value={supplierMetrics.nearExpiry} detail="ภายใน 30 วัน" color="red" />
+        </div>
+        </>}
+      </section>
 
       {/* 2.5 Compliance Alert Widget */}
       {complianceStats && (complianceStats.noCert + complianceStats.expired + complianceStats.expiring) > 0 && (
@@ -666,12 +719,7 @@ const AdminDashboard: React.FC<{ onNavigateToUsers?: () => void }> = ({ onNaviga
                 </tr>
               )) : (
                 <tr>
-                    <td colSpan={6} className="px-8 py-16 sm:py-32 text-center">
-                      <div className="flex flex-col items-center opacity-20">
-                        <Activity size={40} className="sm:w-[60px] sm:h-[60px] text-slate-300 mb-4 animate-pulse" />
-                        <p className="font-black text-slate-400 uppercase text-[10px] sm:text-xs tracking-widest italic">ไม่พบข้อมูลที่ค้นหา (No matching records)</p>
-                      </div>
-                    </td>
+                    <td colSpan={6}><AsyncState compact variant="empty" title="ไม่พบประวัติการสอบ" description="ลองเปลี่ยนคำค้นหา วันที่ สถานะ หรือหลักสูตรที่เลือก" /></td>
                 </tr>
               )}
             </tbody>
@@ -682,6 +730,24 @@ const AdminDashboard: React.FC<{ onNavigateToUsers?: () => void }> = ({ onNaviga
         {renderPagination('bottom')}
         
       </div>
+    </div>
+  );
+};
+
+const SupplierMetricCard = ({ label, value, detail, color }: {
+  label: string; value: number; detail: string; color: 'blue' | 'emerald' | 'amber' | 'red';
+}) => {
+  const colors = {
+    blue: 'border-blue-100 bg-blue-50/70 text-blue-700',
+    emerald: 'border-emerald-100 bg-emerald-50/70 text-emerald-700',
+    amber: 'border-amber-100 bg-amber-50/70 text-amber-700',
+    red: 'border-red-100 bg-red-50/70 text-red-700',
+  };
+  return (
+    <div className={`rounded-2xl border p-4 ${colors[color]}`}>
+      <p className="text-[9px] font-black">{label}</p>
+      <p className="mt-1 text-2xl font-black tabular-nums text-slate-900 sm:text-3xl">{value}</p>
+      <p className="mt-1 text-[8px] font-bold leading-relaxed opacity-70">{detail}</p>
     </div>
   );
 };

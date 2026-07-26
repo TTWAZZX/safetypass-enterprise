@@ -7,13 +7,13 @@ import QuestionManager from './QuestionManager';
 import VendorManager from './VendorManager';
 import SettingsManager from './SettingsManager';
 import SupplierOutsourceManager from './SupplierOutsourceManager';
+import AsyncState from './AsyncState';
 
 import {
   LayoutGrid,
   ClipboardList,
   Building2,
   Settings,
-  Loader2,
   ShieldCheck,
 } from 'lucide-react';
 
@@ -62,12 +62,7 @@ const AdminPanel: React.FC = () => {
   }, [activePage]);
 
   if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] text-slate-400 gap-4 w-full">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-        <p className="font-black uppercase tracking-widest text-[10px]">Loading Control Center...</p>
-      </div>
-    );
+    return <AsyncState variant="loading" title="กำลังเปิดศูนย์ควบคุม" description="ระบบกำลังโหลดสิทธิ์และข้อมูลภาพรวมสำหรับแอดมิน" />;
   }
 
   return (
@@ -115,7 +110,7 @@ const AdminPanel: React.FC = () => {
 
         {/* ✅ ส่ง searchQuery ต่อไปยัง Component ย่อย */}
         <div className="animate-in fade-in duration-500 w-full h-full">
-            {activePage === 'DASHBOARD' && <AdminDashboard onNavigateToUsers={() => setActivePage('VENDORS')} />}
+            {activePage === 'DASHBOARD' && <AdminDashboard onNavigateToUsers={() => setActivePage('VENDORS')} onNavigateToSupplier={() => setActivePage('SUPPLIER_OUTSOURCE')} />}
             {activePage === 'QUESTIONS' && <QuestionManager />}
             {activePage === 'VENDORS' && <VendorManager initialSearch={searchQuery} />}
             {activePage === 'SUPPLIER_OUTSOURCE' && <SupplierOutsourceManager />}

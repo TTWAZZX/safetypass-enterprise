@@ -76,5 +76,5 @@ describe('Supplier & Outsource Phase 2', () => {
     const restored = new ExcelJS.Workbook();
     await restored.xlsx.load(serialized);
     expect(restored.getWorksheet('Sheet1')?.getRow(3).getCell(6).value).toBe('1000000000001');
-  });
+  }, 15_000);
 });

@@ -15,6 +15,7 @@ import {
   MessageCircleQuestion,
   BookOpen
 } from 'lucide-react';
+import AsyncState from './AsyncState';
 
 const SettingsManager: React.FC = () => {
   const { showToast } = useToastContext();
@@ -24,6 +25,7 @@ const SettingsManager: React.FC = () => {
   
   // Config States
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [saving, setSaving] = useState(false);
   
   // States: Scores
@@ -43,6 +45,7 @@ const SettingsManager: React.FC = () => {
 
   const loadConfig = async () => {
     setLoading(true);
+    setLoadError('');
     try {
       const config = await api.getSystemSettings();
       // ดึงค่าคะแนนเดิมมาใส่ State (ถ้าไม่มีให้ใช้ 80)
@@ -55,8 +58,9 @@ const SettingsManager: React.FC = () => {
       if (config['manual_url']) setManualUrl(config['manual_url']);
       if (config['support_url']) setSupportUrl(config['support_url']);
 
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setLoadError(err?.message || 'ไม่สามารถโหลดการตั้งค่าระบบได้');
       showToast('ไม่สามารถโหลดค่า Config ได้ (Failed to load config)', 'error');
     } finally {
       setLoading(false);
@@ -113,7 +117,8 @@ const SettingsManager: React.FC = () => {
     }
   };
 
-  if (loading) return <div className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-blue-600" size={32} /></div>;
+  if (loading) return <AsyncState variant="loading" title="กำลังโหลดการตั้งค่าระบบ" />;
+  if (loadError) return <AsyncState variant="error" title="โหลดการตั้งค่าไม่สำเร็จ" description={loadError} onRetry={loadConfig} />;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 max-w-4xl mx-auto pb-10 px-4 md:px-0">

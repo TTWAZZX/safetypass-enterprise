@@ -9,10 +9,12 @@ import {
   ChevronLeft, ChevronRight, RefreshCw, AlertCircle, CheckCircle2,
   ListFilter, Hash, HelpCircle, ArrowRightLeft
 } from 'lucide-react';
+import AsyncState from './AsyncState';
 
 const QuestionManager: React.FC = () => {
   const [questions, setQuestions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
@@ -42,6 +44,7 @@ const QuestionManager: React.FC = () => {
 
   const fetchQuestions = async () => {
     setLoading(true);
+    setLoadError('');
     try {
       const { data, error } = await supabase
         .from('questions')
@@ -59,8 +62,9 @@ const QuestionManager: React.FC = () => {
 
       setQuestions(sanitized);
       setCurrentPage(1);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Fetch Error:", err);
+      setLoadError(err?.message || 'ไม่สามารถโหลดคลังข้อสอบได้');
     } finally {
       setLoading(false);
     }
@@ -332,7 +336,7 @@ const QuestionManager: React.FC = () => {
             </div>
         </div>
         
-        {loading ? (<div className="py-24 text-center"><Loader2 className="animate-spin mx-auto mb-4 text-blue-500"/><p className="text-[10px] font-black uppercase tracking-widest">Synchronizing Database...</p></div>) : (
+        {loading ? <AsyncState compact variant="loading" title="กำลังโหลดคลังข้อสอบ" /> : loadError ? <AsyncState compact variant="error" title="โหลดคลังข้อสอบไม่สำเร็จ" description={loadError} onRetry={fetchQuestions} /> : (
             <div className="grid grid-cols-1 gap-4">
                 {currentQuestions.map((q) => (
                     <div key={q.id} className={`p-4 md:p-5 border-2 rounded-3xl flex flex-col md:flex-row gap-5 items-start group transition-all ${editingId === q.id ? 'border-amber-400 bg-amber-50/10' : 'border-slate-50 hover:border-blue-100 hover:shadow-lg'}`}>
@@ -361,7 +365,7 @@ const QuestionManager: React.FC = () => {
                         </div>
                     </div>
                 ))}
-                {filteredQuestions.length === 0 && <div className="py-24 text-center opacity-30 font-black uppercase text-xs tracking-widest italic">No assets found in current pool</div>}
+                {filteredQuestions.length === 0 && <AsyncState compact variant="empty" title="ไม่พบข้อสอบ" description={searchTerm ? 'ลองเปลี่ยนคำค้นหา หรือเลือกหลักสูตรอื่น' : 'กดสร้างข้อสอบหรือนำเข้าไฟล์ Excel เพื่อเริ่มต้น'} />}
                 {totalPages > 1 && (
                     <div className="flex justify-center items-center gap-4 mt-8 pt-6 border-t border-slate-50">
                         <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="p-2 bg-slate-50 rounded-xl hover:bg-slate-100 disabled:opacity-20 transition-all"><ChevronLeft size={20}/></button>

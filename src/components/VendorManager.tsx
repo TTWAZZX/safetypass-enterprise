@@ -10,6 +10,7 @@ import {
   X, Globe2, Calendar, CalendarClock, Ban, Clock, CheckCircle2,
   ShieldAlert, ChevronLeft, ChevronRight
 } from 'lucide-react';
+import AsyncState from './AsyncState';
 
 const maskNationalID = (id: string | null | undefined) => {
   if (!id || id.length < 13) return '-------------';
@@ -63,6 +64,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
   const [bulkLoading, setBulkLoading] = useState(false);
 
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [dataList, setDataList] = useState<any[]>([]);
   const [allVendors, setAllVendors] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
@@ -98,8 +100,11 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     } catch (err) { console.error('Audit log failure:', err); }
   };
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (silent = false) => {
+    if (!silent) {
+      setLoading(true);
+      setLoadError('');
+    }
     try {
       let query: any;
       if (activeTab === 'VENDORS') {
@@ -120,9 +125,10 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
       setAllVendors(vData || []);
 
     } catch (err: any) {
+      if (!silent) setLoadError(err?.message || 'ไม่สามารถโหลดข้อมูลได้');
       showToast('ไม่สามารถโหลดข้อมูลได้: ' + err.message, 'error');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -131,7 +137,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
   // Auto-refresh every 60s (skip LOGS tab to avoid noise)
   useEffect(() => {
     if (activeTab === 'LOGS') return;
-    const timer = setInterval(() => { loadData(); }, 60000);
+    const timer = setInterval(() => { loadData(true); }, 60000);
     return () => clearInterval(timer);
   }, [activeTab]);
 
@@ -689,7 +695,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                 </button>
                 
                 <button onClick={handleExport} className="flex-1 md:flex-none bg-white text-slate-600 border border-slate-200 px-4 py-3 rounded-xl font-black text-[10px] uppercase hover:bg-slate-50 transition-all flex items-center justify-center gap-2 shadow-sm"><Download size={14}/> Export</button>
-                <button onClick={loadData} className="flex-none p-3 bg-slate-50 text-slate-400 rounded-xl hover:text-blue-600 transition-all active:scale-95 shadow-sm"><RotateCcw size={18}/></button>
+                <button onClick={() => loadData()} className="flex-none min-h-11 min-w-11 p-3 bg-slate-50 text-slate-400 rounded-xl hover:text-blue-600 transition-all active:scale-95 shadow-sm" aria-label="รีเฟรชข้อมูล"><RotateCcw size={18}/></button>
                 <button onClick={activeTab === 'USERS' ? handleAddUser : handleAddVendor} className="w-full sm:w-auto bg-blue-600 text-white px-6 py-3 rounded-xl font-black text-[10px] uppercase hover:bg-slate-900 transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2"><Plus size={14}/> New Entry</button>
               </>
             )}
@@ -717,9 +723,11 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
         {/* 🟢 Data Presentation Area */}
         <div className="flex-1 p-2 md:p-0 bg-slate-50 md:bg-white flex flex-col">
           {loading ? (
-            <div className="p-32 text-center flex-1"><Loader2 className="animate-spin text-blue-500 mx-auto" size={32}/></div>
+            <AsyncState variant="loading" title="กำลังโหลดข้อมูลผู้ใช้และบริษัท" className="flex-1" />
+          ) : loadError ? (
+            <AsyncState variant="error" title="โหลดข้อมูลไม่สำเร็จ" description={loadError} onRetry={() => loadData()} className="flex-1" />
           ) : paginatedData.length === 0 ? (
-             <div className="p-20 text-center text-slate-400 font-bold text-sm flex-1">ไม่พบข้อมูล (No Data Found)</div>
+             <AsyncState variant="empty" title="ไม่พบข้อมูล" description={searchQuery || selectedVendorFilter || certFilter ? 'ลองล้างคำค้นหาหรือตัวกรองแล้วค้นหาอีกครั้ง' : 'เมื่อมีข้อมูลใหม่ รายการจะแสดงในส่วนนี้'} className="flex-1" />
           ) : (
             <div className="flex-1 flex flex-col">
               
