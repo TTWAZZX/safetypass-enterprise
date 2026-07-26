@@ -42,7 +42,7 @@ CREATE OR REPLACE FUNCTION "public"."encrypt_user_data"() RETURNS "trigger"
     LANGUAGE "plpgsql" SECURITY DEFINER
     AS $$
 DECLARE
-  secret_key text := 'YOUR_SUPER_SECRET_KEY'; 
+  secret_key text := 'REDACTED_LEGACY_KEY';
 BEGIN
   -- ถ้ามีการส่ง national_id มาใหม่ (ไม่ใช่ค่าว่าง และไม่ใช่ค่าเดิม)
   IF NEW.national_id IS NOT NULL AND NEW.national_id <> 'PROTECTED' THEN
@@ -70,7 +70,7 @@ BEGIN
   -- ถอดรหัสเฉพาะแถวที่เป็นของตัวเอง (auth.uid())
   RETURN pgp_sym_decrypt(
     (SELECT national_id_cipher::bytea FROM public.users WHERE id = auth.uid()), 
-    'YOUR_SUPER_SECRET_KEY' -- ⚠️ ต้องตรงกับข้างบน
+    'REDACTED_LEGACY_KEY' -- Sanitized snapshot; migrations are the schema source of truth.
   );
 END;
 $$;
@@ -672,8 +672,6 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TAB
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "anon";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "authenticated";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "service_role";
-
-
 
 
 

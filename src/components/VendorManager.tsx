@@ -16,13 +16,6 @@ const maskNationalID = (id: string | null | undefined) => {
   return `${id.substring(0, 3)}••••••${id.substring(9)}`;
 };
 
-function generateUUID() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
-}
-
 const processExcelDate = (excelDate: any): string | null => {
     if (!excelDate) return null;
     try {
@@ -112,8 +105,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
       if (activeTab === 'VENDORS') {
         query = supabase.from('vendors').select('*').order('created_at', { ascending: false });
       } else if (activeTab === 'USERS') {
-        // ✅ สั่งให้ดึง last_login มาด้วย
-        query = supabase.from('users').select('*, vendors(name)').order('created_at', { ascending: false });
+        query = supabase.rpc('admin_list_users');
       } else {
         query = supabase.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(2000);
       }
@@ -188,13 +180,14 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     setSubmitting(true);
     try {
       const expiryVal = editForm.induction_expiry ? new Date(editForm.induction_expiry).toISOString() : null;
-      const { error } = await supabase.from('users').update({
-        name: editForm.name,
-        age: Number(editForm.age),
-        nationality: editForm.nationality,
-        induction_expiry: expiryVal,
-        vendor_id: editForm.vendor_id || null
-      }).eq('id', editingUser.id);
+      const { error } = await supabase.rpc('admin_update_user_profile', {
+        user_id_param: editingUser.id,
+        name_param: editForm.name,
+        age_param: Number(editForm.age),
+        nationality_param: editForm.nationality,
+        vendor_id_param: editForm.vendor_id || null,
+        induction_expiry_param: expiryVal,
+      });
 
       if (error) throw error;
       showToast('อัปเดตข้อมูลพนักงานสำเร็จ', 'success');
@@ -210,7 +203,10 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
       if (!window.confirm(`คุณต้องการ ${actionText} พนักงาน "${name}" ใช่หรือไม่?`)) return;
 
       try {
-          const { error } = await supabase.from('users').update({ is_active: !currentStatus }).eq('id', id);
+          const { error } = await supabase.rpc('admin_set_user_active', {
+            user_id_param: id,
+            is_active_param: !currentStatus,
+          });
           if (error) throw error;
           showToast(`${actionText} สำเร็จ`, 'success');
           logAction(currentStatus ? 'BAN_USER' : 'UNBAN_USER', name, `Status changed to ${!currentStatus}`);
@@ -285,29 +281,15 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
 
           if (name && nid) {
             const vendor = allVendors.find(v => v.name.toLowerCase() === vName.toLowerCase());
-            const { data: exist } = await supabase.from('users').select('id').eq('national_id', nid).maybeSingle();
-
-            const payload: any = {
-              name, 
-              national_id: nid, 
-              vendor_id: vendor?.id || null, 
-              role: role,
-              age: age, 
-              nationality: nationality,
-              induction_expiry: processedExpiry, 
-              pdpa_agreed: false, // 🚨 เปลี่ยนจาก true เป็น false
-              is_active: true
-            };
-
-            let error;
-            if (exist) {
-              const { error: updateError } = await supabase.from('users').update(payload).eq('id', exist.id);
-              error = updateError;
-            } else {
-              payload.id = generateUUID(); 
-              const { error: insertError } = await supabase.from('users').insert([payload]);
-              error = insertError;
-            }
+            const { error } = await supabase.rpc('admin_upsert_staged_user', {
+              national_id_param: nid,
+              name_param: name,
+              vendor_id_param: vendor?.id || null,
+              role_param: role,
+              age_param: age,
+              nationality_param: nationality,
+              induction_expiry_param: processedExpiry,
+            });
             if (!error) success++; else { console.error(`❌ Error for ${nid}:`, error.message); fail++; }
           }
         }
@@ -393,8 +375,15 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     const name = window.prompt("ชื่อ-นามสกุล:");
     const nid = window.prompt("เลขบัตรประชาชน:");
     if (!name || !nid) return;
-    // 🚨 เพิ่ม pdpa_agreed: false เข้าไปใน insert
-    const { error } = await supabase.from('users').insert([{ id: generateUUID(), name, national_id: nid, role: 'USER', pdpa_agreed: false }]);
+    const { error } = await supabase.rpc('admin_upsert_staged_user', {
+      national_id_param: nid,
+      name_param: name,
+      vendor_id_param: null,
+      role_param: 'USER',
+      age_param: null,
+      nationality_param: 'ไทย (Thai)',
+      induction_expiry_param: null,
+    });
     if (error) showToast(error.message, 'error'); else { showToast('Success', 'success'); loadData(); }
   };
 
@@ -427,7 +416,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
 
   const handleResetTraining = async (id: string, name: string) => {
     if(!window.confirm("Reset induction status for this user?")) return;
-    const { error } = await supabase.from('users').update({ induction_expiry: null }).eq('id', id);
+    const { error } = await supabase.rpc('admin_reset_induction', { user_ids_param: [id] });
     if (error) showToast(error.message, 'error'); else { showToast('Reset Complete', 'success'); logAction('RESET_TRAINING', name); loadData(); }
   };
 
@@ -466,7 +455,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     setBulkLoading(true);
     try {
       const ids = Array.from(selectedIds);
-      const { error } = await supabase.from('users').update({ induction_expiry: null }).in('id', ids);
+      const { error } = await supabase.rpc('admin_reset_induction', { user_ids_param: ids });
       if (error) throw error;
       showToast(`Reset ${ids.length} users`, 'success');
       logAction('BULK_RESET', `${ids.length} users`, 'Bulk training reset');

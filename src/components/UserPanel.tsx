@@ -274,7 +274,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
     if(!window.confirm("คุณต้องการล้างประวัติการอบรมเพื่อเริ่มสอบใหม่ใช่หรือไม่?")) return;
     setIsSaving(true);
     try {
-      const { error } = await supabase.from('users').update({ induction_expiry: null }).eq('id', user.id);
+      const { error } = await supabase.rpc('reset_my_induction');
       if (error) throw error;
       onUserUpdate({ ...user, induction_expiry: null });
       showToast('รีเซ็ตสถานะการอบรมแล้ว คุณสามารถเริ่มสอบใหม่ได้ทันที', 'success');

@@ -51,7 +51,16 @@ export default async function handler(req, res) {
     }
 
     const name = cleanText(profile.name, 120) || 'Verified user';
-    const nationalId = cleanText(profile.national_id, 13);
+    let identityValue = profile.national_id;
+    if (!/^\d{13}$/.test(cleanText(identityValue, 13))) {
+      const identityResponse = await fetch(`${auth.config.url}/rest/v1/rpc/get_my_decrypted_id`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      if (identityResponse.ok) identityValue = await identityResponse.json();
+    }
+    const nationalId = cleanText(identityValue, 13);
     if (!nationalId || !/^\d{13}$/.test(nationalId)) {
       return res.status(422).json({ message: 'Invalid user identity' });
     }

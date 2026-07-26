@@ -1,10 +1,13 @@
 import { supabase } from './supabaseClient'
-import { User, Vendor, ExamType, Question, WorkPermitSession, Choice } from '../types'
-import { isMatchingAnswerCorrect } from './examScoring'
-// ✅ แก้ไข Import ให้ถูกต้อง
-import SHA256 from 'crypto-js/sha256';
+import { User, Vendor, ExamType, Question, WorkPermitSession } from '../types'
 
 const createPinPassword = (nationalId: string, pin: string) => `SafetyPass-${nationalId}-${pin}`;
+
+const USER_PROFILE_SELECT = [
+  'id', 'national_id', 'name', 'vendor_id', 'role', 'induction_expiry',
+  'created_at', 'age', 'nationality', 'pdpa_agreed', 'pdpa_agreed_at',
+  'is_active', 'date_of_birth', 'avatar_url', 'last_login', 'vendors(*)',
+].join(',');
 
 export const api = {
 
@@ -16,13 +19,10 @@ export const api = {
 
     // 🔥 1. PRE-CHECK: ด่านตรวจก่อนเข้า Auth
     // วิ่งไปเช็คในตาราง users ก่อนว่า แอดมินสร้างชื่อคนนี้รอไว้หรือยัง?
-    const safeId = nationalId.replace(/[^0-9a-zA-Z\-]/g, '').slice(0, 20);
-    const hash = SHA256(nationalId).toString();
-    const { data: preCheckUsers } = await supabase
-      .from('users')
-      .select('pdpa_agreed, is_active')
-      .or(`national_id.eq.${safeId},national_id_hash.eq.${hash}`)
-      .limit(1); // ✅ ใช้ limit(1) ป้องกัน Error กรณีฐานข้อมูลมีข้อมูลทับซ้อน
+    const { data: preCheckUsers, error: preCheckError } = await supabase.rpc('check_user_exists', {
+      search_id: nationalId,
+    });
+    if (preCheckError) throw new Error('ไม่สามารถตรวจสอบสถานะบัญชีได้');
 
     if (preCheckUsers && preCheckUsers.length > 0) {
       const preCheckUser = preCheckUsers[0];
@@ -31,7 +31,7 @@ export const api = {
          throw new Error('บัญชีของคุณถูกระงับสิทธิ์ชั่วคราว โปรดติดต่อเจ้าหน้าที่ Safety');
       }
       // ✅ ด่านสกัดสำคัญ: แอดมินเพิ่มชื่อให้แล้ว แต่ผู้ใช้ยังไม่เคยกดยอมรับ PDPA
-      if (preCheckUser.pdpa_agreed === false || preCheckUser.pdpa_agreed === null) {
+      if (preCheckUser.requires_registration === true) {
          throw new Error('REQUIRE_REGISTER'); // เตะกลับไปหน้า Register อัตโนมัติ
       }
     }
@@ -72,13 +72,14 @@ export const api = {
     }
 
     // 3. ดึงข้อมูล Profile ทั่วไป (จะได้ national_id = "PROTECTED")
-    const { data: userData, error: userError } = await supabase
+    const { data: rawUserData, error: userError } = await supabase
       .from('users')
-      .select('*, vendors(*)')
+      .select(USER_PROFILE_SELECT)
       .eq('id', authData.user?.id)
       .single()
 
-    if (userError || !userData) throw new Error('ไม่พบข้อมูลผู้ใช้งานในระบบ')
+    if (userError || !rawUserData) throw new Error('ไม่พบข้อมูลผู้ใช้งานในระบบ')
+    const userData = rawUserData as any;
 
     // 🔥 บล็อกผู้ใช้ที่โดนแบน (ป้องกันเหนียวไว้อีกชั้น)
     if (userData.is_active === false) {
@@ -98,30 +99,22 @@ export const api = {
     } as unknown as User
   },
 
-  checkUser: async (nationalId: string) => {
-    // ✅ แก้ไขการเรียกใช้ Hash เป็น SHA256
-    const safeId = nationalId.replace(/[^0-9a-zA-Z\-]/g, '').slice(0, 20);
-    const hash = SHA256(nationalId).toString();
-
-    const { data, error } = await supabase
-      .from('users')
-      .select('*, vendors(*)')
-      .or(`national_id.eq.${safeId},national_id_hash.eq.${hash}`)
-      .limit(1); // ✅ ใช้ limit(1) ปลอดภัยกว่า
+  checkUser: async (nationalId: string): Promise<any> => {
+    const { data, error } = await supabase.rpc('check_user_exists', {
+      search_id: nationalId,
+    });
       
     if (error) {
         console.error("Check user error:", error);
         return null;
     }
     
-    const userData = data?.[0] as any;
-
-    if (userData && userData.vendor_id && !userData.vendors) {
-        const { data: vendor } = await supabase.from('vendors').select('name').eq('id', userData.vendor_id).single();
-        return { ...userData, vendors: vendor };
-    }
-    
-    return userData;
+    const status = data?.[0] as any;
+    if (!status?.user_exists) return null;
+    return {
+      pdpa_agreed: !status.requires_registration,
+      is_active: status.is_active,
+    };
   },
 
   register: async (
@@ -132,15 +125,6 @@ export const api = {
     nationality: string,
     otherVendorName?: string
   ): Promise<User> => {
-    let finalVendorId = vendorId;
-    if (otherVendorName) {
-      const { data: newVendor, error: vError } = await supabase
-        .from('vendors').insert({ name: otherVendorName, status: 'PENDING' }).select().single();
-      if (vError) throw new Error('สร้างบริษัทไม่สำเร็จ: ' + vError.message);
-      finalVendorId = newVendor.id;
-    }
-
-    const nationalIdHash = SHA256(nationalId).toString();
     const email = `${nationalId}@safetypass.com`;
     const password = createPinPassword(nationalId, nationalId.slice(-4));
 
@@ -150,7 +134,7 @@ export const api = {
     const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { national_id: nationalId, name: name } }
+      options: { data: { name } }
     });
 
     if (signUpError) {
@@ -168,105 +152,27 @@ export const api = {
 
     if (!authUser) throw new Error('ไม่สามารถเชื่อมต่อระบบยืนยันตัวตนได้');
 
-    // 2. 🔍 ค้นหาให้ครอบคลุม! หาจาก ID แท้, ID แอดมิน หรือ Hash (ป้องกันแอดมินพิมพ์ตกหล่น)
-    const safeRegId = nationalId.replace(/[^0-9a-zA-Z\-]/g, '').slice(0, 20);
-    const { data: existingUsers, error: fetchError } = await supabase
-      .from('users')
-      .select('*')
-      .or(`id.eq.${authUser.id},national_id.eq.${safeRegId},national_id_hash.eq.${nationalIdHash}`);
+    const { data: registeredUser, error: registrationError } = await supabase.rpc('complete_registration', {
+      national_id_param: nationalId,
+      name_param: name,
+      vendor_id_param: vendorId || null,
+      age_param: Number.isFinite(age) ? age : null,
+      nationality_param: nationality,
+      other_vendor_name_param: otherVendorName?.trim() || null,
+    });
 
-    if (fetchError) throw new Error('ตรวจสอบข้อมูลเดิมไม่สำเร็จ');
-
-    // แยกแยะว่าอันไหนคือบัญชีจริง(Linked) และอันไหนคือบัญชีที่แอดมินสร้างรอไว้(Dummy)
-    const linkedUser = existingUsers?.find(u => u.id === authUser.id);
-    const dummyUser = existingUsers?.find(u => u.id !== authUser.id && (u.national_id === nationalId || u.national_id_hash === nationalIdHash));
-
-    // 🔥 ✅ แก้ไขจุดลูปนรก: กรณีที่ 1 มีบัญชีจริงอยู่แล้ว 
-    if (linkedUser) {
-        if (linkedUser.is_active === false) throw new Error('บัญชีของคุณถูกระงับสิทธิ์ชั่วคราว');
-        
-        // 🔴 ถ้าพนักงานคนนี้เคยกดยอมรับ PDPA ผ่านไปแล้ว ให้เตะไปล็อกอิน (ลอจิกเดิม)
-        if (linkedUser.pdpa_agreed === true) {
-            await supabase.auth.signOut();
-            throw new Error('already registered');
-        }
-
-        // 🟢 ถ้ายังมี Dummy ค้างอยู่ (โอนถ่ายข้อมูลและลบขยะทิ้ง)
-        if (dummyUser) {
-            await supabase.from('exam_history').update({ user_id: linkedUser.id }).eq('user_id', dummyUser.id);
-            await supabase.from('work_permits').update({ user_id: linkedUser.id }).eq('user_id', dummyUser.id);
-            await supabase.from('exam_logs').update({ user_id: linkedUser.id }).eq('user_id', dummyUser.id);
-            if (dummyUser.induction_expiry) {
-                await supabase.from('users').update({ induction_expiry: dummyUser.induction_expiry }).eq('id', linkedUser.id);
-            }
-            await supabase.from('users').delete().eq('id', dummyUser.id);
-        }
-
-        // 🟢 สำคัญสุด: อัปเดตข้อมูลใหม่ทับเข้าไป พร้อมเซ็ต pdpa_agreed = true (ตัดลูปนรก)
-        const updatePayload = {
-            name,
-            age,
-            nationality,
-            vendor_id: finalVendorId === 'OTHER' ? null : finalVendorId,
-            role: dummyUser?.role || linkedUser.role || 'USER',
-            pdpa_agreed: true,
-            pdpa_agreed_at: new Date().toISOString(),
-            is_active: true
-        };
-
-        const { data: updatedUser, error: updateErr } = await supabase
-            .from('users')
-            .update(updatePayload)
-            .eq('id', linkedUser.id)
-            .select('*, vendors(*)')
-            .single();
-
-        if (updateErr) throw new Error('อัปเดตข้อมูลไม่สำเร็จ: ' + updateErr.message);
-
-        return { ...updatedUser, national_id: nationalId } as unknown as User;
+    if (registrationError) {
+      if (registrationError.message.includes('already registered')) {
+        await supabase.auth.signOut();
+        throw new Error('already registered');
+      }
+      if (registrationError.message.includes('suspended')) {
+        throw new Error('บัญชีของคุณถูกระงับสิทธิ์ชั่วคราว โปรดติดต่อเจ้าหน้าที่ Safety');
+      }
+      throw new Error('ลงทะเบียนไม่สำเร็จ: ' + registrationError.message);
     }
 
-    // ✅ กรณีที่ 2: เพิ่งลงทะเบียนครั้งแรกล้วนๆ
-    if (dummyUser && dummyUser.is_active === false) {
-      throw new Error('บัญชีของคุณถูกระงับสิทธิ์ชั่วคราว โปรดติดต่อเจ้าหน้าที่ Safety');
-    }
-
-    const payload: any = {
-      id: authUser.id, 
-      name,
-      national_id: nationalId,
-      national_id_hash: nationalIdHash,
-      age,
-      nationality,
-      vendor_id: finalVendorId === 'OTHER' ? null : finalVendorId,
-      role: dummyUser?.role || 'USER',
-      pdpa_agreed: true,
-      pdpa_agreed_at: new Date().toISOString(),
-      is_active: true,
-      induction_expiry: dummyUser?.induction_expiry || null
-    };
-
-    // ถ้ามีบัญชีที่แอดมินสร้างรอไว้ ให้โอนประวัติทั้งหมดมาที่ไอดีใหม่ แล้วลบของแอดมินทิ้ง
-    if (dummyUser) {
-      await supabase.from('exam_history').update({ user_id: authUser.id }).eq('user_id', dummyUser.id);
-      await supabase.from('work_permits').update({ user_id: authUser.id }).eq('user_id', dummyUser.id);
-      await supabase.from('exam_logs').update({ user_id: authUser.id }).eq('user_id', dummyUser.id);
-      await supabase.from('users').delete().eq('id', dummyUser.id);
-    }
-
-    // สร้างข้อมูลลงตาราง (ใช้ insert แทน upsert เพราะเคลียร์ทางไว้หมดแล้ว)
-    const { data: newUser, error: dbError } = await supabase
-      .from('users')
-      .insert([payload]) 
-      .select('*, vendors(*)')
-      .single();
-
-    if (dbError) {
-      console.error("Database Insert Error:", dbError);
-      throw new Error('ลงทะเบียนไม่สำเร็จ: ' + dbError.message);
-    }
-    
-    return { ...newUser, national_id: nationalId } as unknown as User;
+    return { ...registeredUser, national_id: nationalId } as unknown as User;
   },
 
   /* =====================================================
@@ -408,96 +314,6 @@ export const api = {
     return true;
   },
 
-  submitExamResult: async (
-    type: ExamType,
-    score: number,
-    totalQuestions: number,
-    passed: boolean,
-    permitNo?: string
-  ) => {
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) throw new Error('Session หมดอายุ กรุณาเข้าสู่ระบบใหม่');
-
-    // 🛡️ RATE LIMIT: ป้องกันการส่งผลสอบซ้ำภายใน 60 วินาที
-    const since = new Date(Date.now() - 60 * 1000).toISOString();
-    const { data: recentSubmit } = await supabase
-      .from('exam_history')
-      .select('id, created_at')
-      .eq('user_id', user.id)
-      .eq('exam_type', type)
-      .gte('created_at', since)
-      .limit(1)
-      .maybeSingle();
-
-    if (recentSubmit) {
-      throw new Error('กรุณารอ 60 วินาทีก่อนส่งผลสอบอีกครั้ง (Rate limit exceeded)');
-    }
-
-    if (user) {
-
-      // 🔥 ย้ายการเคลียร์ของเก่า (EXPIRED) มาไว้ด้านบนก่อน
-      if (passed) {
-        if (type === 'INDUCTION') {
-          // 1. สั่งยกเลิก (EXPIRED) ประวัติการสอบ Induction ครั้งเก่าๆ ที่เคยสอบผ่าน
-          await supabase
-            .from('exam_history')
-            .update({ status: 'EXPIRED' })
-            .eq('user_id', user.id)
-            .eq('exam_type', 'INDUCTION')
-            .eq('status', 'PASSED');
-
-          // 2. สร้างเวลาหมดอายุใหม่ (+1 ปี)
-          const nextYear = new Date();
-          nextYear.setFullYear(nextYear.getFullYear() + 1);
-          nextYear.setHours(23, 59, 59, 999);
-          
-          // 3. อัปเดตตาราง user ให้จำวันหมดอายุใหม่
-          await supabase.from('users').update({ induction_expiry: nextYear.toISOString() }).eq('id', user.id);
-          
-        } else if (type === 'WORK_PERMIT') {
-          // 1. สั่งยกเลิก (EXPIRED) ใบอนุญาต Work Permit เดิมทั้งหมด
-          await supabase
-            .from('work_permits')
-            .update({ status: 'EXPIRED' })
-            .eq('user_id', user.id)
-            .eq('status', 'ACTIVE');
-
-          // 2. สร้างเวลาหมดอายุใหม่ (บวก 4 วัน)
-          const expireDate = new Date();
-          expireDate.setDate(expireDate.getDate() + 4); 
-          expireDate.setHours(23, 59, 59, 999);
-
-          // 3. สร้างใบใหม่ให้เป็น ACTIVE เพียงใบเดียว
-          await supabase.from('work_permits').insert([{
-            user_id: user.id,
-            permit_no: permitNo || `WP-${Date.now().toString().slice(-6)}`,
-            expire_date: expireDate.toISOString(),
-            status: 'ACTIVE' 
-          }]);
-        }
-      }
-
-      // 🔥 ย้ายการ Insert ประวัติใหม่ล่าสุด มาไว้ล่างสุด! (เพื่อป้องกันการโดนเขียนทับ)
-      await supabase.from('exam_history').insert([{
-        user_id: user.id,
-        exam_type: type,
-        score: score,
-        total_questions: totalQuestions,
-        status: passed ? 'PASSED' : 'FAILED'
-      }]);
-
-      await supabase.from('exam_logs').insert({ 
-        user_id: user.id, 
-        exam_type: type, 
-        score, 
-        passed 
-      });
-    }
-    return { success: true };
-  },
-
-  // ✅ เวอร์ชัน Super Compatible: ตรวจทั้งเลขข้อถูก และ Flag ใน Choice (จบปัญหาคะแนนไม่ตรง)
   submitExamWithAnswers: async (
     type: ExamType,
     answers: Record<string, any>,
@@ -510,83 +326,6 @@ export const api = {
     });
     if (rpcError) throw rpcError;
     return data as { score: number; passed: boolean; perQuestion: Record<string, boolean> };
-
-    // 🛡️ GATE CHECK: Work Permit ต้องผ่าน Induction ที่ยังไม่หมดอายุก่อนเสมอ
-    if (type === 'WORK_PERMIT') {
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (!authUser) throw new Error('Session หมดอายุ กรุณาเข้าสู่ระบบใหม่');
-
-      const { data: userData } = await supabase
-        .from('users')
-        .select('induction_expiry')
-        .eq('id', authUser.id)
-        .single();
-
-      const expiry = userData?.induction_expiry;
-      if (!expiry || new Date(expiry) < new Date()) {
-        throw new Error(
-          'คุณยังไม่ผ่านการทดสอบ Safety Induction หรือใบรับรองหมดอายุแล้ว\n' +
-          'กรุณาสอบ Induction ให้ผ่านก่อนจึงจะสามารถสอบ Work Permit ได้'
-        );
-      }
-    }
-
-    // 1. ดึงเฉลยจาก Database
-    const { data: questions, error } = await supabase
-      .from('questions')
-      .select('*')
-      .eq('type', type);
-
-    if (error || !questions) throw new Error('ไม่สามารถดึงข้อมูลข้อสอบได้');
-
-    // 2. ดึงเกณฑ์คะแนน (Default 80)
-    const config = await api.getSystemSettings();
-    const thresholdKey = type === 'INDUCTION' ? 'PASSING_SCORE_INDUCTION' : 'PASSING_SCORE_WORK_PERMIT';
-    const threshold = Number(config[thresholdKey] || 80);
-
-    let score = 0;
-    const perQuestion: Record<string, boolean> = {};
-
-    // 3. เริ่มตรวจคำตอบ (ทำที่ server เท่านั้น — ไม่ส่ง is_correct ออกไป)
-    questions.forEach((q: any) => {
-      const userAns = answers[q.id];
-      let isCorrect = false;
-
-      if (userAns !== undefined && userAns !== null) {
-        let choices = q.choices_json;
-        if (typeof choices === 'string') {
-          try { choices = JSON.parse(choices); } catch { choices = []; }
-        }
-
-        if (q.pattern === 'SHORT_ANSWER' || q.pattern === 'short_answer') {
-          const correctText = choices[0]?.correct_answer?.toString().toLowerCase().trim();
-          if (userAns.toString().toLowerCase().trim() === correctText) isCorrect = true;
-        } else if (q.pattern === 'MATCHING' || q.pattern === 'matching') {
-          isCorrect = isMatchingAnswerCorrect(userAns, choices);
-        } else {
-          const userIndex = Number(userAns);
-          if (q.correct_answer !== null && q.correct_answer !== undefined) {
-            if (Number(q.correct_answer) === userIndex) isCorrect = true;
-          }
-          if (!isCorrect && choices[userIndex]) {
-            const val = choices[userIndex].is_correct;
-            if (val === true || String(val).toLowerCase() === 'true') isCorrect = true;
-          }
-        }
-      }
-
-      if (isCorrect) score++;
-      perQuestion[q.id] = isCorrect;
-    });
-
-    // 4. คำนวณผลลัพธ์ผ่าน/ไม่ผ่าน
-    const passedPercent = questions.length > 0 ? (score / questions.length) * 100 : 0;
-    const passed = passedPercent >= threshold;
-
-    // 5. บันทึกลง Database
-    await api.submitExamResult(type, score, questions.length, passed, permitNo);
-
-    return { score, passed, perQuestion };
   },
 
   /* =====================================================
@@ -629,11 +368,7 @@ export const api = {
   },
 
   getAllExamHistory: async () => {
-    const { data, error } = await supabase
-      .from('exam_history')
-      // ✅ เพิ่ม age และ nationality เข้าไปในวงเล็บของ users
-      .select(`*, users (name, national_id, age, nationality, vendors (name))`)
-      .order('created_at', { ascending: false });
+    const { data, error } = await supabase.rpc('admin_get_exam_history');
       
     if (error) throw error;
     return data;
@@ -641,19 +376,7 @@ export const api = {
 
   // ✅ แก้ไข: ลบคอมเมนต์ภาษาไทยออก (สำคัญมาก)
   getReportData: async () => {
-    const { data, error } = await supabase
-      .from('exam_history')
-      .select(`
-        created_at, exam_type, score, total_questions, status,
-        users ( 
-            national_id,
-            name, 
-            age, 
-            nationality, 
-            vendors ( name ) 
-        )
-      `)
-      .order('created_at', { ascending: false });
+    const { data, error } = await supabase.rpc('admin_get_exam_history');
 
     if (error) {
         console.error("Report Fetch Error:", error); // เพิ่ม log เพื่อดู error ชัดๆ

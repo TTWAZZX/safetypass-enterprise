@@ -124,3 +124,18 @@ export interface SystemSettings {
   key: string;
   value: any;
 }
+
+export type TrainingProgram = 'CONTRACTOR' | 'SUPPLIER_OUTSOURCE';
+export type SupplierOutsourceType = 'supplier' | 'outsource';
+export type SupplierOutsourceWorkType = 'Driver' | 'Passenger' | 'Trainee';
+
+export interface TrainingAccess {
+  user_id: string;
+  program_code: TrainingProgram;
+  participant_type: SupplierOutsourceType | null;
+  work_type: SupplierOutsourceWorkType | null;
+  passed_at: string | null;
+  expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+}

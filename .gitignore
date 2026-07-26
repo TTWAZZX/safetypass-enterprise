@@ -27,3 +27,5 @@ dist-ssr
 .env*.local
 .supabase/
 supabase/.temp/
+supabase-schema-*.sql
+data backup/
