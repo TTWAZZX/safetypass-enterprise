@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import PrivacyPolicyModal from './PrivacyPolicyModal';
 import { addOneYearIsoDate } from '../utils/accessDates';
+import ProgressSteps from './ProgressSteps';
+import { getRegistrationDisabledReason, getRegistrationStepIndex } from '../services/registrationProgress';
 
 interface AuthProps {
   onLogin: (user: User) => void;
@@ -60,6 +62,23 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const filteredVendors = vendors.filter((vendor) =>
     vendor.name.toLocaleLowerCase().includes(vendorSearch.trim().toLocaleLowerCase())
   );
+
+  const registrationState = {
+    loading,
+    regId,
+    name,
+    age,
+    nationality,
+    vendorId,
+    otherVendor,
+    supplierOutsourceEnabled,
+    selectedPrograms,
+    accessStartDate,
+    accessEndDate,
+    pdpaAccepted,
+  };
+  const registrationDisabledReason = getRegistrationDisabledReason(registrationState);
+  const registrationStep = getRegistrationStepIndex(registrationState);
 
   const loadRegistrationVendors = async () => {
     setVendorsLoading(true);
@@ -348,6 +367,15 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         {/* REGISTER FORM */}
         {mode === 'REGISTER' && (
           <form onSubmit={handleRegister} className="space-y-3.5 text-left relative z-10">
+            <ProgressSteps
+              currentStep={registrationStep}
+              steps={[
+                { label: 'ข้อมูลส่วนตัว', description: 'Identity' },
+                { label: 'บริษัทและหลักสูตร', description: 'Company' },
+                { label: 'ยืนยันข้อมูล', description: 'Confirm' },
+              ]}
+              className="mb-4"
+            />
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 
                 <div className="col-span-2 space-y-1">
@@ -403,6 +431,11 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                           </div>
                       )}
                     </div>
+                    {regId.length > 0 && regId.length < 13 && !fetchingUser && (
+                      <p className="ml-1 text-[9px] font-bold text-amber-600" role="status">
+                        กรอกเลขบัตรให้ครบอีก {13 - regId.length} หลักเพื่อค้นหาข้อมูล
+                      </p>
+                    )}
                 </div>
 
                 <div className="col-span-2 space-y-1">
@@ -561,11 +594,17 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             </div>
 
             <button 
-                disabled={loading || !pdpaAccepted}
+                disabled={Boolean(registrationDisabledReason)}
+                aria-describedby={registrationDisabledReason ? 'registration-disabled-reason' : undefined}
                 className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-black py-4 rounded-2xl shadow-lg shadow-blue-100 transition-all flex items-center justify-center gap-2 mt-4 active:scale-95 text-xs uppercase tracking-widest"
             >
               {loading ? <Loader2 size={18} className="animate-spin" /> : <>Register Account</>}
             </button>
+            {registrationDisabledReason && (
+              <p id="registration-disabled-reason" className="flex items-center justify-center gap-1.5 text-center text-[9px] font-bold text-amber-700" role="status">
+                <AlertCircle size={12} aria-hidden="true" /> {registrationDisabledReason}
+              </p>
+            )}
           </form>
         )}
 

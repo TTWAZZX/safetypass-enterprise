@@ -23,6 +23,14 @@ import {
   ListChecks,
   BookOpen
 } from 'lucide-react';
+import ProgressSteps from './ProgressSteps';
+import {
+  SavedExamProgress,
+  countAnsweredQuestions,
+  getExamStepIndex,
+  getExamSubmitDisabledReason,
+  isSavedExamProgressValid,
+} from '../services/examProgress';
 
 interface ExamSystemProps {
   type: ExamType;
@@ -47,6 +55,8 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
   const [passed, setPassed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [hasReadManual, setHasReadManual] = useState(false);
+  const [initializing, setInitializing] = useState(true);
+  const [resumeProgress, setResumeProgress] = useState<SavedExamProgress | null>(null);
   
   // ✅ เพิ่ม State สำหรับเกณฑ์คะแนนผ่าน (ดึงจากฐานข้อมูล)
   const [passThreshold, setPassThreshold] = useState<number>(80); 
@@ -130,8 +140,18 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
     setQuestions(prepared);
   };
 
+  const restoreSavedProgress = (saved: SavedExamProgress) => {
+    setQuestions(saved.questions);
+    setAnswers(saved.answers);
+    setStep(saved.step);
+    setPermitNo(saved.permitNo || '');
+    setHasReadManual(saved.hasReadManual || false);
+    setCurrentPage(saved.currentPage || 0);
+  };
+
   // ✅ 4. Hydration & Load Config (ดึงเกณฑ์คะแนนผ่านจากหน้า Admin)
   useEffect(() => {
+    let active = true;
     const loadState = async () => {
       // --- ดึงเกณฑ์คะแนนผ่านจาก Database ก่อน ---
       try {
@@ -148,27 +168,29 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
       const savedState = localStorage.getItem(STORAGE_KEY);
       if (savedState) {
         try {
-          const parsed = JSON.parse(savedState);
-          const now = new Date().getTime();
-          if (now - parsed.timestamp < 24 * 60 * 60 * 1000) {
-            setQuestions(parsed.questions || []);
-            setAnswers(parsed.answers || {});
-            setStep(parsed.step || 'READ');
-            setPermitNo(parsed.permitNo || '');
-            setHasReadManual(parsed.hasReadManual || false);
-            setCurrentPage(parsed.currentPage || 0);
-            return; 
-          } else {
-            localStorage.removeItem(STORAGE_KEY); 
+          const parsed: unknown = JSON.parse(savedState);
+          if (isSavedExamProgressValid(parsed)) {
+            if (!active) return;
+            if (parsed.step === 'EXAM') {
+              setResumeProgress(parsed);
+            } else {
+              restoreSavedProgress(parsed);
+            }
+            setInitializing(false);
+            return;
           }
+          localStorage.removeItem(STORAGE_KEY);
         } catch (e) {
           console.error('Failed to parse saved exam state', e);
+          localStorage.removeItem(STORAGE_KEY);
         }
       }
       await fetchNewQuestions();
+      if (active) setInitializing(false);
     };
     
-    loadState();
+    void loadState();
+    return () => { active = false; };
   }, [type, user.id]);
 
   // 5. Auto-Save แบบ Real-time
@@ -283,7 +305,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
 
     } catch (err: any) {
       console.error("Submission Error:", err);
-      localStorage.removeItem(STORAGE_KEY);
+      lastSubmitRef.current = 0;
       alert("ไม่สามารถบันทึกผลสอบได้: " + err.message);
     } finally {
       setLoading(false);
@@ -302,7 +324,63 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
     if (currentPage > 0) setCurrentPage(prev => prev - 1);
   };
 
-  const isQuestionAnswered = (id: string) => answers[id] !== undefined;
+  const isQuestionAnswered = (id: string) => countAnsweredQuestions([{ id } as Question], answers) === 1;
+
+  const examSteps = [
+    { label: 'อ่านคู่มือ', description: 'Read' },
+    { label: 'ทำข้อสอบ', description: 'Exam' },
+    { label: 'ดูผลสอบ', description: 'Result' },
+  ];
+
+  if (initializing) {
+    return (
+      <div className="mx-auto flex min-h-[320px] max-w-2xl items-center justify-center p-6" role="status" aria-live="polite">
+        <div className="text-center">
+          <Loader2 className="mx-auto h-8 w-8 animate-spin text-blue-600" />
+          <p className="mt-3 text-xs font-bold text-slate-500">กำลังเตรียมแบบทดสอบ...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (resumeProgress) {
+    const savedAnsweredCount = countAnsweredQuestions(resumeProgress.questions, resumeProgress.answers);
+    return (
+      <div className="mx-auto max-w-md p-4 pt-8 md:p-6 md:pt-12">
+        <ProgressSteps steps={examSteps} currentStep={1} className="mb-5" />
+        <section className="rounded-[2rem] border border-blue-100 bg-white p-6 text-center shadow-xl shadow-slate-200/60" aria-labelledby="resume-exam-title">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+            <RotateCcw size={28} aria-hidden="true" />
+          </div>
+          <h2 id="resume-exam-title" className="mt-5 text-xl font-black text-slate-900">พบข้อสอบที่ยังทำไม่เสร็จ</h2>
+          <p className="mt-2 text-xs font-bold leading-relaxed text-slate-500">
+            ตอบแล้ว {savedAnsweredCount} จาก {resumeProgress.questions.length} ข้อ<br />
+            บันทึกล่าสุด {new Date(resumeProgress.timestamp).toLocaleString('th-TH')}
+          </p>
+          <div className="mt-6 space-y-3">
+            <button type="button" onClick={() => { restoreSavedProgress(resumeProgress); setResumeProgress(null); }} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 text-xs font-black text-white shadow-lg shadow-blue-100 transition hover:bg-blue-700 active:scale-[0.98]">
+              กลับไปทำต่อ <ChevronRight size={16} aria-hidden="true" />
+            </button>
+            <button type="button" onClick={async () => {
+              localStorage.removeItem(STORAGE_KEY);
+              setResumeProgress(null);
+              setAnswers({});
+              setPermitNo('');
+              setHasReadManual(false);
+              setCurrentPage(0);
+              setStep('READ');
+              await fetchNewQuestions();
+            }} className="min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-5 text-xs font-black text-slate-700 transition hover:bg-slate-50 active:scale-[0.98]">
+              เริ่มข้อสอบใหม่
+            </button>
+            <button type="button" onClick={onBack} className="min-h-11 w-full rounded-2xl px-5 text-xs font-bold text-slate-500 transition hover:bg-slate-50">
+              กลับหน้าหลัก (เก็บความคืบหน้าไว้)
+            </button>
+          </div>
+        </section>
+      </div>
+    );
+  }
 
   /* ================= 📖 READ STEP ================= */
   if (step === 'READ') {
@@ -313,6 +391,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
         <button onClick={onBack} className="flex items-center gap-1.5 text-slate-400 hover:text-blue-600 mb-6 font-black text-[10px] uppercase tracking-widest transition-all">
           <ArrowLeft size={16} /> {t('common.back')}
         </button>
+        <ProgressSteps steps={examSteps} currentStep={getExamStepIndex(step)} className="mb-5" />
         
         <div className="bg-white rounded-[2rem] shadow-[0_20px_50px_-12px_rgba(0,0,0,0.1)] border border-slate-100 overflow-hidden flex flex-col">
           
@@ -365,11 +444,17 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
 
               <button 
                 disabled={!hasReadManual} 
+                aria-describedby={!hasReadManual ? 'manual-confirmation-reason' : undefined}
                 onClick={() => setStep('EXAM')} 
                 className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-black py-4 md:py-5 rounded-2xl shadow-lg shadow-blue-200 transition-all text-xs uppercase tracking-widest disabled:shadow-none flex items-center justify-center gap-2 active:scale-95"
               >
                 {t('exam.start')} <ChevronRight size={16} />
               </button>
+              {!hasReadManual && (
+                <p id="manual-confirmation-reason" className="flex items-center justify-center gap-1.5 text-center text-[9px] font-bold text-amber-700" role="status">
+                  <AlertCircle size={12} aria-hidden="true" /> ยืนยันว่าอ่านคู่มือแล้วก่อนเริ่มทำข้อสอบ
+                </p>
+              )}
             </div>
           </div>
           
@@ -385,6 +470,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
 
     return (
       <div className="max-w-md mx-auto text-center p-6 md:p-8 bg-white rounded-[2.5rem] shadow-xl border border-slate-100 mt-6 md:mt-10 animate-in zoom-in text-left select-none pb-8">
+        <ProgressSteps steps={examSteps} currentStep={getExamStepIndex(step)} className="mb-6" />
         
         {/* Icon Header */}
         <div className={`w-20 h-20 md:w-24 md:h-24 rounded-[1.5rem] flex items-center justify-center mx-auto mb-5 shadow-inner ${passed ? 'bg-emerald-50' : 'bg-red-50'}`}>
@@ -479,12 +565,14 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
   }
 
   /* ================= 📝 EXAM STEP ================= */
-  const answeredCount = Object.keys(answers).length;
+  const answeredCount = countAnsweredQuestions(questions, answers);
   const totalQuestions = questions.length;
   const progressPercent = totalQuestions === 0 ? 0 : Math.round((answeredCount / totalQuestions) * 100);
+  const submitDisabledReason = getExamSubmitDisabledReason({ loading, answeredCount, totalQuestions, type, permitNo });
 
   return (
     <div className="max-w-2xl mx-auto p-4 md:p-6 animate-in slide-in-from-bottom-4 duration-500 text-left pb-32 select-none">
+      <ProgressSteps steps={examSteps} currentStep={getExamStepIndex(step)} className="mb-5" />
       
       {/* Tracker */}
       <div className="sticky top-0 bg-slate-50 pt-2 pb-6 mb-8 z-20 border-b border-slate-200 will-change-transform">
@@ -494,7 +582,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
         </div>
         <div className="flex flex-wrap gap-1 mb-4">
            {questions.map((q, qIdx) => (
-             <button key={q.id} onClick={() => setCurrentPage(Math.floor(qIdx / questionsPerPage))} className={`w-6 h-6 rounded-lg flex items-center justify-center text-[8px] font-black transition-all border-2 ${isQuestionAnswered(q.id) ? 'bg-emerald-500 border-emerald-500 text-white shadow-sm' : 'bg-white border-slate-100 text-slate-300'} ${qIdx >= startIndex && qIdx < startIndex + questionsPerPage ? 'ring-2 ring-blue-500 ring-offset-1 scale-110 z-10' : ''}`}>{qIdx + 1}</button>
+             <button key={q.id} aria-label={`ไปข้อ ${qIdx + 1}${isQuestionAnswered(q.id) ? ' ตอบแล้ว' : ' ยังไม่ได้ตอบ'}`} onClick={() => setCurrentPage(Math.floor(qIdx / questionsPerPage))} className={`min-h-11 min-w-11 rounded-xl flex items-center justify-center text-[10px] font-black transition-all border-2 ${isQuestionAnswered(q.id) ? 'bg-emerald-500 border-emerald-500 text-white shadow-sm' : 'bg-white border-slate-100 text-slate-400'} ${qIdx >= startIndex && qIdx < startIndex + questionsPerPage ? 'ring-2 ring-blue-500 ring-offset-1 scale-105 z-10' : ''}`}>{qIdx + 1}</button>
            ))}
         </div>
         <div className="w-full h-1 bg-slate-200 rounded-full overflow-hidden shadow-inner"><div className={`h-full transition-all duration-700 ease-out ${progressPercent === 100 ? 'bg-emerald-500' : 'bg-blue-600'}`} style={{ width: `${progressPercent}%` }} /></div>
@@ -615,7 +703,10 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
         <div className="max-w-2xl w-full flex justify-between items-center gap-4">
           <button disabled={currentPage === 0} onClick={handlePrevPage} className={`flex items-center gap-2 px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all ${currentPage === 0 ? 'opacity-0 pointer-events-none' : 'text-slate-400 hover:text-slate-800'}`}><ChevronLeft size={16} /> Back</button>
           {currentPage === totalPages - 1 ? (
-            <button onClick={handleSubmit} disabled={loading || answeredCount !== totalQuestions || (type === 'WORK_PERMIT' && permitNo.length !== 10)} className="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-emerald-100 transition-all disabled:opacity-50 disabled:grayscale flex items-center justify-center gap-3 active:scale-95">{loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Send size={16} /> Submit Exam</>}</button>
+            <div className="flex flex-1 flex-col items-stretch gap-1.5 md:flex-none">
+              <button onClick={handleSubmit} disabled={Boolean(submitDisabledReason)} aria-describedby={submitDisabledReason ? 'exam-submit-disabled-reason' : undefined} className="min-h-11 bg-emerald-600 hover:bg-emerald-700 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-emerald-100 transition-all disabled:opacity-50 disabled:grayscale flex items-center justify-center gap-3 active:scale-95">{loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Send size={16} /> Submit Exam</>}</button>
+              {submitDisabledReason && <p id="exam-submit-disabled-reason" className="text-center text-[9px] font-bold text-amber-700" role="status">{submitDisabledReason}</p>}
+            </div>
           ) : (
             <button onClick={handleNextPage} className="flex-1 md:flex-none bg-blue-600 hover:bg-blue-700 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-blue-200 transition-all flex items-center justify-center gap-3 active:scale-95 group">Next Page <ChevronRight size={16} className="group-hover:translate-x-1 transition-transform" /></button>
           )}
