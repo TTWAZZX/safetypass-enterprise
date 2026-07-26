@@ -9,6 +9,7 @@
 /* ✅ 1. เพิ่มความสมูทในการเปลี่ยนหน้า (คลิกลิงก์แล้วค่อยๆ เลื่อน) */
 html {
   scroll-behavior: smooth;
+  scrollbar-gutter: stable;
 }
 
 @layer base {
@@ -93,9 +94,9 @@ html {
 }
 
 /* 🟢 5. GLOW EFFECTS FOR SMART BADGES */
-.glow-emerald { shadow-color: #10b981; filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.2)); }
-.glow-amber { shadow-color: #f59e0b; filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.2)); }
-.glow-red { shadow-color: #ef4444; filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.2)); }
+.glow-emerald { box-shadow: 0 8px 24px rgba(16, 185, 129, 0.12); }
+.glow-amber { box-shadow: 0 8px 24px rgba(245, 158, 11, 0.12); }
+.glow-red { box-shadow: 0 8px 24px rgba(239, 68, 68, 0.12); }
 
 /* 🟢 6. CUSTOM SCROLLBAR (Compact Style) */
 ::-webkit-scrollbar {

@@ -55,6 +55,12 @@ const AdminPanel: React.FC = () => {
     fetchData();
   }, []); // Run only once on mount
 
+  useEffect(() => {
+    // Each admin section starts at the top and uses the document as the only vertical scroller.
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }, [activePage]);
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-slate-400 gap-4 w-full">
@@ -92,7 +98,7 @@ const AdminPanel: React.FC = () => {
       </nav>
 
       {/* 🖥️ MAIN CONTENT AREA */}
-      <main className="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto w-full max-w-full overflow-x-hidden pb-24 md:pb-8 min-h-screen md:min-h-0">
+      <main className="min-w-0 flex-1 p-4 md:p-6 lg:p-8 w-full max-w-full overflow-x-hidden pb-24 md:pb-8 min-h-screen md:min-h-0">
         
         {activePage !== 'DASHBOARD' && (
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-6 md:mb-8">
