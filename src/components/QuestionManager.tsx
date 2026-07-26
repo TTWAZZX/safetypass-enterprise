@@ -265,7 +265,7 @@ const QuestionManager: React.FC = () => {
             <div className={`p-2.5 rounded-xl ${editingId ? 'bg-amber-100 text-amber-600' : 'bg-blue-600 text-white'}`}>{editingId ? <Edit3 size={20} /> : <Plus size={20} />}</div>
             <div><h3 className="text-lg font-black text-slate-900 uppercase leading-none">{editingId ? 'Edit Question' : 'Create Question'}</h3></div>
           </div>
-          {editingId && <button onClick={handleCancelEdit} className="p-2 bg-white text-slate-400 hover:text-red-500 rounded-full border border-slate-200"><X size={18}/></button>}
+          {editingId && <button onClick={handleCancelEdit} aria-label="ยกเลิกการแก้ไขข้อสอบ" className="min-h-11 min-w-11 p-2 bg-white text-slate-400 hover:text-red-500 rounded-full border border-slate-200"><X size={18}/></button>}
         </div>
 
         <div className="flex flex-wrap bg-slate-100 p-1.5 rounded-2xl mb-8 gap-1">
@@ -279,7 +279,7 @@ const QuestionManager: React.FC = () => {
             <div className="space-y-4">
                 <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl p-5 text-center cursor-pointer relative overflow-hidden group hover:border-blue-300" onClick={() => imageInputRef.current?.click()}>
                     <input type="file" ref={imageInputRef} className="hidden" accept="image/*" onChange={handleImageChange} />
-                    {previewUrl ? <div className="relative"><img src={previewUrl} className="h-44 mx-auto rounded-2xl object-contain shadow-lg bg-white" /><button onClick={(e) => { e.stopPropagation(); clearImage(); }} className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full border-2 border-white"><X size={14}/></button></div> : <div className="py-10 text-slate-300 flex flex-col items-center gap-2 group-hover:text-blue-400"><ImageIcon size={32}/><span className="text-[10px] font-black uppercase tracking-widest">Media Assets</span></div>}
+                    {previewUrl ? <div className="relative"><img src={previewUrl} className="h-44 mx-auto rounded-2xl object-contain shadow-lg bg-white" /><button onClick={(e) => { e.stopPropagation(); clearImage(); }} aria-label="ลบรูปประกอบข้อสอบ" className="absolute -top-2 -right-2 min-h-11 min-w-11 bg-red-500 text-white p-1 rounded-full border-2 border-white"><X size={14}/></button></div> : <div className="py-10 text-slate-300 flex flex-col items-center gap-2 group-hover:text-blue-400"><ImageIcon size={32}/><span className="text-[10px] font-black uppercase tracking-widest">Media Assets</span></div>}
                 </div>
                 <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Question (Thai)</label>
@@ -290,9 +290,9 @@ const QuestionManager: React.FC = () => {
                     <input placeholder="Question in English" value={en} onChange={e=>setEn(e.target.value)} className="w-full p-4 border border-slate-200 rounded-2xl text-base md:text-sm font-bold bg-white outline-none focus:border-blue-500" />
                 </div>
                 <div className="flex bg-slate-100 p-1.5 rounded-2xl">
-                    <button onClick={() => setExamType('INDUCTION')} className={`flex-1 py-3 rounded-xl font-black text-[10px] transition-all ${examType === 'INDUCTION' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>INDUCTION</button>
-                    <button onClick={() => setExamType('WORK_PERMIT')} className={`flex-1 py-3 rounded-xl font-black text-[10px] transition-all ${examType === 'WORK_PERMIT' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>WORK PERMIT</button>
-                    <button onClick={() => setExamType('SUPPLIER_OUTSOURCE')} className={`flex-1 py-3 rounded-xl font-black text-[9px] transition-all ${examType === 'SUPPLIER_OUTSOURCE' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>SUPPLIER & OUTSOURCE</button>
+                    <button onClick={() => setExamType('INDUCTION')} className={`min-h-11 flex-1 py-3 rounded-xl font-black text-[10px] transition-all ${examType === 'INDUCTION' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>INDUCTION</button>
+                    <button onClick={() => setExamType('WORK_PERMIT')} className={`min-h-11 flex-1 py-3 rounded-xl font-black text-[10px] transition-all ${examType === 'WORK_PERMIT' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>WORK PERMIT</button>
+                    <button onClick={() => setExamType('SUPPLIER_OUTSOURCE')} className={`min-h-11 flex-1 py-3 rounded-xl font-black text-[9px] transition-all ${examType === 'SUPPLIER_OUTSOURCE' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>SUPPLIER & OUTSOURCE</button>
                 </div>
             </div>
             <div className="space-y-4">
@@ -311,7 +311,7 @@ const QuestionManager: React.FC = () => {
                     </div>
                 )}
                 {pattern === QuestionPattern.SHORT_ANSWER && <div className="p-6 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200 text-center"><label className="text-[9px] font-black text-slate-400 uppercase mb-2 block tracking-widest">Correct Answer</label><input value={shortAnswer} onChange={e => setShortAnswer(e.target.value)} placeholder="เฉลย..." className="w-full p-4 border border-slate-200 rounded-2xl text-sm font-black text-blue-600 shadow-inner outline-none text-center" /></div>}
-                {pattern === QuestionPattern.MATCHING && <div className="space-y-3 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">{matchingPairs.map((pair, idx) => (<div key={idx} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 relative"><div className="grid grid-cols-2 gap-3"><div className="space-y-1"><span className="text-[8px] font-black opacity-30 uppercase tracking-widest">Left</span><input value={pair.left_th} onChange={e => { const n = [...matchingPairs]; n[idx].left_th = e.target.value; setMatchingPairs(n); }} className="w-full p-2 border border-slate-200 rounded-lg text-[10px]" /><input value={pair.left_en} onChange={e => { const n = [...matchingPairs]; n[idx].left_en = e.target.value; setMatchingPairs(n); }} className="w-full p-2 border border-slate-200 rounded-lg text-[10px]" /></div><div className="space-y-1"><span className="text-[8px] font-black opacity-30 uppercase tracking-widest">Right</span><input value={pair.right_th} onChange={e => { const n = [...matchingPairs]; n[idx].right_th = e.target.value; setMatchingPairs(n); }} className="w-full p-2 border border-slate-200 rounded-lg text-[10px]" /><input value={pair.right_en} onChange={e => { const n = [...matchingPairs]; n[idx].right_en = e.target.value; setMatchingPairs(n); }} className="w-full p-2 border border-slate-200 rounded-lg text-[10px]" /></div></div>{matchingPairs.length > 1 && <button onClick={() => setMatchingPairs(matchingPairs.filter((_, i) => i !== idx))} className="absolute -top-1 -right-1 bg-red-100 text-red-500 p-1 rounded-full"><X size={10}/></button>}</div>))}<button onClick={() => setMatchingPairs([...matchingPairs, { left_th: '', left_en: '', right_th: '', right_en: '' }])} className="w-full py-2 border-2 border-dashed border-slate-200 text-slate-400 text-[10px] font-black rounded-xl hover:bg-slate-50 uppercase tracking-widest">Add +</button></div>}
+                {pattern === QuestionPattern.MATCHING && <div className="space-y-3 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">{matchingPairs.map((pair, idx) => (<div key={idx} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 relative"><div className="grid grid-cols-2 gap-3"><div className="space-y-1"><span className="text-[8px] font-black opacity-30 uppercase tracking-widest">Left</span><input value={pair.left_th} onChange={e => { const n = [...matchingPairs]; n[idx].left_th = e.target.value; setMatchingPairs(n); }} className="w-full p-2 border border-slate-200 rounded-lg text-[10px]" /><input value={pair.left_en} onChange={e => { const n = [...matchingPairs]; n[idx].left_en = e.target.value; setMatchingPairs(n); }} className="w-full p-2 border border-slate-200 rounded-lg text-[10px]" /></div><div className="space-y-1"><span className="text-[8px] font-black opacity-30 uppercase tracking-widest">Right</span><input value={pair.right_th} onChange={e => { const n = [...matchingPairs]; n[idx].right_th = e.target.value; setMatchingPairs(n); }} className="w-full p-2 border border-slate-200 rounded-lg text-[10px]" /><input value={pair.right_en} onChange={e => { const n = [...matchingPairs]; n[idx].right_en = e.target.value; setMatchingPairs(n); }} className="w-full p-2 border border-slate-200 rounded-lg text-[10px]" /></div></div>{matchingPairs.length > 1 && <button onClick={() => setMatchingPairs(matchingPairs.filter((_, i) => i !== idx))} aria-label={`ลบคู่จับคู่ลำดับ ${idx + 1}`} className="absolute -top-1 -right-1 min-h-11 min-w-11 bg-red-100 text-red-500 p-1 rounded-full"><X size={10}/></button>}</div>))}<button onClick={() => setMatchingPairs([...matchingPairs, { left_th: '', left_en: '', right_th: '', right_en: '' }])} className="min-h-11 w-full py-2 border-2 border-dashed border-slate-200 text-slate-400 text-[10px] font-black rounded-xl hover:bg-slate-50 uppercase tracking-widest">Add +</button></div>}
             </div>
         </div>
         <button onClick={handleSave} disabled={uploadingImage} className="mt-8 w-full md:w-auto bg-slate-900 text-white px-12 py-4 rounded-2xl font-black uppercase text-xs shadow-xl active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 hover:bg-slate-800">
@@ -331,8 +331,8 @@ const QuestionManager: React.FC = () => {
             <div className="flex flex-wrap gap-2 w-full md:w-auto">
                 <div className="relative flex-1"><Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input placeholder="Search keywords..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none w-full" /></div>
                 <input ref={fileInputRef} type="file" accept=".xlsx" className="hidden" onChange={handleQuestionImport} />
-                <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5 text-[9px] font-black uppercase tracking-widest text-emerald-700"><Upload size={16}/> Import</button>
-                <button onClick={fetchQuestions} className="p-2.5 bg-slate-50 text-slate-400 rounded-xl hover:text-blue-600 transition-all border border-slate-100 shadow-sm"><RefreshCw size={18}/></button>
+                <button onClick={() => fileInputRef.current?.click()} className="flex min-h-11 items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5 text-[9px] font-black uppercase tracking-widest text-emerald-700"><Upload size={16}/> Import</button>
+                <button onClick={fetchQuestions} aria-label="รีเฟรชคลังข้อสอบ" className="min-h-11 min-w-11 p-2.5 bg-slate-50 text-slate-400 rounded-xl hover:text-blue-600 transition-all border border-slate-100 shadow-sm"><RefreshCw size={18}/></button>
             </div>
         </div>
         
@@ -348,9 +348,9 @@ const QuestionManager: React.FC = () => {
                             <div className="flex justify-between items-center mb-1">
                                 <span className={`px-2 py-0.5 rounded-md text-[8px] font-black border ${q.type === 'INDUCTION' ? 'text-blue-600 border-blue-100 bg-blue-50' : q.type === 'WORK_PERMIT' ? 'text-purple-600 border-purple-100 bg-purple-50' : 'text-emerald-700 border-emerald-100 bg-emerald-50'}`}>{q.type}</span>
                                 <div className="flex gap-1 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button onClick={() => handleToggleActive(q)} className={`rounded-lg px-2 text-[8px] font-black ${q.is_active ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>{q.is_active ? 'ON' : 'OFF'}</button>
-                                    <button onClick={() => handleEdit(q)} className="p-3 text-slate-400 hover:text-blue-600 transition-colors active:scale-90"><Edit3 size={16}/></button>
-                                    <button onClick={() => handleDelete(q.id)} className="p-3 text-slate-400 hover:text-red-600 transition-colors active:scale-90"><Trash2 size={16}/></button>
+                                    <button onClick={() => handleToggleActive(q)} aria-label={`${q.is_active ? 'ปิด' : 'เปิด'}การใช้งานข้อสอบ`} className={`min-h-11 min-w-11 rounded-lg px-2 text-[8px] font-black ${q.is_active ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>{q.is_active ? 'ON' : 'OFF'}</button>
+                                    <button onClick={() => handleEdit(q)} aria-label="แก้ไขข้อสอบ" className="min-h-11 min-w-11 p-3 text-slate-400 hover:text-blue-600 transition-colors active:scale-90"><Edit3 size={16}/></button>
+                                    <button onClick={() => handleDelete(q.id)} aria-label="ลบข้อสอบ" className="min-h-11 min-w-11 p-3 text-slate-400 hover:text-red-600 transition-colors active:scale-90"><Trash2 size={16}/></button>
                                 </div>
                             </div>
                             <h4 className="font-black text-slate-800 text-sm truncate">{q.content_th}</h4>
@@ -368,9 +368,9 @@ const QuestionManager: React.FC = () => {
                 {filteredQuestions.length === 0 && <AsyncState compact variant="empty" title="ไม่พบข้อสอบ" description={searchTerm ? 'ลองเปลี่ยนคำค้นหา หรือเลือกหลักสูตรอื่น' : 'กดสร้างข้อสอบหรือนำเข้าไฟล์ Excel เพื่อเริ่มต้น'} />}
                 {totalPages > 1 && (
                     <div className="flex justify-center items-center gap-4 mt-8 pt-6 border-t border-slate-50">
-                        <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="p-2 bg-slate-50 rounded-xl hover:bg-slate-100 disabled:opacity-20 transition-all"><ChevronLeft size={20}/></button>
+                        <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} aria-label="หน้าก่อนหน้า" className="min-h-11 min-w-11 p-2 bg-slate-50 rounded-xl hover:bg-slate-100 disabled:opacity-20 transition-all"><ChevronLeft size={20}/></button>
                         <span className="text-[10px] font-black text-slate-900 uppercase tracking-tighter shadow-sm bg-white px-4 py-2 rounded-xl border border-slate-100">Page {currentPage} / {totalPages}</span>
-                        <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} className="p-2 bg-slate-50 rounded-xl hover:bg-slate-100 disabled:opacity-20 transition-all"><ChevronRight size={20}/></button>
+                        <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} aria-label="หน้าถัดไป" className="min-h-11 min-w-11 p-2 bg-slate-50 rounded-xl hover:bg-slate-100 disabled:opacity-20 transition-all"><ChevronRight size={20}/></button>
                     </div>
                 )}
             </div>
@@ -381,7 +381,7 @@ const QuestionManager: React.FC = () => {
 };
 
 const PatternTab = ({ active, onClick, icon, label }: any) => (
-    <button onClick={onClick} className={`flex-1 flex items-center justify-center gap-2 py-3.5 px-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all border ${active ? 'bg-white text-blue-600 shadow-sm border-slate-200' : 'text-slate-400 hover:text-slate-500 border-transparent'}`}>
+    <button onClick={onClick} className={`min-h-11 flex-1 flex items-center justify-center gap-2 py-3.5 px-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all border ${active ? 'bg-white text-blue-600 shadow-sm border-slate-200' : 'text-slate-400 hover:text-slate-500 border-transparent'}`}>
         {icon} <span className="hidden sm:inline">{label}</span>
     </button>
 );

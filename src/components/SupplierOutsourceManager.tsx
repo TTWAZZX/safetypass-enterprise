@@ -77,6 +77,20 @@ const SupplierOutsourceManager: React.FC = () => {
     if ((new Date(row.expiration_date).getTime() - Date.now()) / 86400000 < 30) return 'NEAR_EXPIRY';
     return 'PASSED';
   };
+  const statusLabel = (status: string) => ({
+    READY: 'พร้อมสอบ',
+    PASSED: 'ผ่าน',
+    FAILED: 'ไม่ผ่าน',
+    NEAR_EXPIRY: 'ใกล้หมดอายุ',
+    EXPIRED: 'หมดอายุ',
+  }[status] || status);
+  const statusBadgeClass = (status: string) => ({
+    READY: 'border-blue-100 bg-blue-50 text-blue-700',
+    PASSED: 'border-emerald-100 bg-emerald-50 text-emerald-700',
+    FAILED: 'border-red-100 bg-red-50 text-red-700',
+    NEAR_EXPIRY: 'border-amber-100 bg-amber-50 text-amber-700',
+    EXPIRED: 'border-slate-200 bg-slate-100 text-slate-600',
+  }[status] || 'border-slate-200 bg-slate-100 text-slate-600');
   const filteredRows = useMemo(() => rows.filter((row) => {
     const term = search.trim().toLocaleLowerCase();
     const searchable = `${row.name} ${row.company} ${row.national_id || ''}`.toLocaleLowerCase();
@@ -170,16 +184,16 @@ const SupplierOutsourceManager: React.FC = () => {
     <div className="space-y-6 pb-12 text-left">
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div><h2 className="text-2xl font-black uppercase text-slate-900">Supplier & Outsource</h2><p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Program Control & Reporting</p></div>
-        <div className="flex gap-2">
-          <button onClick={() => openForm()} className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-[9px] font-black uppercase tracking-widest text-white"><Plus size={16}/> เพิ่มสิทธิ์</button>
-          <button onClick={() => downloadSupplierOutsourceWorkbook(filteredRows)} className="flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-[9px] font-black uppercase tracking-widest text-white"><Download size={16}/> Export</button>
-          <button onClick={loadData} disabled={loading} aria-label="รีเฟรชข้อมูล Supplier & Outsource" className="rounded-xl border border-slate-200 bg-white p-3 text-slate-500 disabled:opacity-50"><RefreshCw size={16} className={loading ? 'animate-spin' : ''}/></button>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => openForm()} className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-[9px] font-black uppercase tracking-widest text-white sm:flex-none"><Plus size={16}/> เพิ่มสิทธิ์</button>
+          <button onClick={() => downloadSupplierOutsourceWorkbook(filteredRows)} className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-[9px] font-black uppercase tracking-widest text-white sm:flex-none"><Download size={16}/> Export</button>
+          <button onClick={loadData} disabled={loading} aria-label="รีเฟรชข้อมูล Supplier & Outsource" className="min-h-11 min-w-11 rounded-xl border border-slate-200 bg-white p-3 text-slate-500 disabled:opacity-50"><RefreshCw size={16} className={loading ? 'animate-spin' : ''}/></button>
         </div>
       </div>
 
       <div className={`flex flex-col justify-between gap-4 rounded-2xl border p-4 sm:flex-row sm:items-center ${launchStatus.enabled ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
         <div><p className="text-[10px] font-black uppercase tracking-widest text-slate-800">Production Feature: {launchStatus.enabled ? 'ENABLED' : 'DISABLED'}</p><p className="mt-1 text-[9px] font-bold text-slate-500">คำถามที่เปิดใช้งาน {launchStatus.activeQuestionCount} ข้อ ระบบใช้ข้อสอบจริง 20 ข้อต่อครั้ง และต้องมีอย่างน้อย 20 ข้อจึงจะเปิดโปรแกรมได้</p></div>
-        <button onClick={toggleFeature} disabled={!launchStatus.enabled && launchStatus.activeQuestionCount < 20} className={`rounded-xl px-4 py-3 text-[9px] font-black uppercase tracking-widest text-white disabled:cursor-not-allowed disabled:bg-slate-400 ${launchStatus.enabled ? 'bg-amber-600' : 'bg-emerald-600'}`}>{launchStatus.enabled ? 'ปิดโปรแกรม' : 'เปิดโปรแกรม'}</button>
+        <button onClick={toggleFeature} disabled={!launchStatus.enabled && launchStatus.activeQuestionCount < 20} className={`min-h-11 rounded-xl px-4 py-3 text-[9px] font-black uppercase tracking-widest text-white disabled:cursor-not-allowed disabled:bg-slate-400 ${launchStatus.enabled ? 'bg-amber-600' : 'bg-emerald-600'}`}>{launchStatus.enabled ? 'ปิดโปรแกรม' : 'เปิดโปรแกรม'}</button>
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5 xl:grid-cols-10">
@@ -195,11 +209,46 @@ const SupplierOutsourceManager: React.FC = () => {
 
       <div className="overflow-hidden rounded-[2rem] border border-slate-100 bg-white shadow-sm">
         {loading ? <AsyncState compact variant="loading" title="กำลังโหลดข้อมูล Supplier & Outsource" /> : loadError ? <AsyncState compact variant="error" title="โหลดข้อมูล Supplier & Outsource ไม่สำเร็จ" description={loadError} onRetry={loadData} /> : (
-          <div className="overflow-x-auto"><table className="min-w-full text-left text-xs"><thead className="bg-slate-50 text-[8px] font-black uppercase tracking-widest text-slate-400"><tr>{['Name / Company','Type','Work','Score','Test Date','Expiration','Status','Action'].map((item) => <th key={item} className="px-4 py-4">{item}</th>)}</tr></thead><tbody className="divide-y divide-slate-50">{filteredRows.map((row) => <tr key={row.user_id} className="hover:bg-slate-50/70"><td className="px-4 py-4"><p className="font-black text-slate-800">{row.name}</p><p className="mt-1 text-[9px] text-slate-400">{row.company}</p></td><td className="px-4 py-4 font-bold">{row.participant_type}</td><td className="px-4 py-4 font-bold">{row.work_type}</td><td className="px-4 py-4 font-black text-emerald-600">{row.score ?? '-'} / {row.total_questions ?? '-'}</td><td className="px-4 py-4">{row.test_date ? new Date(row.test_date).toLocaleDateString('th-TH') : '-'}</td><td className="px-4 py-4">{row.expiration_date ? new Date(row.expiration_date).toLocaleDateString('th-TH') : '-'}</td><td className="px-4 py-4"><span className="rounded-full bg-slate-100 px-2 py-1 text-[8px] font-black">{statusOf(row)}</span></td><td className="px-4 py-4"><div className="flex gap-2"><button onClick={() => openForm(row)} className="rounded-lg bg-blue-50 px-2 py-1.5 text-[8px] font-black text-blue-700">แก้ไข</button><button onClick={() => revokeAccess(row)} className="rounded-lg bg-red-50 px-2 py-1.5 text-[8px] font-black text-red-600">ระงับ</button></div></td></tr>)}</tbody></table>{filteredRows.length === 0 && <AsyncState compact variant="empty" title="ไม่พบข้อมูล Supplier & Outsource" description={search || typeFilter !== 'ALL' || workFilter !== 'ALL' || statusFilter !== 'ALL' ? 'ลองล้างคำค้นหาหรือตัวกรองแล้วค้นหาอีกครั้ง' : 'เพิ่มสิทธิ์ผู้ใช้เพื่อเริ่มต้นใช้งานโปรแกรม'} />}</div>
+          <>
+            {filteredRows.length === 0 ? <AsyncState compact variant="empty" title="ไม่พบข้อมูล Supplier & Outsource" description={search || typeFilter !== 'ALL' || workFilter !== 'ALL' || statusFilter !== 'ALL' ? 'ลองล้างคำค้นหาหรือตัวกรองแล้วค้นหาอีกครั้ง' : 'เพิ่มสิทธิ์ผู้ใช้เพื่อเริ่มต้นใช้งานโปรแกรม'} /> : (
+              <>
+                <div className="grid gap-3 p-3 sm:grid-cols-2 xl:hidden">
+                  {filteredRows.map((row) => {
+                    const rowStatus = statusOf(row);
+                    return (
+                      <article key={row.user_id} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm" aria-label={`สิทธิ์ Supplier & Outsource ของ ${row.name}`}>
+                        <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
+                          <div className="min-w-0"><h3 className="truncate text-sm font-black text-slate-900">{row.name}</h3><p className="mt-1 truncate text-[9px] font-bold text-slate-400">{row.company || 'ไม่มีสังกัด'}</p></div>
+                          <span className={`shrink-0 rounded-xl border px-2.5 py-1.5 text-[8px] font-black ${statusBadgeClass(rowStatus)}`}>{statusLabel(rowStatus)}</span>
+                        </div>
+                        <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-[10px]">
+                          <div><dt className="font-black text-slate-400">ประเภทผู้ใช้</dt><dd className="mt-1 font-bold capitalize text-slate-700">{row.participant_type || '-'}</dd></div>
+                          <div><dt className="font-black text-slate-400">ลักษณะงาน</dt><dd className="mt-1 font-bold text-slate-700">{row.work_type || '-'}</dd></div>
+                          <div><dt className="font-black text-slate-400">คะแนน</dt><dd className="mt-1 text-sm font-black text-emerald-600">{row.score ?? '-'} / {row.total_questions ?? '-'}</dd></div>
+                          <div><dt className="font-black text-slate-400">วันที่สอบ</dt><dd className="mt-1 font-bold text-slate-700">{row.test_date ? new Date(row.test_date).toLocaleDateString('th-TH') : '-'}</dd></div>
+                          <div className="col-span-2"><dt className="font-black text-slate-400">วันหมดอายุ</dt><dd className="mt-1 font-bold text-slate-700">{row.expiration_date ? new Date(row.expiration_date).toLocaleDateString('th-TH') : '-'}</dd></div>
+                        </dl>
+                        <div className="mt-4 grid grid-cols-2 gap-2 border-t border-slate-100 pt-3">
+                          <button onClick={() => openForm(row)} className="min-h-11 rounded-xl bg-blue-50 px-3 text-[10px] font-black text-blue-700">แก้ไขสิทธิ์</button>
+                          <button onClick={() => revokeAccess(row)} className="min-h-11 rounded-xl bg-red-50 px-3 text-[10px] font-black text-red-600">ระงับสิทธิ์</button>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+                <div className="hidden overflow-x-auto xl:block">
+                  <table className="min-w-full text-left text-xs">
+                    <thead className="bg-slate-50 text-[8px] font-black uppercase tracking-widest text-slate-400"><tr>{['Name / Company','Type','Work','Score','Test Date','Expiration','Status','Action'].map((item) => <th key={item} className="px-4 py-4">{item}</th>)}</tr></thead>
+                    <tbody className="divide-y divide-slate-50">{filteredRows.map((row) => { const rowStatus = statusOf(row); return <tr key={row.user_id} className="hover:bg-slate-50/70"><td className="px-4 py-4"><p className="font-black text-slate-800">{row.name}</p><p className="mt-1 text-[9px] text-slate-400">{row.company}</p></td><td className="px-4 py-4 font-bold">{row.participant_type}</td><td className="px-4 py-4 font-bold">{row.work_type}</td><td className="px-4 py-4 font-black text-emerald-600">{row.score ?? '-'} / {row.total_questions ?? '-'}</td><td className="px-4 py-4">{row.test_date ? new Date(row.test_date).toLocaleDateString('th-TH') : '-'}</td><td className="px-4 py-4">{row.expiration_date ? new Date(row.expiration_date).toLocaleDateString('th-TH') : '-'}</td><td className="px-4 py-4"><span className={`rounded-full border px-2 py-1 text-[8px] font-black ${statusBadgeClass(rowStatus)}`}>{statusLabel(rowStatus)}</span></td><td className="px-4 py-4"><div className="flex gap-2"><button onClick={() => openForm(row)} className="min-h-11 rounded-lg bg-blue-50 px-3 text-[8px] font-black text-blue-700">แก้ไข</button><button onClick={() => revokeAccess(row)} className="min-h-11 rounded-lg bg-red-50 px-3 text-[8px] font-black text-red-600">ระงับ</button></div></td></tr>; })}</tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </>
         )}
       </div>
 
-      {showForm && <div className="fixed inset-0 z-[140] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"><div role="dialog" aria-modal="true" aria-labelledby="supplier-access-dialog-title" className="w-full max-w-lg rounded-[2rem] bg-white p-6"><div className="mb-5 flex justify-between"><div><h3 id="supplier-access-dialog-title" className="text-lg font-black uppercase">จัดการสิทธิ์</h3><p className="text-[9px] font-bold text-slate-400">Supplier & Outsource Access</p></div><button aria-label="ปิดหน้าต่างจัดการสิทธิ์" onClick={() => setShowForm(false)} className="rounded-full bg-slate-100 p-2"><X size={18}/></button></div><div className="space-y-3">
+      {showForm && <div className="fixed inset-0 z-[140] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"><div role="dialog" aria-modal="true" aria-labelledby="supplier-access-dialog-title" className="max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-[2rem] bg-white p-6"><div className="mb-5 flex justify-between"><div><h3 id="supplier-access-dialog-title" className="text-lg font-black uppercase">จัดการสิทธิ์</h3><p className="text-[9px] font-bold text-slate-400">Supplier & Outsource Access</p></div><button aria-label="ปิดหน้าต่างจัดการสิทธิ์" onClick={() => setShowForm(false)} className="min-h-11 min-w-11 rounded-full bg-slate-100 p-2"><X size={18}/></button></div><div className="space-y-3">
         {editingUserId ? <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs font-bold">{users.find((user) => user.id === editingUserId)?.name || 'ผู้ใช้'} — {users.find((user) => user.id === editingUserId)?.vendors?.name || '-'}</div> : <div className="rounded-xl border border-slate-200 p-3"><div className="relative"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input aria-label="ค้นหาผู้ใช้" value={userSearch} onChange={(e) => setUserSearch(e.target.value)} placeholder="พิมพ์ชื่อ บริษัท หรือเลขบัตร" className="w-full rounded-lg bg-slate-50 py-3 pl-9 pr-3 text-xs font-bold outline-none"/></div><label className="mt-3 flex cursor-pointer items-center gap-2 border-b border-slate-100 pb-3 text-[10px] font-black text-emerald-700"><input type="checkbox" checked={allVisibleSelected} onChange={() => setSelectedUserIds(allVisibleSelected ? selectedUserIds.filter((id) => !selectableUsers.some((user) => user.id === id)) : Array.from(new Set([...selectedUserIds, ...selectableUsers.map((user) => user.id)])))} /> เลือกทั้งหมดที่แสดง ({selectableUsers.length} คน)</label><div className="mt-2 max-h-44 space-y-1 overflow-y-auto">{selectableUsers.map((user) => <label key={user.id} className="flex cursor-pointer items-start gap-2 rounded-lg p-2 hover:bg-slate-50"><input className="mt-0.5" type="checkbox" checked={selectedUserIds.includes(user.id)} onChange={() => setSelectedUserIds((current) => current.includes(user.id) ? current.filter((id) => id !== user.id) : [...current, user.id])}/><span className="text-[10px] font-bold text-slate-700">{user.name}<span className="block text-[9px] font-medium text-slate-400">{user.vendors?.name || '-'}{user.national_id ? ` • ${user.national_id}` : ''}</span></span></label>)}{selectableUsers.length === 0 && <p className="py-4 text-center text-[10px] font-bold text-slate-400">ไม่พบผู้ใช้</p>}</div><p className="mt-2 text-[9px] font-bold text-slate-500">เลือกแล้ว {selectedUserIds.length} คน</p></div>}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><select aria-label="ประเภทผู้ใช้" value={participantType} onChange={(e) => setParticipantType(e.target.value as SupplierOutsourceType)} className="rounded-xl border border-slate-200 p-3 text-xs font-bold"><option value="supplier">Supplier</option><option value="outsource">Outsource</option></select><select aria-label="ลักษณะงาน" value={workType} onChange={(e) => setWorkType(e.target.value as SupplierOutsourceWorkType)} className="rounded-xl border border-slate-200 p-3 text-xs font-bold"><option>Driver</option><option>Passenger</option><option>Trainee</option></select><input aria-label="วันที่เริ่มสิทธิ์" type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setEndDate(addOneYearIsoDate(e.target.value)); }} className="rounded-xl border border-slate-200 p-3 text-xs font-bold"/><input aria-label="วันที่สิ้นสุดสิทธิ์" type="date" min={startDate || undefined} value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-xl border border-slate-200 p-3 text-xs font-bold"/></div><button onClick={saveAccess} disabled={saving || selectedUserIds.length === 0} aria-describedby={selectedUserIds.length === 0 ? 'supplier-access-disabled-reason' : undefined} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-4 text-[10px] font-black uppercase tracking-widest text-white disabled:opacity-50">{saving ? <Loader2 size={16} className="animate-spin"/> : <ShieldCheck size={16}/>} บันทึกสิทธิ์ {selectedUserIds.length > 1 ? `${selectedUserIds.length} คน` : ''}</button>{selectedUserIds.length === 0 && <p id="supplier-access-disabled-reason" className="text-center text-[9px] font-bold text-amber-700" role="status">เลือกผู้ใช้อย่างน้อย 1 คนก่อนบันทึกสิทธิ์</p>}</div></div></div>}
     </div>

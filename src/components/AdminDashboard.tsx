@@ -303,7 +303,7 @@ const AdminDashboard: React.FC<{
             <button 
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
-                className="flex items-center gap-1 p-2 md:px-3 md:py-1.5 rounded-xl border border-slate-200 bg-white text-slate-600 disabled:opacity-50 disabled:bg-slate-50 hover:bg-slate-100 hover:text-blue-600 transition-all shadow-sm font-bold text-xs"
+                className="flex min-h-11 min-w-11 items-center justify-center gap-1 p-2 md:px-3 md:py-1.5 rounded-xl border border-slate-200 bg-white text-slate-600 disabled:opacity-50 disabled:bg-slate-50 hover:bg-slate-100 hover:text-blue-600 transition-all shadow-sm font-bold text-xs"
             >
                 <ChevronLeft size={16} /> <span className="hidden md:inline">ก่อนหน้า</span>
             </button>
@@ -313,7 +313,7 @@ const AdminDashboard: React.FC<{
             <button 
                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages || totalPages === 0}
-                className="flex items-center gap-1 p-2 md:px-3 md:py-1.5 rounded-xl border border-slate-200 bg-white text-slate-600 disabled:opacity-50 disabled:bg-slate-50 hover:bg-slate-100 hover:text-blue-600 transition-all shadow-sm font-bold text-xs"
+                className="flex min-h-11 min-w-11 items-center justify-center gap-1 p-2 md:px-3 md:py-1.5 rounded-xl border border-slate-200 bg-white text-slate-600 disabled:opacity-50 disabled:bg-slate-50 hover:bg-slate-100 hover:text-blue-600 transition-all shadow-sm font-bold text-xs"
             >
                 <span className="hidden md:inline">ถัดไป</span> <ChevronRight size={16} />
             </button>
@@ -398,7 +398,7 @@ const AdminDashboard: React.FC<{
               </div>
             )}
           </div>
-          <button onClick={fetchData} title="รีเฟรชข้อมูล (Refresh)" className="p-3.5 bg-slate-100 text-slate-500 rounded-2xl hover:bg-blue-50 hover:text-blue-600 transition-all active:scale-90 flex-shrink-0">
+          <button onClick={fetchData} title="รีเฟรชข้อมูล (Refresh)" aria-label="รีเฟรชข้อมูล Dashboard" className="min-h-11 min-w-11 p-3.5 bg-slate-100 text-slate-500 rounded-2xl hover:bg-blue-50 hover:text-blue-600 transition-all active:scale-90 flex-shrink-0">
             <RotateCcw size={18} />
           </button>
         </div>
@@ -507,7 +507,7 @@ const AdminDashboard: React.FC<{
           {onNavigateToUsers && (
             <button
               onClick={onNavigateToUsers}
-              className="flex items-center gap-2 bg-rose-500 hover:bg-rose-600 text-white px-5 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-rose-200 whitespace-nowrap shrink-0"
+              className="flex min-h-11 items-center gap-2 bg-rose-500 hover:bg-rose-600 text-white px-5 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-rose-200 whitespace-nowrap shrink-0"
             >
               จัดการ <ArrowRight size={14}/>
             </button>
@@ -657,7 +657,34 @@ const AdminDashboard: React.FC<{
         {/* ✅ Pagination Top */}
         {renderPagination('top')}
 
-        <div className="overflow-x-auto">
+        <div className="grid gap-3 p-4 sm:grid-cols-2 xl:hidden">
+          {paginatedData.length > 0 ? paginatedData.map((item) => (
+            <article key={item.id} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm" aria-label={`ผลสอบของ ${item.users?.name || 'ผู้ใช้'}`}>
+              <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-sm font-black uppercase text-blue-700">
+                    {item.users?.name?.charAt(0) || '?'}
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="truncate text-sm font-black text-slate-900">{item.users?.name || '-'}</h3>
+                    <p className="mt-0.5 truncate text-[9px] font-bold text-slate-400">{item.users?.vendors?.name || 'ไม่มีสังกัด'}</p>
+                  </div>
+                </div>
+                <span className={`shrink-0 rounded-xl border px-2.5 py-1.5 text-[8px] font-black ${item.status === 'PASSED' ? 'border-emerald-100 bg-emerald-50 text-emerald-700' : 'border-red-100 bg-red-50 text-red-700'}`}>
+                  {item.status === 'PASSED' ? 'ผ่าน' : 'ไม่ผ่าน'}
+                </span>
+              </div>
+              <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-[10px]">
+                <div><dt className="font-black text-slate-400">หลักสูตร</dt><dd className="mt-1 font-bold text-slate-700">{item.exam_type?.replace('_', ' ') || '-'}</dd></div>
+                <div><dt className="font-black text-slate-400">คะแนน</dt><dd className={`mt-1 text-sm font-black ${item.status === 'PASSED' ? 'text-emerald-600' : 'text-red-600'}`}>{item.score ?? '-'} / {item.total_questions ?? '-'}</dd></div>
+                <div><dt className="font-black text-slate-400">สัญชาติ / อายุ</dt><dd className="mt-1 font-bold text-slate-700">{item.users?.nationality || '-'} • {item.users?.age ? `${item.users.age} ปี` : '-'}</dd></div>
+                <div><dt className="font-black text-slate-400">วันที่ทำรายการ</dt><dd className="mt-1 font-bold text-slate-700">{new Date(item.created_at).toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: 'numeric' })}<span className="block text-[9px] text-slate-400">{new Date(item.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</span></dd></div>
+              </dl>
+            </article>
+          )) : <AsyncState compact variant="empty" title="ไม่พบประวัติการสอบ" description="ลองเปลี่ยนคำค้นหา วันที่ สถานะ หรือหลักสูตรที่เลือก" />}
+        </div>
+
+        <div className="hidden overflow-x-auto xl:block">
           <table className="w-full text-left min-w-[800px]">
             <thead>
               <tr className="bg-slate-50/50 border-b border-slate-100">

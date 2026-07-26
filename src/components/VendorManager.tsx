@@ -575,7 +575,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
             <button 
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
-                className="flex items-center gap-1 p-2 md:px-3 md:py-1.5 rounded-xl border border-slate-200 bg-white text-slate-600 disabled:opacity-50 disabled:bg-slate-50 hover:bg-slate-100 hover:text-blue-600 transition-all shadow-sm font-bold text-xs"
+                className="flex min-h-11 min-w-11 items-center justify-center gap-1 p-2 md:px-3 md:py-1.5 rounded-xl border border-slate-200 bg-white text-slate-600 disabled:opacity-50 disabled:bg-slate-50 hover:bg-slate-100 hover:text-blue-600 transition-all shadow-sm font-bold text-xs"
             >
                 <ChevronLeft size={16} /> <span className="hidden md:inline">ก่อนหน้า</span>
             </button>
@@ -585,7 +585,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
             <button 
                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages || totalPages === 0}
-                className="flex items-center gap-1 p-2 md:px-3 md:py-1.5 rounded-xl border border-slate-200 bg-white text-slate-600 disabled:opacity-50 disabled:bg-slate-50 hover:bg-slate-100 hover:text-blue-600 transition-all shadow-sm font-bold text-xs"
+                className="flex min-h-11 min-w-11 items-center justify-center gap-1 p-2 md:px-3 md:py-1.5 rounded-xl border border-slate-200 bg-white text-slate-600 disabled:opacity-50 disabled:bg-slate-50 hover:bg-slate-100 hover:text-blue-600 transition-all shadow-sm font-bold text-xs"
             >
                 <span className="hidden md:inline">ถัดไป</span> <ChevronRight size={16} />
             </button>
@@ -649,28 +649,28 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                 <div className="flex items-center gap-1.5 w-full md:w-auto flex-wrap">
                   <button
                     onClick={() => setCertFilter('')}
-                    className={`flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-wide border transition-all active:scale-95 ${certFilter === '' ? 'bg-slate-900 text-white border-slate-900 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
+                    className={`min-h-11 flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-wide border transition-all active:scale-95 ${certFilter === '' ? 'bg-slate-900 text-white border-slate-900 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
                   >
                     <Users size={13}/><span className="hidden sm:inline">ทั้งหมด</span>
                     {userStats && <span className="ml-1 opacity-60 font-medium text-[9px]">{userStats.total}</span>}
                   </button>
                   <button
                     onClick={() => setCertFilter('NO_CERT')}
-                    className={`flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-wide border transition-all active:scale-95 ${certFilter === 'NO_CERT' ? 'bg-rose-500 text-white border-rose-500 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
+                    className={`min-h-11 flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-wide border transition-all active:scale-95 ${certFilter === 'NO_CERT' ? 'bg-rose-500 text-white border-rose-500 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
                   >
                     <ShieldAlert size={13}/><span className="hidden sm:inline">ไม่มี/หมดอายุ</span>
                     {userStats && <span className="ml-1 opacity-60 font-medium text-[9px]">{userStats.noCert + userStats.expired}</span>}
                   </button>
                   <button
                     onClick={() => setCertFilter('EXPIRING')}
-                    className={`flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-wide border transition-all active:scale-95 ${certFilter === 'EXPIRING' ? 'bg-amber-500 text-white border-amber-500 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
+                    className={`min-h-11 flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-wide border transition-all active:scale-95 ${certFilter === 'EXPIRING' ? 'bg-amber-500 text-white border-amber-500 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
                   >
                     <Clock size={13}/><span className="hidden sm:inline">ใกล้หมด</span>
                     {userStats && <span className="ml-1 opacity-60 font-medium text-[9px]">{userStats.expiring}</span>}
                   </button>
                   <button
                     onClick={() => setCertFilter('HAS_CERT')}
-                    className={`flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-wide border transition-all active:scale-95 ${certFilter === 'HAS_CERT' ? 'bg-emerald-500 text-white border-emerald-500 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
+                    className={`min-h-11 flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-wide border transition-all active:scale-95 ${certFilter === 'HAS_CERT' ? 'bg-emerald-500 text-white border-emerald-500 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
                   >
                     <ShieldCheck size={13}/><span className="hidden sm:inline">มีใบเซอร์</span>
                     {userStats && <span className="ml-1 opacity-60 font-medium text-[9px]">{userStats.valid}</span>}
@@ -688,15 +688,15 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                 <button 
                   onClick={() => (activeTab === 'USERS' ? userFileInputRef : vendorFileInputRef).current?.click()} 
                   disabled={activeTab === 'USERS' ? importingUsers : importingVendors}
-                  className="flex-1 md:flex-none bg-emerald-50 text-emerald-600 border border-emerald-100 px-4 py-3 rounded-xl font-black text-[10px] uppercase hover:bg-emerald-100 transition-all flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="min-h-11 flex-1 md:flex-none bg-emerald-50 text-emerald-600 border border-emerald-100 px-4 py-3 rounded-xl font-black text-[10px] uppercase hover:bg-emerald-100 transition-all flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {(activeTab === 'USERS' ? importingUsers : importingVendors) ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14}/>} 
                   {(activeTab === 'USERS' ? importingUsers : importingVendors) ? 'นำเข้า...' : 'Import'}
                 </button>
                 
-                <button onClick={handleExport} className="flex-1 md:flex-none bg-white text-slate-600 border border-slate-200 px-4 py-3 rounded-xl font-black text-[10px] uppercase hover:bg-slate-50 transition-all flex items-center justify-center gap-2 shadow-sm"><Download size={14}/> Export</button>
+                <button onClick={handleExport} className="min-h-11 flex-1 md:flex-none bg-white text-slate-600 border border-slate-200 px-4 py-3 rounded-xl font-black text-[10px] uppercase hover:bg-slate-50 transition-all flex items-center justify-center gap-2 shadow-sm"><Download size={14}/> Export</button>
                 <button onClick={() => loadData()} className="flex-none min-h-11 min-w-11 p-3 bg-slate-50 text-slate-400 rounded-xl hover:text-blue-600 transition-all active:scale-95 shadow-sm" aria-label="รีเฟรชข้อมูล"><RotateCcw size={18}/></button>
-                <button onClick={activeTab === 'USERS' ? handleAddUser : handleAddVendor} className="w-full sm:w-auto bg-blue-600 text-white px-6 py-3 rounded-xl font-black text-[10px] uppercase hover:bg-slate-900 transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2"><Plus size={14}/> New Entry</button>
+                <button onClick={activeTab === 'USERS' ? handleAddUser : handleAddVendor} className="min-h-11 w-full sm:w-auto bg-blue-600 text-white px-6 py-3 rounded-xl font-black text-[10px] uppercase hover:bg-slate-900 transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2"><Plus size={14}/> New Entry</button>
               </>
             )}
           </div>
@@ -704,16 +704,16 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
 
         {/* Bulk Actions Bar */}
         {activeTab === 'USERS' && selectedIds.size > 0 && (
-          <div className="mx-4 mt-3 bg-slate-900 text-white px-4 py-3 rounded-2xl flex items-center justify-between gap-3 shadow-lg animate-in fade-in duration-200">
+          <div className="mx-4 mt-3 bg-slate-900 text-white px-4 py-3 rounded-2xl flex flex-col items-stretch justify-between gap-3 shadow-lg animate-in fade-in duration-200 sm:flex-row sm:items-center">
             <span className="text-xs font-black">{selectedIds.size} รายการที่เลือก</span>
-            <div className="flex gap-2">
-              <button onClick={() => handleBulkExport(filtered)} disabled={bulkLoading} className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95">
+            <div className="grid grid-cols-[1fr_1fr_44px] gap-2">
+              <button onClick={() => handleBulkExport(filtered)} disabled={bulkLoading} className="flex min-h-11 items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95">
                 <Download size={12}/> Export ที่เลือก
               </button>
-              <button onClick={handleBulkReset} disabled={bulkLoading} className="flex items-center gap-1.5 bg-amber-500/80 hover:bg-amber-500 text-white px-3 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95">
+              <button onClick={handleBulkReset} disabled={bulkLoading} className="flex min-h-11 items-center gap-1.5 bg-amber-500/80 hover:bg-amber-500 text-white px-3 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95">
                 {bulkLoading ? <Loader2 size={12} className="animate-spin"/> : <RotateCcw size={12}/>} Reset Training
               </button>
-              <button onClick={() => setSelectedIds(new Set())} className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 transition-all active:scale-95">
+              <button onClick={() => setSelectedIds(new Set())} aria-label="ล้างรายการที่เลือก" className="min-h-11 min-w-11 p-1.5 rounded-xl bg-white/10 hover:bg-white/20 transition-all active:scale-95">
                 <X size={14}/>
               </button>
             </div>
@@ -735,7 +735,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
               {renderPagination('top')}
 
               {/* 🖥️ DESKTOP VIEW (TABLE) */}
-              <div className="hidden lg:block overflow-x-auto w-full flex-1">
+              <div className="hidden xl:block overflow-x-auto w-full flex-1">
                 <table className="w-full text-left min-w-[900px]">
                   <thead className="bg-slate-50/50 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100 sticky top-0 z-10">
                     <tr>
@@ -877,7 +877,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
               </div>
 
               {/* 📱 MOBILE VIEW (CARDS) */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 lg:hidden flex-1 pb-4 pt-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 xl:hidden flex-1 pb-4 pt-3">
                  {activeTab === 'LOGS' ? (
                     paginatedData.map((log: any) => (
                       <div key={log.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
@@ -978,24 +978,25 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                          {/* Card Actions */}
                          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
                             {activeTab === 'VENDORS' && item.status !== 'APPROVED' && (
-                              <button onClick={() => handleUpdateVendorStatus(item.id, item.name, 'APPROVED')} className="p-2.5 rounded-xl bg-emerald-500 text-white hover:bg-emerald-600 active:scale-90 transition-all"><CheckCircle size={14} /></button>
+                              <button onClick={() => handleUpdateVendorStatus(item.id, item.name, 'APPROVED')} aria-label={`อนุมัติบริษัท ${item.name}`} className="min-h-11 min-w-11 p-2.5 rounded-xl bg-emerald-500 text-white hover:bg-emerald-600 active:scale-90 transition-all"><CheckCircle size={14} /></button>
                             )}
                             {activeTab === 'VENDORS' && item.status === 'PENDING' && (
-                              <button onClick={() => handleUpdateVendorStatus(item.id, item.name, 'REJECTED')} className="p-2.5 rounded-xl border border-red-200 text-red-500 bg-red-50 active:scale-90 transition-all"><Ban size={14} /></button>
+                              <button onClick={() => handleUpdateVendorStatus(item.id, item.name, 'REJECTED')} aria-label={`ไม่อนุมัติบริษัท ${item.name}`} className="min-h-11 min-w-11 p-2.5 rounded-xl border border-red-200 text-red-500 bg-red-50 active:scale-90 transition-all"><Ban size={14} /></button>
                             )}
-                            <button onClick={() => activeTab === 'VENDORS' ? handleEditVendor(item.id, item.name) : handleEditUser(item)} className="p-2.5 rounded-xl border border-slate-200 text-slate-500 bg-white active:scale-90 transition-all"><Edit3 size={14} /></button>
+                            <button onClick={() => activeTab === 'VENDORS' ? handleEditVendor(item.id, item.name) : handleEditUser(item)} aria-label={`แก้ไข ${item.name}`} className="min-h-11 min-w-11 p-2.5 rounded-xl border border-slate-200 text-slate-500 bg-white active:scale-90 transition-all"><Edit3 size={14} /></button>
                             {activeTab === 'USERS' && (
                               <>
-                                <button onClick={() => handleResetTraining(item.id, item.name)} className="p-2.5 rounded-xl border border-amber-200 text-amber-500 bg-amber-50 active:scale-90 transition-all"><RotateCcw size={14} /></button>
+                                <button onClick={() => handleResetTraining(item.id, item.name)} aria-label={`รีเซ็ตการอบรมของ ${item.name}`} className="min-h-11 min-w-11 p-2.5 rounded-xl border border-amber-200 text-amber-500 bg-amber-50 active:scale-90 transition-all"><RotateCcw size={14} /></button>
                                 <button
                                     onClick={() => handleToggleUserBan(item.id, item.name, item.is_active !== false)}
-                                    className={`p-2.5 rounded-xl border transition-all active:scale-90 ${item.is_active !== false ? 'border-red-200 text-red-500 bg-red-50' : 'bg-red-500 text-white'}`}
+                                    aria-label={`${item.is_active !== false ? 'ระงับ' : 'เปิด'}ผู้ใช้ ${item.name}`}
+                                    className={`min-h-11 min-w-11 p-2.5 rounded-xl border transition-all active:scale-90 ${item.is_active !== false ? 'border-red-200 text-red-500 bg-red-50' : 'bg-red-500 text-white'}`}
                                 >
                                     {item.is_active !== false ? <ShieldAlert size={14} /> : <CheckCircle2 size={14} />}
                                 </button>
                               </>
                             )}
-                            <button onClick={() => activeTab === 'VENDORS' ? handleDeleteVendor(item.id, item.name) : handleDeleteUser(item.id, item.name)} className="p-2.5 rounded-xl border border-slate-200 text-slate-400 bg-slate-50 active:scale-90 transition-all"><Trash2 size={14} /></button>
+                            <button onClick={() => activeTab === 'VENDORS' ? handleDeleteVendor(item.id, item.name) : handleDeleteUser(item.id, item.name)} aria-label={`ลบ ${item.name}`} className="min-h-11 min-w-11 p-2.5 rounded-xl border border-slate-200 text-slate-400 bg-slate-50 active:scale-90 transition-all"><Trash2 size={14} /></button>
                          </div>
                       </div>
                       );
@@ -1079,7 +1080,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
 };
 
 const TabButton = ({ active, onClick, icon, label }: any) => (
-  <button onClick={onClick} className={`shrink-0 px-4 md:px-5 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all whitespace-nowrap active:scale-95 ${active ? 'bg-white text-blue-600 shadow-md border-b-2 border-blue-500' : 'text-slate-400 hover:text-slate-600 hover:bg-white/50'}`}>{icon} {label}</button>
+  <button onClick={onClick} className={`min-h-11 shrink-0 px-4 md:px-5 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all whitespace-nowrap active:scale-95 ${active ? 'bg-white text-blue-600 shadow-md border-b-2 border-blue-500' : 'text-slate-400 hover:text-slate-600 hover:bg-white/50'}`}>{icon} {label}</button>
 );
 
 export default VendorManager;

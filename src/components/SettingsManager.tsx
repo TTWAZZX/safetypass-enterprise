@@ -337,7 +337,7 @@ const ManualUploadCard = ({ title, type, isUploading, onUpload }: any) => (
         onChange={onUpload} 
         disabled={isUploading} 
       />
-      <div className={`w-full py-3 md:py-4 rounded-xl md:rounded-2xl font-black text-[9px] md:text-[10px] uppercase tracking-widest md:tracking-[0.2em] flex items-center justify-center gap-2 transition-all shadow-sm ${isUploading ? 'bg-slate-100 text-slate-400' : 'bg-white border border-slate-200 text-slate-900 hover:bg-slate-900 hover:text-white hover:border-slate-900'}`}>
+      <div className={`min-h-11 w-full py-3 md:py-4 rounded-xl md:rounded-2xl font-black text-[9px] md:text-[10px] uppercase tracking-widest md:tracking-[0.2em] flex items-center justify-center gap-2 transition-all shadow-sm ${isUploading ? 'bg-slate-100 text-slate-400' : 'bg-white border border-slate-200 text-slate-900 hover:bg-slate-900 hover:text-white hover:border-slate-900'}`}>
         {isUploading ? <Loader2 size={14} className="animate-spin md:w-4 md:h-4" /> : <Upload size={14} className="md:w-4 md:h-4" />}
         {isUploading ? 'Deploying...' : 'Replace Artifact'}
       </div>

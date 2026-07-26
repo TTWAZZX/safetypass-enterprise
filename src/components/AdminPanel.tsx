@@ -66,7 +66,7 @@ const AdminPanel: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-col md:flex-row min-h-screen md:min-h-[calc(100vh-64px)] bg-slate-50 text-left relative">
+    <div className="admin-shell flex flex-col md:flex-row min-h-screen md:min-h-[calc(100vh-64px)] bg-slate-50 text-left relative">
       
       {/* 🧭 SIDE NAVIGATION (สำหรับ Desktop) */}
       <aside className="w-64 bg-white border-r border-slate-200 hidden md:flex flex-col sticky top-0 h-[calc(100vh-64px)] z-10 shrink-0">
@@ -123,14 +123,14 @@ const AdminPanel: React.FC = () => {
 
 /* --- SHARED COMPONENTS --- */
 const SidebarButton = ({ icon, label, active, onClick, badge }: any) => (
-  <button onClick={onClick} className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all duration-300 active:scale-95 group ${active ? 'bg-slate-900 text-white shadow-xl shadow-slate-900/10 translate-x-1' : 'text-slate-500 hover:bg-slate-50'}`}>
+  <button onClick={onClick} className={`min-h-11 w-full flex items-center justify-between px-4 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all duration-300 active:scale-95 group ${active ? 'bg-slate-900 text-white shadow-xl shadow-slate-900/10 translate-x-1' : 'text-slate-500 hover:bg-slate-50'}`}>
     <div className="flex items-center gap-3">{icon} {label}</div>
     {badge > 0 && <span className="bg-red-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-lg animate-pulse">{badge}</span>}
   </button>
 );
 
 const MobileTab = ({ icon, label, active, onClick, badge }: any) => (
-  <button onClick={onClick} className={`flex flex-col items-center gap-1 relative flex-1 py-2 transition-all ${active ? 'text-blue-600' : 'text-slate-400'}`}>
+  <button onClick={onClick} className={`flex min-h-11 flex-col items-center justify-center gap-1 relative flex-1 py-2 transition-all ${active ? 'text-blue-600' : 'text-slate-400'}`}>
     <div className={`transition-transform duration-300 ${active ? 'scale-110 -translate-y-1' : ''}`}>{icon}</div>
     <span className="text-[8px] font-black uppercase tracking-tighter">{label}</span>
     {active && <div className="absolute bottom-0 w-1 h-1 bg-blue-600 rounded-full" />}
