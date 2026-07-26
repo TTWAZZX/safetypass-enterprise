@@ -20,6 +20,11 @@ describe('Supplier & Outsource Phase 2', () => {
     expect(payload).toContain('Supplier & Outsource');
     expect(payload).toContain('ผู้ใช้ทดสอบ');
     expect(payload).toContain('/verify?supplier=123e4567-e89b-42d3-a456-426614174000');
+    expect(payload).toContain('ดูบัตร Supplier & Outsource');
+    expect(payload).toContain('เข้าสู่ระบบ / Login');
+    expect(message.altText.length).toBeLessThanOrEqual(400);
+    expect(payload).toContain('https://safetypass-enterprise.vercel.app');
+    expect(payload).not.toMatch(/\?{3,}/);
     expect(payload).not.toContain('\uFFFD');
   });
 
@@ -42,5 +47,17 @@ describe('Supplier & Outsource Phase 2', () => {
     ]);
     expect(sheet?.getRow(3).getCell(6).value).toBe('1000000000001');
     expect(sheet?.getColumn(6).numFmt).toBe('@');
+    expect(sheet?.getColumn(7).numFmt).toBe('mm-dd-yy');
+    expect(sheet?.getColumn(8).numFmt).toBe('mm-dd-yy');
+    expect(sheet?.model.merges).toContain('A1:H1');
+    expect(Array.from({ length: 8 }, (_, index) => sheet?.getColumn(index + 1).width)).toEqual([
+      6, 54, 54, 12.15, 12.15, 17.55, 13.5, 20.25,
+    ]);
+
+    const serialized = await workbook.xlsx.writeBuffer();
+    const { default: ExcelJS } = await import('exceljs');
+    const restored = new ExcelJS.Workbook();
+    await restored.xlsx.load(serialized);
+    expect(restored.getWorksheet('Sheet1')?.getRow(3).getCell(6).value).toBe('1000000000001');
   });
 });

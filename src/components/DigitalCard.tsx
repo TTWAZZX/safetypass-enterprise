@@ -122,10 +122,10 @@ const DigitalCard: React.FC<DigitalCardProps> = ({
          </p>
       </div>
 
-      <div className="relative group touch-none">
+      <div className="relative group touch-none max-w-full">
         <div 
           ref={cardRef}
-          className={`w-[310px] ${isSupplier ? 'h-[520px]' : 'h-[480px]'} bg-gradient-to-br ${themeColor} rounded-[2.5rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.5)] overflow-hidden relative text-white border border-white/10`}
+          className={`w-[310px] max-w-[calc(100vw-2rem)] ${isSupplier ? 'h-[520px]' : 'h-[480px]'} bg-gradient-to-br ${themeColor} rounded-[2.5rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.5)] overflow-hidden relative text-white border border-white/10`}
         >
           <div className={`absolute top-0 right-0 w-40 h-40 rounded-full blur-[80px] -translate-y-1/2 translate-x-1/2 opacity-40 ${isPermit ? 'bg-pink-600' : 'bg-blue-600'}`}></div>
           <div className={`absolute bottom-0 left-0 w-40 h-40 rounded-full blur-[80px] translate-y-1/2 -translate-x-1/2 opacity-30 ${isPermit ? 'bg-indigo-600' : 'bg-emerald-600'}`}></div>

@@ -213,6 +213,20 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
       showToast('วันที่สิ้นสุดต้องไม่น้อยกว่าวันที่เริ่มต้น', 'error');
       return;
     }
+    const accessChanged = Boolean(supplierStatus) && (
+      supplierParticipantType !== supplierStatus?.participant_type
+      || supplierWorkType !== supplierStatus?.work_type
+      || supplierStartDate !== (supplierStatus?.access_start_date || '')
+      || supplierEndDate !== (supplierStatus?.access_end_date || '')
+    );
+    const hasActivePass = Boolean(
+      supplierStatus?.verification_token
+      && supplierStatus.expires_at
+      && new Date(supplierStatus.expires_at) > new Date()
+    );
+    if (accessChanged && hasActivePass && !window.confirm(
+      'การเปลี่ยนประเภทผู้ใช้ ประเภทงาน หรือช่วงวันที่ จะยกเลิกบัตรเดิมและต้องสอบใหม่ ต้องการดำเนินการต่อหรือไม่?'
+    )) return;
     setSupplierSaving(true);
     try {
       await mockApi.addMySupplierOutsourceAccess({
@@ -223,7 +237,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
       });
       await loadSupplierStatus();
       setShowSupplierEnrollment(false);
-      showToast('เพิ่มสิทธิ์ Supplier & Outsource เรียบร้อยแล้ว', 'success');
+      showToast(supplierStatus ? 'อัปเดตสิทธิ์ Supplier & Outsource เรียบร้อยแล้ว' : 'เพิ่มสิทธิ์ Supplier & Outsource เรียบร้อยแล้ว', 'success');
     } catch (error: any) {
       showToast('เพิ่มสิทธิ์ไม่สำเร็จ: ' + error.message, 'error');
     } finally {
