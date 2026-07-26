@@ -655,7 +655,17 @@ const SupplierMetricCard = ({ label, value, detail, color }: {
   );
 };
 
-const StatCard = ({ icon, label, value, color, trend, description, glow }: any) => {
+type StatIcon = React.ReactElement<{ size?: number; className?: string; strokeWidth?: number }>;
+
+const StatCard = ({ icon, label, value, color, trend, description, glow }: {
+  icon: StatIcon;
+  label: string;
+  value: number;
+  color: 'blue' | 'emerald' | 'amber' | 'red';
+  trend: string;
+  description: string;
+  glow?: string;
+}) => {
   const styles: any = {
     blue: { box: 'bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white', badge: 'bg-blue-50 text-blue-600 border-blue-100' },
     emerald: { box: 'bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white', badge: 'bg-emerald-50 text-emerald-600 border-emerald-100' },
@@ -668,12 +678,12 @@ const StatCard = ({ icon, label, value, color, trend, description, glow }: any) 
   return (
     <div className={`bg-white p-4 sm:p-6 rounded-[2rem] sm:rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col gap-3 sm:gap-4 group hover:border-blue-500 hover:shadow-2xl transition-all duration-500 cursor-default relative overflow-hidden ${glow}`}>
       <div className={`absolute -right-4 -top-4 sm:-right-6 sm:-top-6 opacity-[0.03] group-hover:scale-150 group-hover:rotate-12 transition-transform duration-1000`}>
-          {React.cloneElement(icon as React.ReactElement, { size: 120, className: "sm:w-[160px] sm:h-[160px]" })}
+          {React.cloneElement(icon, { size: 120, className: "sm:w-[160px] sm:h-[160px]" })}
       </div>
       
       <div className="flex justify-between items-start relative z-10">
         <div className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl transition-all duration-500 shadow-inner ${c.box}`}>
-          {React.cloneElement(icon as React.ReactElement, { className: "w-5 h-5 sm:w-6 sm:h-6", strokeWidth: 2.5 })}
+          {React.cloneElement(icon, { className: "w-5 h-5 sm:w-6 sm:h-6", strokeWidth: 2.5 })}
         </div>
         <span className={`text-[7px] sm:text-[8px] font-black px-2 py-1 sm:px-2.5 rounded-md sm:rounded-lg border uppercase tracking-tighter max-w-[50%] truncate text-right ${c.badge}`}>
             {trend}

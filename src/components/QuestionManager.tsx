@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../services/supabaseApi';
 import { supabase } from '../services/supabaseClient';
-import { QuestionPattern } from '../types'; 
+import { ExamType, Question, QuestionPattern } from '../types'; 
 import { readFirstWorksheetRows } from '../services/excelImport';
 import { 
   Plus, Save, Trash2, BookOpen, Ticket, Loader2, 
@@ -19,7 +19,7 @@ const QuestionManager: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
 
-  const [examType, setExamType] = useState('INDUCTION');
+  const [examType, setExamType] = useState<ExamType>(ExamType.INDUCTION);
   const [pattern, setPattern] = useState<QuestionPattern>(QuestionPattern.MULTIPLE_CHOICE);
   const [th, setTh] = useState('');
   const [en, setEn] = useState('');
@@ -103,7 +103,7 @@ const QuestionManager: React.FC = () => {
 
   const handleEdit = (q: any) => {
     setEditingId(q.id);
-    setExamType(q.type);
+    setExamType(q.type as ExamType);
     const qPattern = q.pattern || QuestionPattern.MULTIPLE_CHOICE;
     setPattern(qPattern as QuestionPattern);
     setTh(q.content_th);
@@ -146,7 +146,7 @@ const QuestionManager: React.FC = () => {
 
   const handleSave = async () => {
     if(!th || !en) return alert("กรุณากรอกโจทย์");
-    let finalChoices = choices;
+    let finalChoices: any[] = choices;
     let correctIndex = choices.findIndex(c => c.is_correct);
 
     if (pattern === QuestionPattern.SHORT_ANSWER) {
@@ -171,7 +171,7 @@ const QuestionManager: React.FC = () => {
     }
 
     const imageUrl = await uploadImageToSupabase();
-    const payload = { 
+    const payload: Partial<Question> = { 
         type: examType, 
         pattern: pattern, 
         content_th: th, 
@@ -290,9 +290,9 @@ const QuestionManager: React.FC = () => {
                     <input placeholder="Question in English" value={en} onChange={e=>setEn(e.target.value)} className="w-full p-4 border border-slate-200 rounded-2xl text-base md:text-sm font-bold bg-white outline-none focus:border-blue-500" />
                 </div>
                 <div className="flex bg-slate-100 p-1.5 rounded-2xl">
-                    <button onClick={() => setExamType('INDUCTION')} className={`min-h-11 flex-1 py-3 rounded-xl font-black text-[10px] transition-all ${examType === 'INDUCTION' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>INDUCTION</button>
-                    <button onClick={() => setExamType('WORK_PERMIT')} className={`min-h-11 flex-1 py-3 rounded-xl font-black text-[10px] transition-all ${examType === 'WORK_PERMIT' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>WORK PERMIT</button>
-                    <button onClick={() => setExamType('SUPPLIER_OUTSOURCE')} className={`min-h-11 flex-1 py-3 rounded-xl font-black text-[9px] transition-all ${examType === 'SUPPLIER_OUTSOURCE' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>SUPPLIER & OUTSOURCE</button>
+                    <button onClick={() => setExamType(ExamType.INDUCTION)} className={`min-h-11 flex-1 py-3 rounded-xl font-black text-[10px] transition-all ${examType === ExamType.INDUCTION ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>INDUCTION</button>
+                    <button onClick={() => setExamType(ExamType.WORK_PERMIT)} className={`min-h-11 flex-1 py-3 rounded-xl font-black text-[10px] transition-all ${examType === ExamType.WORK_PERMIT ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>WORK PERMIT</button>
+                    <button onClick={() => setExamType(ExamType.SUPPLIER_OUTSOURCE)} className={`min-h-11 flex-1 py-3 rounded-xl font-black text-[9px] transition-all ${examType === ExamType.SUPPLIER_OUTSOURCE ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>SUPPLIER & OUTSOURCE</button>
                 </div>
             </div>
             <div className="space-y-4">
