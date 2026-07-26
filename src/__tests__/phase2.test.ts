@@ -1,0 +1,46 @@
+import { describe, expect, it } from 'vitest';
+import { createSupplierOutsourcePassMessage } from '../../api/_lineMessages.js';
+import { createSupplierOutsourceWorkbook, sanitizeExcelText } from '../services/excelExport';
+
+describe('Supplier & Outsource Phase 2', () => {
+  it('creates a LINE Flex message with supported URI buttons and Thai UTF-8 text', () => {
+    const message = createSupplierOutsourcePassMessage({
+      name: 'ผู้ใช้ทดสอบ',
+      vendor: 'บริษัท ทดสอบ จำกัด',
+      participantType: 'supplier',
+      workType: 'Driver',
+      score: 9,
+      totalQuestions: 10,
+      testDate: '2026-07-26T00:00:00.000Z',
+      expiryDate: '2027-07-26T23:59:59.000Z',
+      verificationToken: '123e4567-e89b-42d3-a456-426614174000',
+    });
+    const payload = JSON.stringify(message);
+    expect(message.type).toBe('flex');
+    expect(payload).toContain('Supplier & Outsource');
+    expect(payload).toContain('ผู้ใช้ทดสอบ');
+    expect(payload).toContain('/verify?supplier=123e4567-e89b-42d3-a456-426614174000');
+    expect(payload).not.toContain('\uFFFD');
+  });
+
+  it('prevents spreadsheet formulas while preserving ordinary values', () => {
+    expect(sanitizeExcelText('=HYPERLINK("https://example.com")')).toBe('\'=HYPERLINK("https://example.com")');
+    expect(sanitizeExcelText('+SUM(1,2)')).toBe("'+SUM(1,2)");
+    expect(sanitizeExcelText('บริษัท ทดสอบ จำกัด')).toBe('บริษัท ทดสอบ จำกัด');
+  });
+
+  it('creates the Supplier Epass workbook with the sample column order', async () => {
+    const workbook = await createSupplierOutsourceWorkbook([{
+      company: 'บริษัท ทดสอบ จำกัด', name: 'ผู้ใช้ทดสอบ', participant_type: 'supplier',
+      work_type: 'Driver', national_id: '1000000000001',
+      test_date: '2026-07-26T00:00:00.000Z', expiration_date: '2027-07-26T00:00:00.000Z',
+    }]);
+    const sheet = workbook.getWorksheet('Sheet1');
+    expect(sheet?.getRow(1).getCell(1).value).toBe(' Supplier Epass | Check Member');
+    expect(sheet?.getRow(2).values).toEqual([
+      undefined, 'No.', 'Company', 'Name', 'Type', 'Work Type', 'ID card', 'Test Date', 'Expiration Date',
+    ]);
+    expect(sheet?.getRow(3).getCell(6).value).toBe('1000000000001');
+    expect(sheet?.getColumn(6).numFmt).toBe('@');
+  });
+});

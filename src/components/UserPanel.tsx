@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { User, WorkPermitSession, ExamType } from '../types';
+import {
+  User, WorkPermitSession, ExamType, SupplierOutsourceStatus,
+  SupplierOutsourceType, SupplierOutsourceWorkType,
+} from '../types';
 import { api as mockApi } from '../services/supabaseApi';
 import { supabase } from '../services/supabaseClient'; 
 import { useTranslation } from '../context/LanguageContext';
@@ -63,13 +66,21 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
   const { t, language } = useTranslation();
   const { showToast } = useToastContext();
 
-  const [activeStage, setActiveStage] = useState<'IDLE' | 'INDUCTION' | 'WORK_PERMIT'>('IDLE');
+  const [activeStage, setActiveStage] = useState<'IDLE' | 'INDUCTION' | 'WORK_PERMIT' | 'SUPPLIER_OUTSOURCE'>('IDLE');
   const [activePermit, setActivePermit] = useState<WorkPermitSession | null>(null);
   const [showQRFullScreen, setShowQRFullScreen] = useState(false);
   const [viewingManual, setViewingManual] = useState<ExamType | null>(null);
   const [showCard, setShowCard] = useState(false);
-  const [cardType, setCardType] = useState<'INDUCTION' | 'WORK_PERMIT'>('INDUCTION');
+  const [cardType, setCardType] = useState<'INDUCTION' | 'WORK_PERMIT' | 'SUPPLIER_OUTSOURCE'>('INDUCTION');
   const [showHistory, setShowHistory] = useState(false);
+  const [supplierOutsourceEnabled, setSupplierOutsourceEnabled] = useState(false);
+  const [supplierStatus, setSupplierStatus] = useState<SupplierOutsourceStatus | null>(null);
+  const [showSupplierEnrollment, setShowSupplierEnrollment] = useState(false);
+  const [supplierParticipantType, setSupplierParticipantType] = useState<SupplierOutsourceType>('supplier');
+  const [supplierWorkType, setSupplierWorkType] = useState<SupplierOutsourceWorkType>('Driver');
+  const [supplierStartDate, setSupplierStartDate] = useState('');
+  const [supplierEndDate, setSupplierEndDate] = useState('');
+  const [supplierSaving, setSupplierSaving] = useState(false);
 
   // Profile Edit States
   const [isEditing, setIsEditing] = useState(false);
@@ -132,6 +143,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
         .eq('id', user.id);
 
       if (error) throw error;
+      if (profile.userId) await mockApi.linkMyLineIdentity(profile.userId);
 
       // 2. อัปเดตหน้าจอให้เปลี่ยนรูปทันที
       onUserUpdate({ ...user, avatar_url: newAvatarUrl });
@@ -174,6 +186,51 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
     fetchPermit();
   }, [user.id]);
 
+  const loadSupplierStatus = async () => {
+    try {
+      const flags = await mockApi.getPublicFeatureFlags();
+      setSupplierOutsourceEnabled(flags.supplierOutsourceEnabled);
+      if (flags.supplierOutsourceEnabled) setSupplierStatus(await mockApi.getMySupplierOutsourceStatus());
+    } catch (error) {
+      console.error('Supplier and Outsource status error:', error);
+    }
+  };
+
+  useEffect(() => {
+    loadSupplierStatus();
+  }, [user.id]);
+
+  useEffect(() => {
+    if (!supplierStatus) return;
+    setSupplierParticipantType(supplierStatus.participant_type);
+    setSupplierWorkType(supplierStatus.work_type);
+    setSupplierStartDate(supplierStatus.access_start_date || '');
+    setSupplierEndDate(supplierStatus.access_end_date || '');
+  }, [supplierStatus]);
+
+  const handleSupplierEnrollment = async () => {
+    if (supplierStartDate && supplierEndDate && supplierEndDate < supplierStartDate) {
+      showToast('วันที่สิ้นสุดต้องไม่น้อยกว่าวันที่เริ่มต้น', 'error');
+      return;
+    }
+    setSupplierSaving(true);
+    try {
+      await mockApi.addMySupplierOutsourceAccess({
+        participantType: supplierParticipantType,
+        workType: supplierWorkType,
+        accessStartDate: supplierStartDate || undefined,
+        accessEndDate: supplierEndDate || undefined,
+      });
+      await loadSupplierStatus();
+      setShowSupplierEnrollment(false);
+      showToast('เพิ่มสิทธิ์ Supplier & Outsource เรียบร้อยแล้ว', 'success');
+    } catch (error: any) {
+      showToast('เพิ่มสิทธิ์ไม่สำเร็จ: ' + error.message, 'error');
+    } finally {
+      setSupplierSaving(false);
+    }
+  };
+
   // ✅ 2. ดึงรายชื่อบริษัททั้งหมดมาเก็บไว้ทำ Dropdown ตอนกด Edit
   useEffect(() => {
     const fetchVendorsList = async () => {
@@ -202,6 +259,9 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
 
   const hasInduction = user.induction_expiry && new Date(user.induction_expiry) > new Date();
   const isNearExpiry = user.induction_expiry && (new Date(user.induction_expiry).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24) < 30;
+  const supplierPassActive = Boolean(supplierStatus?.expires_at && new Date(supplierStatus.expires_at) > new Date());
+  const supplierPassNearExpiry = Boolean(supplierStatus?.expires_at
+    && (new Date(supplierStatus.expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24) < 30);
 
   // ✅ 3.1 ฟังก์ชันบันทึกข้อมูล (รวมอัปเดต Vendor ID และ วันเกิด ลง Database)
   const handleUpdateProfile = async () => {
@@ -286,14 +346,14 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
   };
 
   // ✅ Focus Mode Render: ซ่อนทุกอย่างเพื่อโชว์หน้าเฉพาะทาง
-  if (showCard) return <DigitalCard user={user} onBack={() => setShowCard(false)} type={cardType} permit={activePermit} />;
+  if (showCard) return <DigitalCard user={user} onBack={() => setShowCard(false)} type={cardType} permit={activePermit} supplierStatus={supplierStatus} />;
   if (showHistory) return <ExamHistory userId={user.id} onBack={() => setShowHistory(false)} />;
   
   if (activeStage !== 'IDLE' && !isBanned) {
     return (
       <div className="animate-in fade-in zoom-in-95 duration-300">
         <ExamSystem
-          type={activeStage === 'INDUCTION' ? ExamType.INDUCTION : ExamType.WORK_PERMIT}
+          type={activeStage === 'INDUCTION' ? ExamType.INDUCTION : activeStage === 'WORK_PERMIT' ? ExamType.WORK_PERMIT : ExamType.SUPPLIER_OUTSOURCE}
           user={user}
           onComplete={(u) => {
             onUserUpdate(u);
@@ -321,6 +381,13 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
                     setCardType('WORK_PERMIT');
                     setShowCard(true);
                 }, 1500);
+            }
+            if (activeStage === 'SUPPLIER_OUTSOURCE') {
+                setTimeout(async () => {
+                    await loadSupplierStatus();
+                    setCardType('SUPPLIER_OUTSOURCE');
+                    setShowCard(true);
+                }, 1000);
             }
           }}
           onBack={() => setActiveStage('IDLE')}
@@ -595,6 +662,44 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
               color="indigo"
             />
 
+            {supplierOutsourceEnabled && (
+              <div className="rounded-[2rem] border border-emerald-100 bg-white p-5 shadow-sm">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-start gap-4">
+                    <div className="rounded-2xl bg-emerald-50 p-3 text-emerald-600"><ShieldCheck size={24}/></div>
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h4 className="text-sm font-black uppercase text-slate-900">Supplier & Outsource</h4>
+                        <span className={`rounded-full px-2 py-1 text-[8px] font-black uppercase ${supplierPassActive ? 'bg-emerald-100 text-emerald-700' : supplierStatus ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
+                          {supplierPassActive ? (supplierPassNearExpiry ? 'ใกล้หมดอายุ' : 'ผ่าน') : supplierStatus?.last_status === 'FAILED' ? 'ไม่ผ่าน' : supplierStatus ? 'พร้อมสอบ' : 'ยังไม่มีสิทธิ์'}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-[10px] font-bold text-slate-400">
+                        {supplierStatus ? `${supplierStatus.participant_type} • ${supplierStatus.work_type}` : 'สำหรับ Supplier ส่งสินค้า/เข้าพื้นที่ชั่วคราว และ Outsource งานทั่วไป'}
+                      </p>
+                      {supplierStatus && (
+                        <div className="mt-2 flex flex-wrap gap-2 text-[9px] font-bold text-slate-500">
+                          <span>คะแนน {supplierStatus.last_score ?? '-'} / {supplierStatus.total_questions ?? '-'}</span>
+                          <span>•</span>
+                          <span>หมดอายุ {supplierStatus.expires_at ? new Date(supplierStatus.expires_at).toLocaleDateString('th-TH') : '-'}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    {supplierStatus && (
+                      <button disabled={isBanned} onClick={() => supplierPassActive && !supplierPassNearExpiry ? (setCardType('SUPPLIER_OUTSOURCE'), setShowCard(true)) : setActiveStage('SUPPLIER_OUTSOURCE')} className="flex-1 rounded-xl bg-emerald-600 px-4 py-3 text-[9px] font-black uppercase tracking-widest text-white disabled:opacity-40">
+                        {supplierPassActive && !supplierPassNearExpiry ? 'ดูบัตร' : 'เริ่มสอบ'}
+                      </button>
+                    )}
+                    <button disabled={isBanned} onClick={() => setShowSupplierEnrollment(true)} className="flex-1 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-[9px] font-black uppercase tracking-widest text-emerald-700 disabled:opacity-40">
+                      {supplierStatus ? 'แก้ไขข้อมูล' : 'เพิ่มสิทธิ์'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {!hasInduction && !activePermit && !isBanned && (
               <div className="bg-blue-50/50 border-2 border-dashed border-blue-200 rounded-[2rem] p-8 text-center animate-in zoom-in">
                 <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm">
@@ -607,16 +712,60 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
           </div>
         </div>
 
+        {showSupplierEnrollment && supplierOutsourceEnabled && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-md rounded-[2rem] bg-white p-6 shadow-2xl">
+              <div className="mb-5 flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-black uppercase text-slate-900">Supplier & Outsource</h3>
+                  <p className="mt-1 text-[10px] font-bold text-slate-400">เพิ่มหรือแก้ไขประเภทผู้ใช้และลักษณะงาน</p>
+                </div>
+                <button onClick={() => setShowSupplierEnrollment(false)} className="rounded-full bg-slate-100 p-2 text-slate-500"><X size={18}/></button>
+              </div>
+              <div className="space-y-3">
+                <label className="block text-[9px] font-black uppercase tracking-widest text-slate-400">ประเภทผู้ใช้
+                  <select value={supplierParticipantType} onChange={(e) => setSupplierParticipantType(e.target.value as SupplierOutsourceType)} className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs font-bold normal-case text-slate-700">
+                    <option value="supplier">Supplier ส่งสินค้า/เข้าพื้นที่ชั่วคราว</option>
+                    <option value="outsource">Outsource งานทั่วไป</option>
+                  </select>
+                </label>
+                <label className="block text-[9px] font-black uppercase tracking-widest text-slate-400">ประเภทงาน
+                  <select value={supplierWorkType} onChange={(e) => setSupplierWorkType(e.target.value as SupplierOutsourceWorkType)} className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs font-bold normal-case text-slate-700">
+                    <option value="Driver">Driver</option><option value="Passenger">Passenger</option><option value="Trainee">Trainee</option>
+                  </select>
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">วันที่เริ่ม
+                    <input type="date" value={supplierStartDate} onChange={(e) => setSupplierStartDate(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs font-bold text-slate-700" />
+                  </label>
+                  <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">วันที่สิ้นสุด
+                    <input type="date" min={supplierStartDate || undefined} value={supplierEndDate} onChange={(e) => setSupplierEndDate(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs font-bold text-slate-700" />
+                  </label>
+                </div>
+                <button onClick={handleSupplierEnrollment} disabled={supplierSaving} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-4 text-[10px] font-black uppercase tracking-widest text-white disabled:opacity-50">
+                  {supplierSaving ? <Loader2 size={16} className="animate-spin"/> : <Save size={16}/>} บันทึกสิทธิ์
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* 🟡 Resource Guides */}
         <div className="space-y-4 px-1 text-left">
            <h3 className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] ml-2">Safety Manuals</h3>
-           <div className="grid grid-cols-2 gap-4">
+           <div className={`grid gap-4 ${supplierOutsourceEnabled ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-2'}`}>
               <ResourceCard 
                 icon={<BookOpen size={20} />} 
                 title="Induction" 
                 desc="Basic Safety Rules" 
                 onClick={() => window.open('https://qdodmxrecioltwdryhec.supabase.co/storage/v1/object/public/manuals/induction.pdf', '_blank', 'noopener,noreferrer')} 
               />
+              {supplierOutsourceEnabled && <ResourceCard
+                icon={<ShieldCheck size={20} />}
+                title="Supplier & Outsource"
+                desc="Temporary Access"
+                onClick={() => window.open('https://qdodmxrecioltwdryhec.supabase.co/storage/v1/object/public/manuals/supplier_outsource.pdf', '_blank', 'noopener,noreferrer')}
+              />}
               <ResourceCard 
                 icon={<Ticket size={20} />} 
                 title="Work Permit" 

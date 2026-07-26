@@ -36,3 +36,60 @@ export async function downloadWorkbook(
   link.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
+
+export const sanitizeExcelText = (value: unknown): string => {
+  const text = String(value ?? '');
+  return /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+};
+
+export type SupplierOutsourceExcelRow = {
+  company: string;
+  name: string;
+  participant_type: string;
+  work_type: string;
+  national_id: string | null;
+  test_date: string | null;
+  expiration_date: string | null;
+};
+
+export async function createSupplierOutsourceWorkbook(rows: SupplierOutsourceExcelRow[]) {
+  const { default: ExcelJS } = await import('exceljs');
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('Sheet1');
+  worksheet.mergeCells('A1:H1');
+  worksheet.getCell('A1').value = ' Supplier Epass | Check Member';
+  worksheet.addRow(['No.', 'Company', 'Name', 'Type', 'Work Type', 'ID card', 'Test Date', 'Expiration Date']);
+  rows.forEach((row, index) => {
+    worksheet.addRow([
+      index + 1,
+      sanitizeExcelText(row.company),
+      sanitizeExcelText(row.name),
+      sanitizeExcelText(row.participant_type),
+      sanitizeExcelText(row.work_type),
+      row.national_id && /^\d{13}$/.test(row.national_id) ? row.national_id : '',
+      row.test_date ? new Date(row.test_date) : null,
+      row.expiration_date ? new Date(row.expiration_date) : null,
+    ]);
+  });
+  [6, 54, 54, 12.15, 12.15, 17.55, 13.5, 20.25].forEach((width, index) => {
+    worksheet.getColumn(index + 1).width = width;
+  });
+  worksheet.getColumn(6).numFmt = '@';
+  worksheet.getColumn(7).numFmt = 'mm-dd-yy';
+  worksheet.getColumn(8).numFmt = 'mm-dd-yy';
+  return workbook;
+}
+
+export async function downloadSupplierOutsourceWorkbook(rows: SupplierOutsourceExcelRow[]) {
+  const workbook = await createSupplierOutsourceWorkbook(rows);
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'Supplier Epass  Check Member.xlsx';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}

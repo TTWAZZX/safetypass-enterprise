@@ -11,7 +11,8 @@ export enum VendorStatus {
 
 export enum ExamType {
   INDUCTION = 'INDUCTION',
-  WORK_PERMIT = 'WORK_PERMIT'
+  WORK_PERMIT = 'WORK_PERMIT',
+  SUPPLIER_OUTSOURCE = 'SUPPLIER_OUTSOURCE'
 }
 
 export enum UserRole {
@@ -136,6 +137,33 @@ export interface TrainingAccess {
   work_type: SupplierOutsourceWorkType | null;
   passed_at: string | null;
   expires_at: string | null;
+  access_start_date?: string | null;
+  access_end_date?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface SupplierOutsourceStatus {
+  participant_type: SupplierOutsourceType;
+  work_type: SupplierOutsourceWorkType;
+  access_start_date: string | null;
+  access_end_date: string | null;
+  passed_at: string | null;
+  expires_at: string | null;
+  last_score: number | null;
+  total_questions: number | null;
+  last_status: 'PASSED' | 'FAILED' | null;
+  last_test_at: string | null;
+  verification_token: string | null;
+}
+
+export interface SupplierOutsourceReportRow extends SupplierOutsourceStatus {
+  user_id: string;
+  company: string;
+  name: string;
+  national_id: string | null;
+  test_date: string | null;
+  expiration_date: string | null;
+  score: number | null;
+  result_status: 'PASSED' | 'FAILED' | null;
 }

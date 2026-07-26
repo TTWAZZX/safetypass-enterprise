@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../services/supabaseApi';
 import { supabase } from '../services/supabaseClient';
 import { QuestionPattern } from '../types'; 
+import { readFirstWorksheetRows } from '../services/excelImport';
 import { 
   Plus, Save, Trash2, BookOpen, Ticket, Loader2, 
   Edit3, Upload, Download, X, Search, Image as ImageIcon,
@@ -178,8 +179,8 @@ const QuestionManager: React.FC = () => {
     };
 
     try {
-      const { error } = editingId ? await supabase.from('questions').update(payload).eq('id', editingId) : await supabase.from('questions').insert(payload);
-      if(error) throw error;
+      if (editingId) await api.updateQuestion(editingId, payload);
+      else await api.createQuestion(payload);
       alert("บันทึกสำเร็จ!");
       handleCancelEdit();
       fetchQuestions();
@@ -188,8 +189,61 @@ const QuestionManager: React.FC = () => {
 
   const handleDelete = async (id: string) => {
     if(!window.confirm("ต้องการลบข้อสอบนี้ใช่หรือไม่?")) return;
-    await supabase.from('questions').delete().eq('id', id);
+    await api.deleteQuestion(id);
     fetchQuestions();
+  };
+
+  const handleToggleActive = async (question: any) => {
+    try {
+      await api.updateQuestion(question.id, { ...question, is_active: !question.is_active });
+      fetchQuestions();
+    } catch (error: any) {
+      alert('เปลี่ยนสถานะไม่สำเร็จ: ' + error.message);
+    }
+  };
+
+  const handleQuestionImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+      const rows = await readFirstWorksheetRows(file);
+      let imported = 0;
+      for (const row of rows) {
+        const value = (names: string[]) => {
+          const key = Object.keys(row).find((item) => names.includes(item.trim().toLowerCase()));
+          return key ? String(row[key] ?? '').trim() : '';
+        };
+        const contentTh = value(['question th', 'question_th', 'คำถามภาษาไทย', 'คำถาม']);
+        const contentEn = value(['question en', 'question_en', 'คำถามภาษาอังกฤษ']);
+        if (!contentTh || !contentEn) continue;
+        const importedPattern = (value(['pattern', 'รูปแบบ']) || 'MULTIPLE_CHOICE').toUpperCase() as QuestionPattern;
+        const importedType = (value(['type', 'exam type', 'ประเภทข้อสอบ']) || examType).toUpperCase();
+        const correct = Math.max(0, Number(value(['correct choice', 'correct_choice_index', 'คำตอบที่ถูก'])) - 1 || 0);
+        const importedChoices = [1, 2, 3, 4].map((index) => ({
+          text_th: value([`choice ${index} th`, `choice_${index}_th`, `ตัวเลือก ${index} ไทย`]),
+          text_en: value([`choice ${index} en`, `choice_${index}_en`, `ตัวเลือก ${index} อังกฤษ`]),
+          is_correct: index - 1 === correct,
+        })).filter((choice) => choice.text_th || choice.text_en);
+        await api.createQuestion({
+          type: importedType as any,
+          pattern: importedPattern,
+          content_th: contentTh,
+          content_en: contentEn,
+          choices_json: importedPattern === QuestionPattern.SHORT_ANSWER
+            ? [{ correct_answer: value(['correct answer', 'คำตอบ']) }]
+            : importedChoices,
+          correct_choice_index: correct,
+          image_url: null,
+          is_active: true,
+        });
+        imported++;
+      }
+      alert(`นำเข้าข้อสอบสำเร็จ ${imported} ข้อ`);
+      fetchQuestions();
+    } catch (error: any) {
+      alert('นำเข้าไม่สำเร็จ: ' + error.message);
+    }
   };
 
   // ================= [ RENDER ] =================
@@ -234,6 +288,7 @@ const QuestionManager: React.FC = () => {
                 <div className="flex bg-slate-100 p-1.5 rounded-2xl">
                     <button onClick={() => setExamType('INDUCTION')} className={`flex-1 py-3 rounded-xl font-black text-[10px] transition-all ${examType === 'INDUCTION' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>INDUCTION</button>
                     <button onClick={() => setExamType('WORK_PERMIT')} className={`flex-1 py-3 rounded-xl font-black text-[10px] transition-all ${examType === 'WORK_PERMIT' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>WORK PERMIT</button>
+                    <button onClick={() => setExamType('SUPPLIER_OUTSOURCE')} className={`flex-1 py-3 rounded-xl font-black text-[9px] transition-all ${examType === 'SUPPLIER_OUTSOURCE' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>SUPPLIER & OUTSOURCE</button>
                 </div>
             </div>
             <div className="space-y-4">
@@ -271,6 +326,8 @@ const QuestionManager: React.FC = () => {
             </div>
             <div className="flex flex-wrap gap-2 w-full md:w-auto">
                 <div className="relative flex-1"><Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input placeholder="Search keywords..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none w-full" /></div>
+                <input ref={fileInputRef} type="file" accept=".xlsx" className="hidden" onChange={handleQuestionImport} />
+                <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5 text-[9px] font-black uppercase tracking-widest text-emerald-700"><Upload size={16}/> Import</button>
                 <button onClick={fetchQuestions} className="p-2.5 bg-slate-50 text-slate-400 rounded-xl hover:text-blue-600 transition-all border border-slate-100 shadow-sm"><RefreshCw size={18}/></button>
             </div>
         </div>
@@ -285,8 +342,9 @@ const QuestionManager: React.FC = () => {
                         </div>
                         <div className="flex-1 min-w-0 text-left">
                             <div className="flex justify-between items-center mb-1">
-                                <span className={`px-2 py-0.5 rounded-md text-[8px] font-black border ${q.type === 'INDUCTION' ? 'text-blue-600 border-blue-100 bg-blue-50' : 'text-purple-600 border-purple-100 bg-purple-50'}`}>{q.type}</span>
+                                <span className={`px-2 py-0.5 rounded-md text-[8px] font-black border ${q.type === 'INDUCTION' ? 'text-blue-600 border-blue-100 bg-blue-50' : q.type === 'WORK_PERMIT' ? 'text-purple-600 border-purple-100 bg-purple-50' : 'text-emerald-700 border-emerald-100 bg-emerald-50'}`}>{q.type}</span>
                                 <div className="flex gap-1 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button onClick={() => handleToggleActive(q)} className={`rounded-lg px-2 text-[8px] font-black ${q.is_active ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>{q.is_active ? 'ON' : 'OFF'}</button>
                                     <button onClick={() => handleEdit(q)} className="p-3 text-slate-400 hover:text-blue-600 transition-colors active:scale-90"><Edit3 size={16}/></button>
                                     <button onClick={() => handleDelete(q.id)} className="p-3 text-slate-400 hover:text-red-600 transition-colors active:scale-90"><Trash2 size={16}/></button>
                                 </div>

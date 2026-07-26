@@ -109,6 +109,62 @@ export function createInductionPassMessage({ name, vendor, score, totalQuestions
   };
 }
 
+export function createSupplierOutsourcePassMessage({
+  name, vendor, participantType, workType, score, totalQuestions, testDate,
+  expiryDate, verificationToken,
+}) {
+  const digitalPassUrl = `${APP_URL}/verify?supplier=${encodeURIComponent(verificationToken)}`;
+  const formatDate = (value) => new Date(value).toLocaleDateString('th-TH', {
+    timeZone: 'Asia/Bangkok', day: 'numeric', month: 'short', year: 'numeric',
+  });
+  const participantLabel = participantType === 'supplier' ? 'Supplier' : 'Outsource';
+  return {
+    type: 'flex',
+    altText: `สอบผ่าน Supplier & Outsource: ${name}`,
+    contents: {
+      type: 'bubble',
+      size: 'mega',
+      header: {
+        type: 'box', layout: 'vertical', backgroundColor: '#0F172A',
+        paddingAll: '20px', paddingTop: '22px', paddingBottom: '22px',
+        contents: [
+          { type: 'text', text: 'SECURITY COMPLIANCE NODE', color: '#EAB308', size: 'xxs', weight: 'bold' },
+          { type: 'text', text: 'SUPPLIER & OUTSOURCE PASSED', color: '#10B981', weight: 'bold', size: 'lg', wrap: true, margin: 'sm' },
+        ],
+      },
+      body: {
+        type: 'box', layout: 'vertical', paddingAll: '20px',
+        contents: [
+          { type: 'text', text: 'สรุปผลการทดสอบ Supplier & Outsource', size: 'xs', color: '#64748B', wrap: true },
+          { type: 'separator', margin: 'lg', color: '#E2E8F0' },
+          {
+            type: 'box', layout: 'vertical', margin: 'lg', spacing: 'md',
+            contents: [
+              createDetailRow('ชื่อ', name),
+              createDetailRow('บริษัท', vendor || 'ไม่มีสังกัด'),
+              createDetailRow('ประเภท', participantLabel),
+              createDetailRow('งาน', workType),
+              createDetailRow('คะแนน', `${score} / ${totalQuestions}`, '#10B981'),
+              createDetailRow('วันที่สอบ', formatDate(testDate)),
+              createDetailRow('ใช้ได้ถึง', formatDate(expiryDate)),
+            ],
+          },
+        ],
+      },
+      footer: {
+        type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '20px', paddingTop: '0px',
+        contents: [
+          {
+            type: 'button', style: 'primary', height: 'sm', color: '#10B981',
+            action: { type: 'uri', label: 'ดูบัตร Supplier & Outsource', uri: digitalPassUrl, altUri: { desktop: digitalPassUrl } },
+          },
+          createLoginButton(),
+        ],
+      },
+    },
+  };
+}
+
 function createDetailRow(label, value, valueColor = '#0F172A') {
   return {
     type: 'box',

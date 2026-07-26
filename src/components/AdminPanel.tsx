@@ -6,19 +6,21 @@ import AdminDashboard from './AdminDashboard';
 import QuestionManager from './QuestionManager';
 import VendorManager from './VendorManager';
 import SettingsManager from './SettingsManager';
+import SupplierOutsourceManager from './SupplierOutsourceManager';
 
 import {
   LayoutGrid,
   ClipboardList,
   Building2,
   Settings,
-  Loader2
+  Loader2,
+  ShieldCheck,
 } from 'lucide-react';
 
 const AdminPanel: React.FC = () => {
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [activePage, setActivePage] = useState<'DASHBOARD' | 'QUESTIONS' | 'VENDORS' | 'SETTINGS'>('DASHBOARD');
+  const [activePage, setActivePage] = useState<'DASHBOARD' | 'QUESTIONS' | 'VENDORS' | 'SUPPLIER_OUTSOURCE' | 'SETTINGS'>('DASHBOARD');
   
   // ✅ สร้าง State เพื่อเก็บคำค้นหาที่อาจส่งมาจาก LINE
   const [searchQuery, setSearchQuery] = useState<string | null>(null);
@@ -75,6 +77,7 @@ const AdminPanel: React.FC = () => {
           <SidebarButton icon={<LayoutGrid size={18} />} label="Overview" active={activePage === 'DASHBOARD'} onClick={() => setActivePage('DASHBOARD')} />
           <SidebarButton icon={<ClipboardList size={18} />} label="Questions" active={activePage === 'QUESTIONS'} onClick={() => setActivePage('QUESTIONS')} />
           <SidebarButton icon={<Building2 size={18} />} label="Vendors & Users" badge={stats?.pendingVendors} active={activePage === 'VENDORS'} onClick={() => setActivePage('VENDORS')} />
+          <SidebarButton icon={<ShieldCheck size={18} />} label="Supplier & Outsource" active={activePage === 'SUPPLIER_OUTSOURCE'} onClick={() => setActivePage('SUPPLIER_OUTSOURCE')} />
           <SidebarButton icon={<Settings size={18} />} label="Settings" active={activePage === 'SETTINGS'} onClick={() => setActivePage('SETTINGS')} />
         </nav>
       </aside>
@@ -84,6 +87,7 @@ const AdminPanel: React.FC = () => {
         <MobileTab icon={<LayoutGrid size={20} />} label="Home" active={activePage === 'DASHBOARD'} onClick={() => setActivePage('DASHBOARD')} />
         <MobileTab icon={<ClipboardList size={20} />} label="Exam" active={activePage === 'QUESTIONS'} onClick={() => setActivePage('QUESTIONS')} />
         <MobileTab icon={<Building2 size={20} />} label="Users" badge={stats?.pendingVendors} active={activePage === 'VENDORS'} onClick={() => setActivePage('VENDORS')} />
+        <MobileTab icon={<ShieldCheck size={20} />} label="S&O" active={activePage === 'SUPPLIER_OUTSOURCE'} onClick={() => setActivePage('SUPPLIER_OUTSOURCE')} />
         <MobileTab icon={<Settings size={20} />} label="Config" active={activePage === 'SETTINGS'} onClick={() => setActivePage('SETTINGS')} />
       </nav>
 
@@ -95,7 +99,8 @@ const AdminPanel: React.FC = () => {
                 <div className="space-y-1">
                     <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight uppercase leading-none">
                         {activePage === 'QUESTIONS' ? 'Assessment Manager' : 
-                         activePage === 'VENDORS' ? 'User & Vendor Compliance' : 'System Configuration'}
+                         activePage === 'VENDORS' ? 'User & Vendor Compliance' :
+                         activePage === 'SUPPLIER_OUTSOURCE' ? 'Supplier & Outsource Program' : 'System Configuration'}
                     </h1>
                     <p className="text-[10px] md:text-xs text-slate-400 font-bold tracking-widest uppercase mt-1">Management Access • Secure Node</p>
                 </div>
@@ -107,6 +112,7 @@ const AdminPanel: React.FC = () => {
             {activePage === 'DASHBOARD' && <AdminDashboard onNavigateToUsers={() => setActivePage('VENDORS')} />}
             {activePage === 'QUESTIONS' && <QuestionManager />}
             {activePage === 'VENDORS' && <VendorManager initialSearch={searchQuery} />}
+            {activePage === 'SUPPLIER_OUTSOURCE' && <SupplierOutsourceManager />}
             {activePage === 'SETTINGS' && <SettingsManager />}
         </div>
       </main>

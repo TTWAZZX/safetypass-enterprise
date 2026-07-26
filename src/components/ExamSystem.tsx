@@ -60,6 +60,11 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
   const lastSubmitRef = useRef<number>(0);
 
   const STORAGE_KEY = `exam_progress_${user.id}_${type}`;
+  const getPassingScoreKey = () => type === ExamType.INDUCTION
+    ? 'PASSING_SCORE_INDUCTION'
+    : type === ExamType.WORK_PERMIT
+      ? 'PASSING_SCORE_WORK_PERMIT'
+      : 'PASSING_SCORE_SUPPLIER_OUTSOURCE';
 
   // 1. Auto-Scroll to top
   useEffect(() => {
@@ -131,7 +136,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
       // --- ดึงเกณฑ์คะแนนผ่านจาก Database ก่อน ---
       try {
         const config = await api.getSystemSettings();
-        const configKey = type === 'INDUCTION' ? 'PASSING_SCORE_INDUCTION' : 'PASSING_SCORE_WORK_PERMIT';
+        const configKey = getPassingScoreKey();
         if (config[configKey]) {
           setPassThreshold(Number(config[configKey]));
         }
@@ -221,9 +226,11 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
         const { data: { session } } = await supabase.auth.getSession();
         if (!session?.access_token) throw new Error('No active session');
 
-        const notificationEndpoint = type === 'INDUCTION'
+        const notificationEndpoint = type === ExamType.INDUCTION
           ? '/api/notify-induction'
-          : '/api/notify-work-permit';
+          : type === ExamType.WORK_PERMIT
+            ? '/api/notify-work-permit'
+            : '/api/notify-supplier-outsource';
 
         fetch(notificationEndpoint, {
           method: 'POST',
@@ -263,7 +270,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
       if (serverResult.passed) {
         const updatedUser = { ...user };
         const now = new Date();
-        if (type === 'INDUCTION') {
+        if (type === ExamType.INDUCTION) {
           const nextYear = new Date(now);
           nextYear.setFullYear(now.getFullYear() + 1);
           updatedUser.induction_expiry = nextYear.toISOString();
@@ -450,7 +457,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
                   // รีเฟรช passThreshold ใหม่จาก DB ทุกครั้งที่สอบซ้ำ
                   try {
                     const config = await api.getSystemSettings();
-                    const configKey = type === 'INDUCTION' ? 'PASSING_SCORE_INDUCTION' : 'PASSING_SCORE_WORK_PERMIT';
+                    const configKey = getPassingScoreKey();
                     if (config[configKey]) setPassThreshold(Number(config[configKey]));
                   } catch {}
                   localStorage.removeItem(STORAGE_KEY);

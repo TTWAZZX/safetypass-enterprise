@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import QRCode from 'react-qr-code';
 import html2canvas from 'html2canvas';
-import { User, WorkPermitSession } from '../types';
+import { User, WorkPermitSession, SupplierOutsourceStatus } from '../types';
 import { 
   Download, 
   CheckCircle2, 
@@ -17,15 +17,17 @@ import {
 interface DigitalCardProps {
   user: User;
   onBack: () => void;
-  type?: 'INDUCTION' | 'WORK_PERMIT'; 
+  type?: 'INDUCTION' | 'WORK_PERMIT' | 'SUPPLIER_OUTSOURCE';
   permit?: WorkPermitSession | null;
+  supplierStatus?: SupplierOutsourceStatus | null;
 }
 
 const DigitalCard: React.FC<DigitalCardProps> = ({ 
   user, 
   onBack, 
   type = 'INDUCTION', 
-  permit 
+  permit,
+  supplierStatus,
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const [downloading, setDownloading] = useState(false);
@@ -33,15 +35,18 @@ const DigitalCard: React.FC<DigitalCardProps> = ({
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const isPermit = type === 'WORK_PERMIT';
+  const isSupplier = type === 'SUPPLIER_OUTSOURCE';
   const themeColor = isPermit 
     ? 'from-slate-900 via-indigo-950 to-purple-950' 
-    : 'from-[#0f172a] via-[#1e293b] to-[#064e3b]';
+    : isSupplier ? 'from-slate-900 via-emerald-950 to-teal-950' : 'from-[#0f172a] via-[#1e293b] to-[#064e3b]';
   const accentColor = isPermit ? 'text-purple-400' : 'text-emerald-400';
-  const cardTitle = isPermit ? 'WORK PERMIT' : 'SAFETY PASS';
+  const cardTitle = isPermit ? 'WORK PERMIT' : isSupplier ? 'SUPPLIER & OUTSOURCE' : 'SAFETY PASS';
   const cardIcon = isPermit ? <Ticket className={accentColor} size={20} /> : <ShieldCheck className={accentColor} size={20} />;
   
-  const displayId = isPermit ? permit?.permit_no : user.national_id;
-  const idLabel = isPermit ? 'PERMIT NO.' : 'NATIONAL ID';
+  const displayId = isPermit ? permit?.permit_no : isSupplier
+    ? `${supplierStatus?.participant_type || '-'} / ${supplierStatus?.work_type || '-'}`
+    : user.national_id;
+  const idLabel = isPermit ? 'PERMIT NO.' : isSupplier ? 'TYPE / WORK TYPE' : 'NATIONAL ID';
   
   // ✅ ปรับ Format ให้แสดงปีแบบ 4 หลัก (เช่น 2569) ให้ตรงกับหน้า Verify 100%
   const formatThaiDate = (dateVal: string | Date | undefined | null) => {
@@ -51,16 +56,19 @@ const DigitalCard: React.FC<DigitalCardProps> = ({
     return d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }); // เปลี่ยน 2-digit เป็น numeric
   };
 
-  const expiryDate = isPermit ? formatThaiDate(permit?.expire_date) : formatThaiDate(user.induction_expiry);
+  const expiryDate = isPermit ? formatThaiDate(permit?.expire_date) : isSupplier
+    ? formatThaiDate(supplierStatus?.expires_at) : formatThaiDate(user.induction_expiry);
 
-  const issueDate = isPermit && (permit as any)?.created_at 
-    ? formatThaiDate((permit as any).created_at) 
-    : formatThaiDate(new Date());
+  const issueDate = isPermit && (permit as any)?.created_at
+    ? formatThaiDate((permit as any).created_at)
+    : isSupplier ? formatThaiDate(supplierStatus?.last_test_at) : formatThaiDate(new Date());
 
   // 🔥 แก้ไขตัวบั๊ก! ใช้ encodeURIComponent ครอบ permit_no เผื่อมันเป็นภาษาไทยแบบคำว่า "ทดสอบ"
   const qrValue = isPermit 
     ? `${window.location.origin}/verify?id=${encodeURIComponent(user.national_id)}&permit=${encodeURIComponent(permit?.permit_no || '')}`
-    : `${window.location.origin}/verify?id=${encodeURIComponent(user.national_id)}`;
+    : isSupplier
+      ? `${window.location.origin}/verify?supplier=${encodeURIComponent(supplierStatus?.verification_token || '')}`
+      : `${window.location.origin}/verify?id=${encodeURIComponent(user.national_id)}`;
 
   // ✅ อัปเกรดระบบ Download ล็อกขนาดและแก้อาการภาพเบี้ยว/ตัวหนังสือขาด
   const handleDownload = async () => {
@@ -107,17 +115,17 @@ const DigitalCard: React.FC<DigitalCardProps> = ({
 
       <div className="text-center mb-6">
          <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">
-            {isPermit ? 'Contractor Work Permit' : 'Personnel Safety Pass'}
+            {isPermit ? 'Contractor Work Permit' : isSupplier ? 'Supplier & Outsource Pass' : 'Personnel Safety Pass'}
          </h2>
          <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 tracking-wide">
-            {isPermit ? 'Show to security at entry point' : 'Verified Safety Induction Status'}
+            {isPermit || isSupplier ? 'Show to security at entry point' : 'Verified Safety Induction Status'}
          </p>
       </div>
 
       <div className="relative group touch-none">
         <div 
           ref={cardRef}
-          className={`w-[310px] h-[480px] bg-gradient-to-br ${themeColor} rounded-[2.5rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.5)] overflow-hidden relative text-white border border-white/10`}
+          className={`w-[310px] ${isSupplier ? 'h-[520px]' : 'h-[480px]'} bg-gradient-to-br ${themeColor} rounded-[2.5rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.5)] overflow-hidden relative text-white border border-white/10`}
         >
           <div className={`absolute top-0 right-0 w-40 h-40 rounded-full blur-[80px] -translate-y-1/2 translate-x-1/2 opacity-40 ${isPermit ? 'bg-pink-600' : 'bg-blue-600'}`}></div>
           <div className={`absolute bottom-0 left-0 w-40 h-40 rounded-full blur-[80px] translate-y-1/2 -translate-x-1/2 opacity-30 ${isPermit ? 'bg-indigo-600' : 'bg-emerald-600'}`}></div>
@@ -175,6 +183,12 @@ const DigitalCard: React.FC<DigitalCardProps> = ({
                   <p className="text-[7px] text-slate-500 uppercase font-black tracking-widest mb-0.5">{idLabel}</p>
                   <p className="font-mono text-[11px] font-bold tracking-widest text-slate-200">{displayId}</p>
                </div>
+               {isSupplier && (
+                 <div className="col-span-2 text-left pt-2.5 border-t border-white/5">
+                   <p className="text-[7px] text-slate-500 uppercase font-black tracking-widest mb-0.5">SCORE</p>
+                   <p className="font-black text-[11px] text-emerald-400">{supplierStatus?.last_score ?? '-'} / {supplierStatus?.total_questions ?? '-'}</p>
+                 </div>
+               )}
             </div>
           </div>
 

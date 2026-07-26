@@ -513,6 +513,7 @@ const AdminDashboard: React.FC<{ onNavigateToUsers?: () => void }> = ({ onNaviga
                 <option value="ALL">ทุกหลักสูตร (All)</option>
                 <option value="INDUCTION">Induction</option>
                 <option value="WORK_PERMIT">Work Permit</option>
+                <option value="SUPPLIER_OUTSOURCE">Supplier & Outsource</option>
                 </select>
             </div>
           </div>
@@ -558,7 +559,7 @@ const AdminDashboard: React.FC<{ onNavigateToUsers?: () => void }> = ({ onNaviga
                     </div>
                   </td>
                   <td className="px-6 sm:px-8 py-4 sm:py-6">
-                    <span className={`text-[8px] sm:text-[9px] font-black px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl border w-fit uppercase whitespace-nowrap ${item.exam_type === 'INDUCTION' ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-purple-50 text-purple-600 border-purple-100'}`}>
+                    <span className={`text-[8px] sm:text-[9px] font-black px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl border w-fit uppercase whitespace-nowrap ${item.exam_type === 'INDUCTION' ? 'bg-blue-50 text-blue-600 border-blue-100' : item.exam_type === 'WORK_PERMIT' ? 'bg-purple-50 text-purple-600 border-purple-100' : 'bg-emerald-50 text-emerald-700 border-emerald-100'}`}>
                       {item.exam_type?.replace('_', ' ')}
                     </span>
                   </td>

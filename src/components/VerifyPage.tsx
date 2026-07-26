@@ -25,7 +25,7 @@ const VerifyPage: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string>(''); 
 
   // ✅ เพิ่ม State สำหรับแยกว่ากำลังตรวจบัตรประเภทไหน และวันหมดอายุคือวันไหน
-  const [verifyMode, setVerifyMode] = useState<'INDUCTION' | 'WORK_PERMIT'>('INDUCTION');
+  const [verifyMode, setVerifyMode] = useState<'INDUCTION' | 'WORK_PERMIT' | 'SUPPLIER_OUTSOURCE'>('INDUCTION');
   const [verifiedExpiryDate, setVerifiedExpiryDate] = useState<string | null>(null);
   const [activePermitObj, setActivePermitObj] = useState<any>(null);
 
@@ -34,6 +34,7 @@ const VerifyPage: React.FC = () => {
       const urlParams = new URLSearchParams(window.location.search);
       let userId = urlParams.get('id');
       const permitId = urlParams.get('permit'); 
+      const supplierToken = urlParams.get('supplier');
 
       if (!userId) {
         const pathParts = window.location.pathname.split('/');
@@ -43,7 +44,9 @@ const VerifyPage: React.FC = () => {
         }
       }
 
-      if (permitId) {
+      if (supplierToken) {
+        checkSupplierOutsourceStatus(supplierToken);
+      } else if (permitId) {
         checkPermitStatus(permitId);
       } else if (userId) {
         checkUserStatus(decodeURIComponent(userId));
@@ -56,6 +59,37 @@ const VerifyPage: React.FC = () => {
       setStatus('NOT_FOUND');
     }
   }, []);
+
+  const checkSupplierOutsourceStatus = async (token: string) => {
+    try {
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(token)) {
+        setStatus('NOT_FOUND');
+        return;
+      }
+      const { data, error } = await supabase.rpc('verify_supplier_outsource_pass', { token_param: token });
+      const pass = data?.[0];
+      if (error || !pass) {
+        setStatus('NOT_FOUND');
+        return;
+      }
+      setUserData({
+        name: pass.name,
+        vendors: { name: pass.vendor_name },
+        participant_type: pass.participant_type,
+        work_type: pass.work_type,
+        score: pass.score,
+        total_questions: pass.total_questions,
+        test_date: pass.test_date,
+      });
+      setVerifyMode('SUPPLIER_OUTSOURCE');
+      setVerifiedExpiryDate(pass.expires_at);
+      setActivePermitObj(null);
+      setStatus(pass.is_active ? 'VALID' : 'EXPIRED');
+    } catch (err: any) {
+      setErrorMsg(err.message);
+      setStatus('NOT_FOUND');
+    }
+  };
 
   const checkPermitStatus = async (permitNo: string) => {
     try {
@@ -177,7 +211,7 @@ const VerifyPage: React.FC = () => {
          </div>
          {/* เปลี่ยน Title ด้านบนให้ตรงกับประเภทบัตร */}
          <span className="text-[10px] font-black uppercase tracking-[0.4em] text-center">
-            {verifyMode === 'WORK_PERMIT' ? 'Work Permit Verification' : 'Safety Pass Verification'}
+            {verifyMode === 'WORK_PERMIT' ? 'Work Permit Verification' : verifyMode === 'SUPPLIER_OUTSOURCE' ? 'Supplier & Outsource Verification' : 'Safety Pass Verification'}
          </span>
       </div>
 
@@ -241,13 +275,26 @@ const VerifyPage: React.FC = () => {
                </div>
             )}
 
+            {verifyMode === 'SUPPLIER_OUTSOURCE' && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4">
+                  <p className="text-[8px] font-black uppercase tracking-widest text-emerald-500">Type / Work</p>
+                  <p className="mt-1 text-xs font-black text-emerald-800">{userData?.participant_type} / {userData?.work_type}</p>
+                </div>
+                <div className="rounded-2xl border border-blue-100 bg-blue-50/50 p-4">
+                  <p className="text-[8px] font-black uppercase tracking-widest text-blue-500">Score</p>
+                  <p className="mt-1 text-xs font-black text-blue-800">{userData?.score} / {userData?.total_questions}</p>
+                </div>
+              </div>
+            )}
+
             <div className={`flex items-center gap-4 p-4 rounded-2xl border transition-all ${boxBg} ${boxBorder}`}>
               <div className="bg-white p-2.5 rounded-xl shadow-sm border border-white">
                 <CalendarDays className={`w-4 h-4 ${iconColor}`}/>
               </div>
               <div>
                 <p className={`text-[8px] uppercase font-black tracking-widest ${textMuted}`}>
-                  {verifyMode === 'WORK_PERMIT' ? 'Permit Valid Until' : 'Induction Valid Until'}
+                  {verifyMode === 'WORK_PERMIT' ? 'Permit Valid Until' : verifyMode === 'SUPPLIER_OUTSOURCE' ? 'Supplier & Outsource Valid Until' : 'Induction Valid Until'}
                 </p>
                 <p className={`font-black text-sm ${textBold}`}>
                   {verifiedExpiryDate ? new Date(verifiedExpiryDate).toLocaleDateString('th-TH', { 

@@ -32,5 +32,16 @@ create table if not exists auth.users (
   updated_at timestamptz
 );
 
+alter table auth.users add column if not exists instance_id uuid;
+alter table auth.users add column if not exists aud text;
+alter table auth.users add column if not exists role text;
+alter table auth.users add column if not exists email text;
+alter table auth.users add column if not exists encrypted_password text;
+alter table auth.users add column if not exists email_confirmed_at timestamptz;
+alter table auth.users add column if not exists raw_app_meta_data jsonb;
+alter table auth.users add column if not exists raw_user_meta_data jsonb;
+alter table auth.users add column if not exists created_at timestamptz;
+alter table auth.users add column if not exists updated_at timestamptz;
+
 grant usage on schema auth to anon, authenticated, service_role;
 grant execute on function auth.uid() to anon, authenticated, service_role;

@@ -29,6 +29,8 @@ const SettingsManager: React.FC = () => {
   // States: Scores
   const [inductionScore, setInductionScore] = useState<number>(80);
   const [permitScore, setPermitScore] = useState<number>(80);
+  const [supplierScore, setSupplierScore] = useState<number>(80);
+  const [supplierValidityDays, setSupplierValidityDays] = useState<number>(365);
 
   // ✅ States: Support Links (ใหม่)
   const [manualUrl, setManualUrl] = useState<string>('');
@@ -46,6 +48,8 @@ const SettingsManager: React.FC = () => {
       // ดึงค่าคะแนนเดิมมาใส่ State (ถ้าไม่มีให้ใช้ 80)
       if (config['PASSING_SCORE_INDUCTION']) setInductionScore(Number(config['PASSING_SCORE_INDUCTION']));
       if (config['PASSING_SCORE_WORK_PERMIT']) setPermitScore(Number(config['PASSING_SCORE_WORK_PERMIT']));
+      if (config['PASSING_SCORE_SUPPLIER_OUTSOURCE']) setSupplierScore(Number(config['PASSING_SCORE_SUPPLIER_OUTSOURCE']));
+      if (config['SUPPLIER_OUTSOURCE_VALIDITY_DAYS']) setSupplierValidityDays(Number(config['SUPPLIER_OUTSOURCE_VALIDITY_DAYS']));
       
       // ✅ ดึงค่าลิงก์มาใส่ State (ถ้าไม่มีให้ว่างไว้)
       if (config['manual_url']) setManualUrl(config['manual_url']);
@@ -67,6 +71,8 @@ const SettingsManager: React.FC = () => {
         // บันทึกคะแนนผ่าน
         api.updateSystemSetting('PASSING_SCORE_INDUCTION', inductionScore),
         api.updateSystemSetting('PASSING_SCORE_WORK_PERMIT', permitScore),
+        api.updateSystemSetting('PASSING_SCORE_SUPPLIER_OUTSOURCE', supplierScore),
+        api.updateSystemSetting('SUPPLIER_OUTSOURCE_VALIDITY_DAYS', supplierValidityDays),
         // ✅ บันทึกลิงก์
         api.updateSystemSetting('manual_url', manualUrl),
         api.updateSystemSetting('support_url', supportUrl)
@@ -83,7 +89,7 @@ const SettingsManager: React.FC = () => {
   };
 
   // Upload Logic (ของเดิม ไม่ถูกลบ)
-  const handleUploadManual = async (event: React.ChangeEvent<HTMLInputElement>, type: 'induction' | 'work_permit') => {
+  const handleUploadManual = async (event: React.ChangeEvent<HTMLInputElement>, type: 'induction' | 'work_permit' | 'supplier_outsource') => {
     try {
       setUploading(type);
       const file = event.target.files?.[0];
@@ -188,6 +194,19 @@ const SettingsManager: React.FC = () => {
                         </div>
                     </div>
                 </div>
+                <div className="bg-slate-50 p-5 md:p-6 rounded-3xl border border-slate-200 hover:border-emerald-300 transition-all group">
+                    <div className="flex justify-between items-start md:items-center mb-4 gap-2">
+                        <label className="text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-widest flex flex-col">Supplier & Outsource Pass Rate<span className="text-[9px] text-slate-400 font-bold mt-0.5">เกณฑ์ผ่าน Supplier & Outsource</span></label>
+                        <span className="shrink-0 px-3 py-1 rounded-full text-[9px] font-black border bg-emerald-100 text-emerald-600 border-emerald-200">PROGRAM</span>
+                    </div>
+                    <div className="flex items-center gap-3 md:gap-4">
+                        <input type="range" min="0" max="100" step="5" value={supplierScore} onChange={(e) => setSupplierScore(Number(e.target.value))} className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600" />
+                        <div className="w-14 h-14 md:w-16 md:h-16 shrink-0 bg-white rounded-2xl border-2 border-emerald-100 flex items-center justify-center text-lg md:text-xl font-black text-slate-800 shadow-sm">{supplierScore}%</div>
+                    </div>
+                    <label className="mt-4 block text-[9px] font-black uppercase tracking-widest text-slate-400">อายุบัตร (วัน)
+                      <input type="number" min="1" max="3650" value={supplierValidityDays} onChange={(e) => setSupplierValidityDays(Number(e.target.value))} className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-3 text-xs font-bold text-slate-700" />
+                    </label>
+                </div>
             </div>
             
             {/* ✅ ส่วนตั้งค่าลิงก์ใหม่ (Help & Support Links) */}
@@ -259,12 +278,18 @@ const SettingsManager: React.FC = () => {
           </div>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-8">
           <ManualUploadCard 
             title="Induction Manual (ปฐมนิเทศ)"
             type="induction"
             isUploading={uploading === 'induction'}
             onUpload={(e: any) => handleUploadManual(e, 'induction')}
+          />
+          <ManualUploadCard
+            title="Supplier & Outsource Manual"
+            type="supplier_outsource"
+            isUploading={uploading === 'supplier_outsource'}
+            onUpload={(e: any) => handleUploadManual(e, 'supplier_outsource')}
           />
           <ManualUploadCard 
             title="Work Permit Manual (ใบอนุญาต)"

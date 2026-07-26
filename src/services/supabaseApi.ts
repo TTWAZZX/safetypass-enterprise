@@ -1,5 +1,9 @@
 import { supabase } from './supabaseClient'
-import { User, Vendor, ExamType, Question, WorkPermitSession } from '../types'
+import {
+  User, Vendor, ExamType, Question, WorkPermitSession, SupplierOutsourceStatus,
+  SupplierOutsourceReportRow, SupplierOutsourceType, SupplierOutsourceWorkType,
+  TrainingProgram,
+} from '../types'
 
 const createPinPassword = (nationalId: string, pin: string) => `SafetyPass-${nationalId}-${pin}`;
 
@@ -123,7 +127,14 @@ export const api = {
     vendorId: string | null, // เปลี่ยนให้รองรับ null
     age: number,
     nationality: string,
-    otherVendorName?: string
+    otherVendorName?: string,
+    trainingSelection?: {
+      programs: TrainingProgram[];
+      participantType?: SupplierOutsourceType;
+      workType?: SupplierOutsourceWorkType;
+      accessStartDate?: string;
+      accessEndDate?: string;
+    }
   ): Promise<User> => {
     const email = `${nationalId}@safetypass.com`;
     const password = createPinPassword(nationalId, nationalId.slice(-4));
@@ -152,14 +163,25 @@ export const api = {
 
     if (!authUser) throw new Error('ไม่สามารถเชื่อมต่อระบบยืนยันตัวตนได้');
 
-    const { data: registeredUser, error: registrationError } = await supabase.rpc('complete_registration', {
+    const registrationArgs = {
       national_id_param: nationalId,
       name_param: name,
       vendor_id_param: vendorId || null,
       age_param: Number.isFinite(age) ? age : null,
       nationality_param: nationality,
       other_vendor_name_param: otherVendorName?.trim() || null,
-    });
+    };
+    const registrationResponse = trainingSelection
+      ? await supabase.rpc('complete_registration_v2', {
+          ...registrationArgs,
+          program_codes_param: trainingSelection.programs,
+          participant_type_param: trainingSelection.participantType || null,
+          work_type_param: trainingSelection.workType || null,
+          access_start_date_param: trainingSelection.accessStartDate || null,
+          access_end_date_param: trainingSelection.accessEndDate || null,
+        })
+      : await supabase.rpc('complete_registration', registrationArgs);
+    const { data: registeredUser, error: registrationError } = registrationResponse;
 
     if (registrationError) {
       if (registrationError.message.includes('already registered')) {
@@ -221,6 +243,12 @@ export const api = {
       config[item.key] = item.value;
     });
     return config;
+  },
+
+  getPublicFeatureFlags: async () => {
+    const { data, error } = await supabase.rpc('get_public_feature_flags');
+    if (error) return { supplierOutsourceEnabled: false };
+    return { supplierOutsourceEnabled: Boolean(data?.[0]?.supplier_outsource_enabled) };
   },
 
   getPassingScore: async (key: string) => {
@@ -286,17 +314,37 @@ export const api = {
   },
 
   createQuestion: async (question: Partial<Question>) => {
-    const { error } = await supabase.from('questions').insert(question)
+    const { error } = await supabase.rpc('admin_save_question', {
+      question_id_param: null,
+      exam_type_param: question.type,
+      pattern_param: question.pattern,
+      content_th_param: question.content_th,
+      content_en_param: question.content_en,
+      choices_json_param: question.choices_json,
+      correct_choice_index_param: question.correct_choice_index ?? 0,
+      image_url_param: question.image_url || null,
+      is_active_param: question.is_active ?? true,
+    })
     if (error) throw error
   },
 
   updateQuestion: async (id: string, updates: Partial<Question>) => {
-    const { error } = await supabase.from('questions').update(updates).eq('id', id)
+    const { error } = await supabase.rpc('admin_save_question', {
+      question_id_param: id,
+      exam_type_param: updates.type,
+      pattern_param: updates.pattern,
+      content_th_param: updates.content_th,
+      content_en_param: updates.content_en,
+      choices_json_param: updates.choices_json,
+      correct_choice_index_param: updates.correct_choice_index ?? 0,
+      image_url_param: updates.image_url || null,
+      is_active_param: updates.is_active ?? true,
+    })
     if (error) throw error
   },
 
   deleteQuestion: async (id: string) => {
-    const { error } = await supabase.from('questions').delete().eq('id', id)
+    const { error } = await supabase.rpc('admin_delete_question', { question_id_param: id })
     if (error) throw error
   },
 
@@ -325,7 +373,78 @@ export const api = {
       permit_no_param: permitNo || null,
     });
     if (rpcError) throw rpcError;
-    return data as { score: number; passed: boolean; perQuestion: Record<string, boolean> };
+    return data as {
+      score: number;
+      passed: boolean;
+      perQuestion: Record<string, boolean>;
+      verificationToken?: string | null;
+      expiresAt?: string | null;
+    };
+  },
+
+  addMySupplierOutsourceAccess: async (selection: {
+    participantType: SupplierOutsourceType;
+    workType: SupplierOutsourceWorkType;
+    accessStartDate?: string;
+    accessEndDate?: string;
+  }) => {
+    const { error } = await supabase.rpc('add_my_supplier_outsource_access', {
+      participant_type_param: selection.participantType,
+      work_type_param: selection.workType,
+      access_start_date_param: selection.accessStartDate || null,
+      access_end_date_param: selection.accessEndDate || null,
+    });
+    if (error) throw error;
+  },
+
+  getMySupplierOutsourceStatus: async (): Promise<SupplierOutsourceStatus | null> => {
+    const { data, error } = await supabase.rpc('get_my_supplier_outsource_status');
+    if (error) throw error;
+    return (data?.[0] as SupplierOutsourceStatus | undefined) || null;
+  },
+
+  linkMyLineIdentity: async (lineUserId: string) => {
+    const { error } = await supabase.rpc('link_my_line_identity', { line_user_id_param: lineUserId });
+    if (error) throw error;
+  },
+
+  getSupplierOutsourceReport: async (): Promise<SupplierOutsourceReportRow[]> => {
+    const { data, error } = await supabase.rpc('admin_supplier_outsource_report');
+    if (error) throw error;
+    return (data || []) as SupplierOutsourceReportRow[];
+  },
+
+  adminSetSupplierOutsourceAccess: async (payload: {
+    userId: string;
+    enabled: boolean;
+    participantType?: SupplierOutsourceType;
+    workType?: SupplierOutsourceWorkType;
+    accessStartDate?: string;
+    accessEndDate?: string;
+  }) => {
+    const { error } = await supabase.rpc('admin_set_supplier_outsource_access', {
+      user_id_param: payload.userId,
+      enabled_param: payload.enabled,
+      participant_type_param: payload.participantType || null,
+      work_type_param: payload.workType || null,
+      access_start_date_param: payload.accessStartDate || null,
+      access_end_date_param: payload.accessEndDate || null,
+    });
+    if (error) throw error;
+  },
+
+  getSupplierOutsourceLaunchStatus: async () => {
+    const { data, error } = await supabase.rpc('admin_get_supplier_outsource_launch_status');
+    if (error) throw error;
+    return {
+      enabled: Boolean(data?.[0]?.enabled),
+      activeQuestionCount: Number(data?.[0]?.active_question_count || 0),
+    };
+  },
+
+  setSupplierOutsourceFeature: async (enabled: boolean) => {
+    const { error } = await supabase.rpc('admin_set_supplier_outsource_feature', { enabled_param: enabled });
+    if (error) throw error;
   },
 
   /* =====================================================
@@ -351,6 +470,7 @@ export const api = {
     const failed = history.filter(l => l.status === 'FAILED').length;
     const induction = history.filter(l => l.exam_type === 'INDUCTION').length;
     const wp = history.filter(l => l.exam_type === 'WORK_PERMIT').length;
+    const supplierOutsource = history.filter(l => l.exam_type === 'SUPPLIER_OUTSOURCE').length;
 
     return {
       totalUsers: users || 0,
@@ -362,7 +482,8 @@ export const api = {
       ],
       activityVolume: [
         { name: 'Induction', value: induction },
-        { name: 'Work Permit', value: wp }
+        { name: 'Work Permit', value: wp },
+        { name: 'Supplier & Outsource', value: supplierOutsource }
       ]
     };
   },

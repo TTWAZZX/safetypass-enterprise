@@ -1,7 +1,9 @@
 import { supabase } from '../services/supabaseClient'; // ✅ เพิ่มบรรทัดนี้เข้ามา
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/supabaseApi';
-import { User, Vendor } from '../types';
+import {
+  User, Vendor, TrainingProgram, SupplierOutsourceType, SupplierOutsourceWorkType,
+} from '../types';
 import { useTranslation } from '../context/LanguageContext';
 import { 
   UserPlus, LogIn, ChevronRight, AlertCircle, Loader2, 
@@ -32,6 +34,12 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [otherVendor, setOtherVendor] = useState('');
   const [pdpaAccepted, setPdpaAccepted] = useState(false);
   const [showPolicyModal, setShowPolicyModal] = useState(false);
+  const [supplierOutsourceEnabled, setSupplierOutsourceEnabled] = useState(false);
+  const [selectedPrograms, setSelectedPrograms] = useState<TrainingProgram[]>(['CONTRACTOR']);
+  const [participantType, setParticipantType] = useState<SupplierOutsourceType>('supplier');
+  const [workType, setWorkType] = useState<SupplierOutsourceWorkType>('Driver');
+  const [accessStartDate, setAccessStartDate] = useState('');
+  const [accessEndDate, setAccessEndDate] = useState('');
   
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [vendorSearch, setVendorSearch] = useState('');
@@ -55,6 +63,18 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       api.getVendors().then(setVendors);
     }
   }, [mode]);
+
+  useEffect(() => {
+    api.getPublicFeatureFlags()
+      .then(({ supplierOutsourceEnabled: enabled }) => setSupplierOutsourceEnabled(enabled))
+      .catch(() => setSupplierOutsourceEnabled(false));
+  }, []);
+
+  const toggleProgram = (program: TrainingProgram) => {
+    setSelectedPrograms((current) => current.includes(program)
+      ? current.filter((item) => item !== program)
+      : [...current, program]);
+  };
 
   useEffect(() => {
     const loadSupportLinks = async () => {
@@ -156,13 +176,27 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     setError("");
     setInfoMsg(""); 
     try {
+      if (supplierOutsourceEnabled && selectedPrograms.length === 0) {
+        throw new Error('กรุณาเลือกหลักสูตรอย่างน้อย 1 รายการ');
+      }
+      if (supplierOutsourceEnabled && selectedPrograms.includes('SUPPLIER_OUTSOURCE')
+          && accessStartDate && accessEndDate && accessEndDate < accessStartDate) {
+        throw new Error('วันที่สิ้นสุดต้องไม่น้อยกว่าวันที่เริ่มต้น');
+      }
       const user = await api.register(
         regId, 
         name, 
         vendorId === 'OTHER' ? '' : vendorId, 
         Number(age), 
         nationality, 
-        vendorId === 'OTHER' ? otherVendor : undefined
+        vendorId === 'OTHER' ? otherVendor : undefined,
+        supplierOutsourceEnabled ? {
+          programs: selectedPrograms,
+          participantType: selectedPrograms.includes('SUPPLIER_OUTSOURCE') ? participantType : undefined,
+          workType: selectedPrograms.includes('SUPPLIER_OUTSOURCE') ? workType : undefined,
+          accessStartDate: selectedPrograms.includes('SUPPLIER_OUTSOURCE') ? accessStartDate : undefined,
+          accessEndDate: selectedPrograms.includes('SUPPLIER_OUTSOURCE') ? accessEndDate : undefined,
+        } : undefined,
       );
 
       // 🔥 ✅ แก้ไข: เติมคำว่า await เพื่อให้ระบบ "รอ" ส่ง LINE ให้เสร็จก่อนเปลี่ยนหน้า
@@ -419,6 +453,57 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               <div className="space-y-1 animate-in slide-in-from-top-2 duration-300">
                 <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('auth.other_company')}</label>
                 <input required value={otherVendor} onChange={e => setOtherVendor(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs" />
+              </div>
+            )}
+
+            {supplierOutsourceEnabled && (
+              <div className="space-y-3 rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700">
+                    หลักสูตรที่ต้องการ / Training Programs
+                  </p>
+                  <p className="mt-1 text-[9px] font-bold text-slate-500">
+                    เลือกได้มากกว่า 1 รายการ และสามารถเพิ่ม Supplier & Outsource ภายหลังได้
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <label className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 ${selectedPrograms.includes('CONTRACTOR') ? 'border-blue-300 bg-white' : 'border-slate-200 bg-slate-50'}`}>
+                    <input type="checkbox" checked={selectedPrograms.includes('CONTRACTOR')} onChange={() => toggleProgram('CONTRACTOR')} />
+                    <span className="text-[10px] font-black text-slate-700">Contractor</span>
+                  </label>
+                  <label className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 ${selectedPrograms.includes('SUPPLIER_OUTSOURCE') ? 'border-emerald-300 bg-white' : 'border-slate-200 bg-slate-50'}`}>
+                    <input type="checkbox" checked={selectedPrograms.includes('SUPPLIER_OUTSOURCE')} onChange={() => toggleProgram('SUPPLIER_OUTSOURCE')} />
+                    <span className="text-[10px] font-black text-slate-700">Supplier & Outsource</span>
+                  </label>
+                </div>
+
+                {selectedPrograms.includes('SUPPLIER_OUTSOURCE') && (
+                  <div className="grid grid-cols-1 gap-3 border-t border-emerald-100 pt-3 sm:grid-cols-2">
+                    <label className="space-y-1 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                      ประเภทผู้ใช้
+                      <select value={participantType} onChange={(e) => setParticipantType(e.target.value as SupplierOutsourceType)} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-xs font-bold normal-case text-slate-700">
+                        <option value="supplier">Supplier ส่งสินค้า/เข้าพื้นที่ชั่วคราว</option>
+                        <option value="outsource">Outsource งานทั่วไป</option>
+                      </select>
+                    </label>
+                    <label className="space-y-1 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                      ประเภทงาน
+                      <select value={workType} onChange={(e) => setWorkType(e.target.value as SupplierOutsourceWorkType)} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-xs font-bold normal-case text-slate-700">
+                        <option value="Driver">Driver</option>
+                        <option value="Passenger">Passenger</option>
+                        <option value="Trainee">Trainee</option>
+                      </select>
+                    </label>
+                    <label className="space-y-1 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                      วันที่เริ่มเข้าพื้นที่ (ถ้ามี)
+                      <input type="date" value={accessStartDate} onChange={(e) => setAccessStartDate(e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-xs font-bold text-slate-700" />
+                    </label>
+                    <label className="space-y-1 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                      วันที่สิ้นสุด (ถ้ามี)
+                      <input type="date" value={accessEndDate} min={accessStartDate || undefined} onChange={(e) => setAccessEndDate(e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-xs font-bold text-slate-700" />
+                    </label>
+                  </div>
+                )}
               </div>
             )}
 
