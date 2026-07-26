@@ -700,10 +700,23 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
                       )}
                     </div>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     {supplierStatus && (
                       <button disabled={isBanned} onClick={() => supplierPassActive && !supplierPassNearExpiry ? (setCardType('SUPPLIER_OUTSOURCE'), setShowCard(true)) : setActiveStage('SUPPLIER_OUTSOURCE')} className="flex-1 rounded-xl bg-emerald-600 px-4 py-3 text-[9px] font-black uppercase tracking-widest text-white disabled:opacity-40">
                         {supplierPassActive && !supplierPassNearExpiry ? 'ดูบัตร' : 'เริ่มสอบ'}
+                      </button>
+                    )}
+                    {supplierStatus && supplierPassActive && !supplierPassNearExpiry && (
+                      <button
+                        disabled={isBanned}
+                        onClick={() => {
+                          if (window.confirm('คุณต้องการเริ่มสอบ Supplier & Outsource ใหม่ใช่หรือไม่?')) {
+                            setActiveStage('SUPPLIER_OUTSOURCE');
+                          }
+                        }}
+                        className="flex-1 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[9px] font-black uppercase tracking-widest text-amber-700 disabled:opacity-40"
+                      >
+                        สอบใหม่ / Retake
                       </button>
                     )}
                     <button disabled={isBanned} onClick={() => setShowSupplierEnrollment(true)} className="flex-1 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-[9px] font-black uppercase tracking-widest text-emerald-700 disabled:opacity-40">

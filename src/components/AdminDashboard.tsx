@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { api } from '../services/supabaseApi'; 
 import { supabase } from '../services/supabaseClient'; 
 import {
@@ -6,9 +6,9 @@ import {
   Search, Calendar, TrendingUp,
   Loader2, AlertCircle, RotateCcw, Filter, ChevronRight, ChevronLeft,
   ShieldCheck, AlertTriangle, UserX, Activity, PieChart as PieChartIcon,
-  LineChart as LineChartIcon, Building2, ShieldAlert, Clock, ArrowRight
+  LineChart as LineChartIcon, Building2, ShieldAlert, Clock, ArrowRight, ChevronDown
 } from 'lucide-react';
-import { downloadWorkbook } from '../services/excelExport';
+import { downloadSupplierOutsourceWorkbook, downloadWorkbook } from '../services/excelExport';
 
 import {
   PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
@@ -23,6 +23,9 @@ const AdminDashboard: React.FC<{ onNavigateToUsers?: () => void }> = ({ onNaviga
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [supplierExportLoading, setSupplierExportLoading] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
 
   // Filtering States
   const [filterDate, setFilterDate] = useState('');
@@ -36,6 +39,26 @@ const AdminDashboard: React.FC<{ onNavigateToUsers?: () => void }> = ({ onNaviga
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (!exportMenuOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setExportMenuOpen(false);
+    };
+    const closeOnOutsideClick = (event: MouseEvent | TouchEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+        setExportMenuOpen(false);
+      }
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    document.addEventListener('mousedown', closeOnOutsideClick);
+    document.addEventListener('touchstart', closeOnOutsideClick);
+    return () => {
+      document.removeEventListener('keydown', closeOnEscape);
+      document.removeEventListener('mousedown', closeOnOutsideClick);
+      document.removeEventListener('touchstart', closeOnOutsideClick);
+    };
+  }, [exportMenuOpen]);
 
   // ✅ รีเซ็ตหน้ากลับไปที่ 1 เสมอเวลาเปลี่ยนตัวกรอง ค้นหา หรือเปลี่ยนจำนวนแสดง
   useEffect(() => {
@@ -206,6 +229,20 @@ const AdminDashboard: React.FC<{ onNavigateToUsers?: () => void }> = ({ onNaviga
     );
   };
 
+  const exportSupplierOutsource = async () => {
+    try {
+      setSupplierExportLoading(true);
+      const rows = await api.getSupplierOutsourceReport();
+      await downloadSupplierOutsourceWorkbook(rows);
+      setExportMenuOpen(false);
+    } catch (exportError: any) {
+      console.error('Supplier & Outsource export failed:', exportError);
+      window.alert('ไม่สามารถส่งออกรายงาน Supplier & Outsource ได้ กรุณาลองใหม่อีกครั้ง');
+    } finally {
+      setSupplierExportLoading(false);
+    }
+  };
+
   const renderPagination = (position: 'top' | 'bottom') => {
     if (filteredHistory.length === 0) return null;
     return (
@@ -288,17 +325,58 @@ const AdminDashboard: React.FC<{ onNavigateToUsers?: () => void }> = ({ onNaviga
           </div>
         </div>
         <div className="flex w-full md:w-auto gap-2">
-          <button 
-            onClick={exportToExcel}
-            disabled={filteredHistory.length === 0}
-            className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-slate-900 hover:bg-black disabled:bg-slate-200 text-white px-4 sm:px-6 py-3.5 rounded-2xl font-black text-xs uppercase transition-all shadow-lg active:scale-95 group"
-          >
-            <FileSpreadsheet size={16} className="group-hover:rotate-12 transition-transform" />
-            <span className="flex flex-col items-start leading-none text-left">
-                <span className="mb-0.5">Export Data</span>
-                <span className="text-[8px] text-slate-300 font-medium">ส่งออก Excel</span>
-            </span>
-          </button>
+          <div ref={exportMenuRef} className="relative flex-1 md:flex-none">
+            <button
+              type="button"
+              onClick={() => setExportMenuOpen((open) => !open)}
+              aria-haspopup="menu"
+              aria-expanded={exportMenuOpen}
+              aria-controls="dashboard-export-menu"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3.5 text-xs font-black uppercase text-white shadow-lg transition-all hover:bg-black active:scale-95 sm:px-6 md:w-auto"
+            >
+              <FileSpreadsheet size={16} />
+              <span className="flex flex-col items-start leading-none text-left">
+                  <span className="mb-0.5">Export Data</span>
+                  <span className="text-[8px] font-medium text-slate-300">ส่งออก Excel</span>
+              </span>
+              <ChevronDown size={14} className={`transition-transform ${exportMenuOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {exportMenuOpen && (
+              <div
+                id="dashboard-export-menu"
+                role="menu"
+                aria-label="เลือกรายงาน Excel"
+                className="absolute right-0 z-40 mt-2 w-full min-w-[260px] overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl md:w-72"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={filteredHistory.length === 0}
+                  onClick={async () => {
+                    await exportToExcel();
+                    setExportMenuOpen(false);
+                  }}
+                  className="w-full rounded-xl px-4 py-3 text-left transition-colors hover:bg-blue-50 focus:bg-blue-50 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <span className="block text-[10px] font-black uppercase text-slate-800">รายงานผู้รับเหมาเดิม</span>
+                  <span className="mt-1 block text-[9px] font-bold text-slate-400">Contractor report</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={supplierExportLoading}
+                  onClick={exportSupplierOutsource}
+                  className="w-full rounded-xl px-4 py-3 text-left transition-colors hover:bg-emerald-50 focus:bg-emerald-50 focus:outline-none disabled:cursor-wait disabled:opacity-50"
+                >
+                  <span className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-800">
+                    {supplierExportLoading && <Loader2 size={13} className="animate-spin" />}
+                    รายงาน Supplier & Outsource
+                  </span>
+                  <span className="mt-1 block text-[9px] font-bold text-slate-400">Supplier Epass Check Member</span>
+                </button>
+              </div>
+            )}
+          </div>
           <button onClick={fetchData} title="รีเฟรชข้อมูล (Refresh)" className="p-3.5 bg-slate-100 text-slate-500 rounded-2xl hover:bg-blue-50 hover:text-blue-600 transition-all active:scale-90 flex-shrink-0">
             <RotateCcw size={18} />
           </button>

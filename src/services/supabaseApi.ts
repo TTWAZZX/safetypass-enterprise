@@ -234,12 +234,23 @@ export const api = {
   ===================================================== */
 
   getSystemSettings: async () => {
-    const { data } = await supabase.from('system_config').select('*');
+    const { data, error } = await supabase.rpc('get_runtime_system_settings');
+    if (error) throw error;
     const config: Record<string, string> = {};
     data?.forEach((item: any) => {
       config[item.key] = item.value;
     });
     return config;
+  },
+
+  getPublicSupportLinks: async () => {
+    const { data, error } = await supabase.rpc('get_public_support_links');
+    if (error) throw error;
+    const links = data?.[0];
+    return {
+      manualUrl: String(links?.manual_url || ''),
+      supportUrl: String(links?.support_url || ''),
+    };
   },
 
   getPublicFeatureFlags: async () => {
@@ -249,22 +260,16 @@ export const api = {
   },
 
   getPassingScore: async (key: string) => {
-    const { data } = await supabase
-      .from('system_config')
-      .select('value')
-      .eq('key', key)
-      .maybeSingle() // ✅ เปลี่ยนเป็น maybeSingle เพื่อกัน Error กรณีไม่เจอค่า
-    return Number(data?.value || 80) // Default 80
+    const settings = await api.getSystemSettings();
+    return Number(settings[key] || 80);
   },
 
   // ✅ ฟังก์ชันพระเอก: ใช้ upsert เพื่อ "สร้างใหม่" หรือ "อัปเดต" ในคำสั่งเดียว
   updateSystemSetting: async (key: string, value: number | string) => {
-    const { error } = await supabase
-      .from('system_config')
-      .upsert(
-        { key, value: String(value) }, 
-        { onConflict: 'key' } // 👈 สำคัญ: ระบุว่าให้เช็คซ้ำที่คอลัมน์ key
-      );
+    const { error } = await supabase.rpc('admin_update_system_setting', {
+      key_param: key,
+      value_param: String(value),
+    });
     if (error) throw error;
   },
   

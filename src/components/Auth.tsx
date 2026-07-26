@@ -94,9 +94,9 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   useEffect(() => {
     const loadSupportLinks = async () => {
       try {
-        const config = await api.getSystemSettings();
-        if (config['manual_url']) setManualUrl(config['manual_url']);
-        if (config['support_url']) setSupportUrl(config['support_url']);
+        const links = await api.getPublicSupportLinks();
+        setManualUrl(links.manualUrl);
+        setSupportUrl(links.supportUrl);
       } catch (err) {
         console.error("Failed to load support links", err);
       }

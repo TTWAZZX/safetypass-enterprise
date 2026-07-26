@@ -28,4 +28,5 @@ dist-ssr
 .supabase/
 supabase/.temp/
 supabase-schema-*.sql
+.phase8-*
 data backup/
