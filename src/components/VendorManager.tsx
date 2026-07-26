@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { api } from '../services/supabaseApi';
 import { useToastContext } from './ToastProvider';
@@ -11,6 +11,7 @@ import {
   ShieldAlert, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import AsyncState from './AsyncState';
+import { useDialogFocus } from '../hooks/useDialogFocus';
 
 const maskNationalID = (id: string | null | undefined) => {
   if (!id || id.length < 13) return '-------------';
@@ -68,6 +69,8 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
   const [dataList, setDataList] = useState<any[]>([]);
   const [allVendors, setAllVendors] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
+  const [totalItems, setTotalItems] = useState(0);
+  const [userStats, setUserStats] = useState<{ total: number; noCert: number; expired: number; expiring: number; valid: number } | null>(null);
   
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10); 
@@ -85,6 +88,8 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
 
   const userFileInputRef = useRef<HTMLInputElement>(null);
   const vendorFileInputRef = useRef<HTMLInputElement>(null);
+  const editDialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(isEditModalOpen, editDialogRef, () => setIsEditModalOpen(false));
 
   useEffect(() => {
     setCurrentPage(1);
@@ -106,22 +111,26 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
       setLoadError('');
     }
     try {
-      let query: any;
-      if (activeTab === 'VENDORS') {
-        query = supabase.from('vendors').select('*').order('created_at', { ascending: false });
-      } else if (activeTab === 'USERS') {
-        query = supabase.rpc('admin_list_users');
-      } else {
-        query = supabase.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(2000);
-      }
+      const [result, vendorsResult] = await Promise.all([
+        api.getDirectoryPage({
+          section: activeTab,
+          page: currentPage,
+          pageSize: itemsPerPage === -1 ? 5000 : itemsPerPage,
+          search: activeTab === 'LOGS' ? '' : searchQuery,
+          vendorFilter: activeTab === 'USERS' ? selectedVendorFilter : '',
+          certFilter: activeTab === 'USERS' ? certFilter : '',
+        }),
+        supabase.from('vendors').select('id, name').eq('status', 'APPROVED').order('name'),
+      ]);
 
-      const { data, error } = await query;
-      if (error) throw error;
+      if (activeTab === 'LOGS') setLogs(result.rows);
+      else setDataList(result.rows);
+      setTotalItems(result.total);
+      setUserStats(activeTab === 'USERS' ? result.stats : null);
+      const resultTotalPages = itemsPerPage === -1 ? 1 : Math.max(1, Math.ceil(result.total / itemsPerPage));
+      if (currentPage > resultTotalPages) setCurrentPage(resultTotalPages);
 
-      if (activeTab === 'LOGS') setLogs(data || []);
-      else setDataList(data || []);
-
-      const { data: vData } = await supabase.from('vendors').select('id, name').eq('status', 'APPROVED').order('name');
+      const { data: vData } = vendorsResult;
       setAllVendors(vData || []);
 
     } catch (err: any) {
@@ -132,14 +141,39 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     }
   };
 
-  useEffect(() => { loadData(); }, [activeTab]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => loadData(), searchQuery ? 250 : 0);
+    return () => window.clearTimeout(timer);
+  }, [activeTab, currentPage, itemsPerPage, searchQuery, selectedVendorFilter, certFilter]);
 
   // Auto-refresh every 60s (skip LOGS tab to avoid noise)
   useEffect(() => {
     if (activeTab === 'LOGS') return;
     const timer = setInterval(() => { loadData(true); }, 60000);
     return () => clearInterval(timer);
-  }, [activeTab]);
+  }, [activeTab, currentPage, itemsPerPage, searchQuery, selectedVendorFilter, certFilter]);
+
+  const getAllDirectoryRows = async (section: 'USERS' | 'VENDORS') => {
+    const pageSize = 1000;
+    const rows: any[] = [];
+    let page = 1;
+    let total = 0;
+    do {
+      const result = await api.getDirectoryPage({
+        section,
+        page,
+        pageSize,
+        search: searchQuery,
+        vendorFilter: section === 'USERS' ? selectedVendorFilter : '',
+        certFilter: section === 'USERS' ? certFilter : '',
+      });
+      rows.push(...result.rows);
+      total = result.total;
+      if (result.rows.length === 0) break;
+      page += 1;
+    } while (rows.length < total);
+    return rows;
+  };
 
   const handleUpdateVendorStatus = async (id: string, name: string, newStatus: 'APPROVED' | 'REJECTED') => {
     const confirmMsg = newStatus === 'APPROVED' ? `ยืนยันการอนุมัติบริษัท ${name}?` : `ยืนยันการปฏิเสธบริษัท ${name}?`;
@@ -227,7 +261,8 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     let fileName = '';
 
     if (activeTab === 'USERS') {
-      exportData = filtered.map(user => ({
+      const exportRows = await getAllDirectoryRows('USERS');
+      exportData = exportRows.map(user => ({
         'Name': user.name,
         'National ID': user.national_id ? "'" + user.national_id : '-',
         'Vendor': user.vendors?.name || 'N/A',
@@ -240,7 +275,8 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
       }));
       fileName = `Personnel_List_${new Date().toISOString().split('T')[0]}.xlsx`;
     } else if (activeTab === 'VENDORS') {
-      exportData = filtered.map(vendor => ({
+      const exportRows = await getAllDirectoryRows('VENDORS');
+      exportData = exportRows.map(vendor => ({
         'Company Name': vendor.name,
         'Status': vendor.status,
         'Registry Date': new Date(vendor.created_at).toLocaleDateString()
@@ -434,8 +470,10 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     });
   };
 
-  const handleBulkExport = async (currentFiltered: any[]) => {
-    const selected = currentFiltered.filter(u => selectedIds.has(u.id));
+  const handleBulkExport = async () => {
+    const { data, error } = await supabase.rpc('admin_list_users');
+    if (error) return showToast('ไม่สามารถโหลดข้อมูลที่เลือกได้', 'error');
+    const selected = (data || []).filter((user: any) => selectedIds.has(user.id));
     if (selected.length === 0) return showToast('ไม่พบข้อมูลที่จะส่งออก', 'error');
     const exportData = selected.map(user => ({
       'Name': user.name,
@@ -494,70 +532,19 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     return diffDays > 0 ? `หมดอายุอีก ${diffDays} วัน` : `หมดไปแล้ว ${Math.abs(diffDays)} วัน`;
   };
 
-  const filteredRaw = activeTab === 'LOGS' ? logs : dataList.filter(item => {
-    const matchesSearch = (item.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          (item.national_id || '').includes(searchQuery);
-
-    if (activeTab === 'USERS' && selectedVendorFilter) {
-      if (selectedVendorFilter === 'EXTERNAL') {
-        if (!matchesSearch || item.vendor_id) return false;
-      } else {
-        if (!matchesSearch || item.vendor_id !== selectedVendorFilter) return false;
-      }
-    } else if (!matchesSearch) return false;
-
-    if (activeTab === 'USERS' && certFilter) {
-      const cs = getCertStatus(item);
-      if (certFilter === 'NO_CERT') return cs === 'none' || cs === 'expired';
-      if (certFilter === 'EXPIRING') return cs === 'expiring';
-      if (certFilter === 'HAS_CERT') return cs === 'valid';
-    }
-
-    return true;
-  });
-
-  const filtered = activeTab === 'USERS'
-    ? [...filteredRaw].sort((a, b) => {
-        const sortKey = (item: any) => {
-          const cert = getCertStatus(item);
-          const active = !!item.last_login;
-          if ((cert === 'none' || cert === 'expired') && active) return 0;
-          if ((cert === 'none' || cert === 'expired') && !active) return 1;
-          if (cert === 'expiring') return 2;
-          return 3; // valid
-        };
-        return sortKey(a) - sortKey(b);
-      })
-    : filteredRaw;
-
-  const userStats = useMemo(() => {
-    if (activeTab !== 'USERS') return null;
-    return {
-      total: dataList.length,
-      noCert: dataList.filter(u => getCertStatus(u) === 'none').length,
-      expired: dataList.filter(u => getCertStatus(u) === 'expired').length,
-      expiring: dataList.filter(u => getCertStatus(u) === 'expiring').length,
-      valid: dataList.filter(u => getCertStatus(u) === 'valid').length,
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dataList, activeTab]);
-
-  const totalItems = filtered.length;
   const totalPages = itemsPerPage === -1 ? 1 : Math.ceil(totalItems / itemsPerPage);
-  
-  const paginatedData = itemsPerPage === -1 
-    ? filtered 
-    : filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const paginatedData = activeTab === 'LOGS' ? logs : dataList;
 
   const renderPagination = (position: 'top' | 'bottom') => {
-    if (filtered.length === 0) return null;
+    if (totalItems === 0) return null;
     return (
       <div className={`bg-slate-50/50 p-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4 ${position === 'top' ? 'border-b border-slate-100' : 'mt-auto border-t border-slate-200 rounded-b-[1.5rem] md:rounded-b-[2.5rem]'}`}>
          <div className="flex items-center gap-2 text-[10px] md:text-xs font-bold text-slate-500 w-full sm:w-auto justify-center sm:justify-start">
             <span>แสดง</span>
             <select 
                 value={itemsPerPage} 
-                onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+                aria-label="จำนวนรายการต่อหน้า"
                 className="bg-white border border-slate-200 rounded-lg px-2 py-1 outline-none focus:border-blue-500 shadow-sm font-black text-slate-700"
             >
                 <option value={10}>10</option>
@@ -607,9 +594,9 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
           </div>
         </div>
         <div className="flex w-full lg:w-auto bg-slate-100 p-1 rounded-2xl border border-slate-200 shadow-inner overflow-x-auto no-scrollbar">
-          <TabButton active={activeTab === 'VENDORS'} onClick={() => {setActiveTab('VENDORS'); setSearchQuery(''); setSelectedVendorFilter(''); setCertFilter('');}} icon={<Building2 size={14}/>} label="Vendors" />
-          <TabButton active={activeTab === 'USERS'} onClick={() => {setActiveTab('USERS'); setSearchQuery(''); setSelectedVendorFilter(''); setCertFilter('');}} icon={<Users size={14}/>} label="Personnel" />
-          <TabButton active={activeTab === 'LOGS'} onClick={() => {setActiveTab('LOGS'); setSearchQuery(''); setSelectedVendorFilter(''); setCertFilter('');}} icon={<History size={14}/>} label="Audit" />
+          <TabButton active={activeTab === 'VENDORS'} onClick={() => {setActiveTab('VENDORS'); setCurrentPage(1); setSearchQuery(''); setSelectedVendorFilter(''); setCertFilter('');}} icon={<Building2 size={14}/>} label="Vendors" />
+          <TabButton active={activeTab === 'USERS'} onClick={() => {setActiveTab('USERS'); setCurrentPage(1); setSearchQuery(''); setSelectedVendorFilter(''); setCertFilter('');}} icon={<Users size={14}/>} label="Personnel" />
+          <TabButton active={activeTab === 'LOGS'} onClick={() => {setActiveTab('LOGS'); setCurrentPage(1); setSearchQuery(''); setSelectedVendorFilter(''); setCertFilter('');}} icon={<History size={14}/>} label="Audit" />
         </div>
       </div>
 
@@ -623,7 +610,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
               {/* ช่องค้นหา */}
               <div className="relative flex-1 group w-full">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-                <input className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-base md:text-sm outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all shadow-sm" placeholder={`Search ${activeTab.toLowerCase()}...`} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                <input aria-label={`ค้นหา ${activeTab.toLowerCase()}`} className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-base md:text-sm outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all shadow-sm" placeholder={`Search ${activeTab.toLowerCase()}...`} value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }} />
               </div>
               
               {/* ตัวกรองบริษัท */}
@@ -633,7 +620,8 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                   <select
                     className="w-full pl-10 pr-8 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-[11px] text-slate-600 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all shadow-sm appearance-none cursor-pointer truncate"
                     value={selectedVendorFilter}
-                    onChange={(e) => setSelectedVendorFilter(e.target.value)}
+                    onChange={(e) => { setSelectedVendorFilter(e.target.value); setCurrentPage(1); }}
+                    aria-label="กรองบริษัทของผู้ใช้"
                   >
                     <option value="">ทุกบริษัท (All Vendors)</option>
                     {allVendors.map(v => (
@@ -707,7 +695,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
           <div className="mx-4 mt-3 bg-slate-900 text-white px-4 py-3 rounded-2xl flex flex-col items-stretch justify-between gap-3 shadow-lg animate-in fade-in duration-200 sm:flex-row sm:items-center">
             <span className="text-xs font-black">{selectedIds.size} รายการที่เลือก</span>
             <div className="grid grid-cols-[1fr_1fr_44px] gap-2">
-              <button onClick={() => handleBulkExport(filtered)} disabled={bulkLoading} className="flex min-h-11 items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95">
+              <button onClick={handleBulkExport} disabled={bulkLoading} className="flex min-h-11 items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95">
                 <Download size={12}/> Export ที่เลือก
               </button>
               <button onClick={handleBulkReset} disabled={bulkLoading} className="flex min-h-11 items-center gap-1.5 bg-amber-500/80 hover:bg-amber-500 text-white px-3 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95">
@@ -1014,14 +1002,14 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
       {/* 📝 EDIT USER MODAL */}
       {isEditModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setIsEditModalOpen(false)} />
-          <div className="bg-white w-full max-w-lg rounded-[2rem] md:rounded-[2.5rem] shadow-2xl border relative z-10 p-6 md:p-8 text-left animate-in zoom-in-95 duration-300 max-h-[95vh] overflow-y-auto mx-4 md:mx-0">
+          <div aria-hidden="true" className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setIsEditModalOpen(false)} />
+          <div ref={editDialogRef} role="dialog" aria-modal="true" aria-labelledby="edit-profile-dialog-title" tabIndex={-1} className="bg-white w-full max-w-lg rounded-[2rem] md:rounded-[2.5rem] shadow-2xl border relative z-10 p-6 md:p-8 text-left animate-in zoom-in-95 duration-300 max-h-[95vh] overflow-y-auto mx-4 md:mx-0 focus:outline-none">
               <div className="flex justify-between items-center mb-6 border-b pb-4 sticky top-0 bg-white z-20">
                   <div>
-                    <h3 className="text-lg md:text-xl font-black text-slate-900 uppercase">Edit Profile</h3>
+                    <h3 id="edit-profile-dialog-title" className="text-lg md:text-xl font-black text-slate-900 uppercase">Edit Profile</h3>
                     <p className="text-[10px] text-blue-500 font-bold uppercase tracking-widest mt-1">ID: {maskNationalID(editingUser?.national_id)}</p>
                   </div>
-                  <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-red-500 transition-colors bg-slate-50 p-3 rounded-full"><X size={20}/></button>
+                  <button onClick={() => setIsEditModalOpen(false)} aria-label="ปิดหน้าต่างแก้ไขผู้ใช้" className="min-h-11 min-w-11 text-slate-600 hover:text-red-600 transition-colors bg-slate-50 p-3 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500"><X size={20}/></button>
               </div>
               <div className="space-y-4">
                   <div className="space-y-1">
@@ -1080,7 +1068,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
 };
 
 const TabButton = ({ active, onClick, icon, label }: any) => (
-  <button onClick={onClick} className={`min-h-11 shrink-0 px-4 md:px-5 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all whitespace-nowrap active:scale-95 ${active ? 'bg-white text-blue-600 shadow-md border-b-2 border-blue-500' : 'text-slate-400 hover:text-slate-600 hover:bg-white/50'}`}>{icon} {label}</button>
+  <button onClick={onClick} aria-current={active ? 'page' : undefined} className={`min-h-11 shrink-0 px-4 md:px-5 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all whitespace-nowrap active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500 ${active ? 'bg-white text-blue-600 shadow-md border-b-2 border-blue-500' : 'text-slate-600 hover:text-slate-800 hover:bg-white/50'}`}>{icon} {label}</button>
 );
 
 export default VendorManager;

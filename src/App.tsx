@@ -105,6 +105,9 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans relative">
+      <a href="#main-content" className="sr-only z-[200] rounded-lg bg-white px-4 py-3 font-bold text-blue-700 shadow-lg focus:not-sr-only focus:fixed focus:left-4 focus:top-4">
+        ข้ามไปยังเนื้อหาหลัก
+      </a>
       
       {/* Header */}
       <header className="bg-slate-900 text-white shadow-lg relative z-50 border-b border-slate-800">
@@ -156,7 +159,7 @@ const AppContent: React.FC = () => {
       </header>
 
       {/* Main Content */}
-      <main className="flex-grow relative z-0">
+      <main id="main-content" tabIndex={-1} className="flex-grow relative z-0 focus:outline-none">
         <Suspense fallback={<PageSkeleton />}>
           {!currentUser ? (
             <Auth onLogin={handleLogin} />
@@ -241,11 +244,11 @@ const AppContent: React.FC = () => {
       {/* Footer */}
       <footer className="bg-slate-50 border-t border-slate-200 py-8 mt-auto pb-32 md:pb-8">
         <div className="max-w-7xl mx-auto px-4 text-center">
-          <div className="inline-flex items-center gap-2 mb-2 opacity-50 grayscale">
+          <div className="inline-flex items-center gap-2 mb-2 grayscale">
              <Shield size={14} className="text-blue-500"/>
              <span className="text-xs font-black text-slate-700 tracking-tight">SafetyPass Enterprise</span>
           </div>
-          <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.2em]">
+          <p className="text-slate-600 text-[10px] font-bold uppercase tracking-[0.2em]">
             © 2026 Secure Access System • Internal Use Only
           </p>
         </div>

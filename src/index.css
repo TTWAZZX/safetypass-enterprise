@@ -12,6 +12,11 @@ html {
   scrollbar-gutter: stable;
 }
 
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 3px solid #2563eb;
+  outline-offset: 2px;
+}
+
 /* Respect the operating-system setting and the in-app accessibility toggle. */
 @media (prefers-reduced-motion: reduce) {
   html {

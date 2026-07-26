@@ -1,6 +1,5 @@
 import React, { lazy, Suspense, useEffect, useState, useMemo, useRef } from 'react';
 import { api } from '../services/supabaseApi'; 
-import { supabase } from '../services/supabaseClient'; 
 import {
   Users, CheckCircle, XCircle, FileSpreadsheet,
   Search, Calendar,
@@ -30,7 +29,13 @@ const AdminDashboard: React.FC<{
   const [supplierRows, setSupplierRows] = useState<SupplierOutsourceReportRow[]>([]);
   const [supplierLaunchStatus, setSupplierLaunchStatus] = useState({ enabled: false, activeQuestionCount: 0 });
   const [supplierLoadError, setSupplierLoadError] = useState('');
+  const [totalItems, setTotalItems] = useState(0);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [chartData, setChartData] = useState<{ pieData: any[]; barData: any[]; trendData: any[]; vendorData: any[] }>({
+    pieData: [], barData: [], trendData: [], vendorData: [],
+  });
   const exportMenuRef = useRef<HTMLDivElement>(null);
+  const initialLoadCompleteRef = useRef(false);
 
   // Filtering States
   const [filterDate, setFilterDate] = useState('');
@@ -44,6 +49,12 @@ const AdminDashboard: React.FC<{
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (!initialLoadCompleteRef.current) return;
+    const timer = window.setTimeout(() => loadHistoryPage(), searchTerm ? 250 : 0);
+    return () => window.clearTimeout(timer);
+  }, [currentPage, itemsPerPage, searchTerm, filterDate, filterStatus, filterType]);
 
   useEffect(() => {
     if (!exportMenuOpen) return;
@@ -65,11 +76,6 @@ const AdminDashboard: React.FC<{
     };
   }, [exportMenuOpen]);
 
-  // ✅ รีเซ็ตหน้ากลับไปที่ 1 เสมอเวลาเปลี่ยนตัวกรอง ค้นหา หรือเปลี่ยนจำนวนแสดง
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, filterDate, filterStatus, filterType, itemsPerPage]);
-
   const loadSupplierSnapshot = async () => {
     setSupplierLoadError('');
     try {
@@ -89,57 +95,32 @@ const AdminDashboard: React.FC<{
     try {
       setLoading(true);
       setError(null);
-      
-      const [historyData] = await Promise.all([
-        api.getAllExamHistory(),
+      const [summary] = await Promise.all([
+        api.getDashboardSummary(),
+        loadHistoryPage(false),
         loadSupplierSnapshot(),
       ]);
 
-      let suspendedCount = 0;
-      try {
-         const { count } = await supabase
-           .from('users')
-           .select('*', { count: 'exact', head: true })
-           .eq('is_active', false);
-         suspendedCount = count || 0;
-      } catch (e) {
-         console.warn("Table users might not have is_active column yet", e);
-      }
-
-      const validHistory = historyData || [];
-      
-      const totalExams = validHistory.length;
-      const passedExams = validHistory.filter(h => h.status === 'PASSED').length;
-      const failedExams = validHistory.filter(h => h.status !== 'PASSED').length;
-
-      setHistory(validHistory);
       setStats({
-        total: totalExams,
-        passed: passedExams,
-        failed: failedExams,
-        suspended: suspendedCount
+        total: summary.total,
+        passed: summary.passed,
+        failed: summary.failed,
+        suspended: summary.suspended,
       });
-
-      // Compliance stats
-      try {
-        const { data: usersData } = await supabase
-          .from('users')
-          .select('induction_expiry')
-          .eq('is_active', true);
-        if (usersData) {
-          const now = Date.now();
-          const soon = now + 30 * 24 * 60 * 60 * 1000;
-          let noCert = 0, expired = 0, expiring = 0;
-          for (const u of usersData) {
-            if (!u.induction_expiry) { noCert++; continue; }
-            const exp = new Date(u.induction_expiry).getTime();
-            if (exp <= now) expired++;
-            else if (exp <= soon) expiring++;
-          }
-          setComplianceStats({ noCert, expired, expiring });
-        }
-      } catch { /* non-critical */ }
-
+      setComplianceStats(summary.compliance);
+      setChartData({
+        pieData: [
+          { name: 'ผ่าน (Passed)', value: summary.passed, color: '#10b981' },
+          { name: 'ไม่ผ่าน (Failed)', value: summary.failed, color: '#ef4444' },
+        ],
+        barData: summary.barData,
+        trendData: summary.trendData.map((item: any) => ({
+          ...item,
+          name: new Date(`${item.dateKey}T00:00:00`).toLocaleDateString('th-TH', { day: '2-digit', month: 'short' }),
+        })),
+        vendorData: summary.vendorData,
+      });
+      initialLoadCompleteRef.current = true;
     } catch (err: any) {
       console.error("Dashboard fetch error:", err);
       setError("ไม่สามารถโหลดข้อมูลได้ กรุณาลองใหม่อีกครั้ง");
@@ -148,59 +129,35 @@ const AdminDashboard: React.FC<{
     }
   };
 
-  const chartData = useMemo(() => {
-    if (!history.length) return { pieData: [], barData: [], trendData: [], vendorData: [] };
-
-    const passCount = history.filter(h => h.status === 'PASSED').length;
-    const failCount = history.filter(h => h.status !== 'PASSED').length;
-    const pieData = [
-      { name: 'ผ่าน (Passed)', value: passCount, color: '#10b981' },
-      { name: 'ไม่ผ่าน (Failed)', value: failCount, color: '#ef4444' }
-    ];
-
-    const typeStats = history.reduce((acc: any, curr: any) => {
-      const type = curr.exam_type || 'UNKNOWN';
-      if (!acc[type]) acc[type] = { name: type.replace('_', ' '), Passed: 0, Failed: 0 };
-      if (curr.status === 'PASSED') acc[type].Passed += 1;
-      else acc[type].Failed += 1;
-      return acc;
-    }, {});
-    const barData = Object.values(typeStats);
-
-    const dateMap: any = {};
-    history.forEach(h => {
-      const d = new Date(h.created_at);
-      const key = d.toISOString().split('T')[0];
-      const label = d.toLocaleDateString('th-TH', { day: '2-digit', month: 'short' });
-      if (!dateMap[key]) dateMap[key] = { dateKey: key, name: label, Exams: 0 };
-      dateMap[key].Exams += 1;
-    });
-    const trendData = Object.values(dateMap)
-      .sort((a: any, b: any) => a.dateKey.localeCompare(b.dateKey))
-      .slice(-14);
-
-    const vendorMap: any = {};
-    history.forEach(h => {
-      const vName = h.users?.vendors?.name || 'EXTERNAL (ไม่มีสังกัด)';
-      if (!vendorMap[vName]) vendorMap[vName] = { name: vName, total: 0, passed: 0, failed: 0 };
-      vendorMap[vName].total += 1;
-      if (h.status === 'PASSED') vendorMap[vName].passed += 1;
-      else vendorMap[vName].failed += 1;
-    });
-    const vendorData = Object.values(vendorMap)
-      .sort((a: any, b: any) => b.total - a.total)
-      .slice(0, 5);
-
-    return { pieData, barData, trendData, vendorData };
-  }, [history]);
+  const loadHistoryPage = async (showLoading = true) => {
+    if (showLoading) setHistoryLoading(true);
+    try {
+      const result = await api.getExamHistoryPage({
+        page: currentPage,
+        pageSize: itemsPerPage === -1 ? 5000 : itemsPerPage,
+        search: searchTerm,
+        examType: filterType,
+        status: filterStatus,
+        date: filterDate,
+      });
+      setHistory(result.rows);
+      setTotalItems(result.total);
+      const resultTotalPages = itemsPerPage === -1 ? 1 : Math.max(1, Math.ceil(result.total / itemsPerPage));
+      if (currentPage > resultTotalPages) setCurrentPage(resultTotalPages);
+    } catch (historyError) {
+      if (!showLoading) throw historyError;
+      setError('ไม่สามารถโหลดหน้าประวัติการสอบได้ กรุณาลองใหม่อีกครั้ง');
+    } finally {
+      if (showLoading) setHistoryLoading(false);
+    }
+  };
 
   const supplierMetrics = useMemo(
     () => calculateSupplierDashboardMetrics(supplierRows),
     [supplierRows],
   );
 
-  // ✅ การกรองข้อมูล
-  const filteredHistory = history.filter(item => {
+  const matchesHistoryFilters = (item: any) => {
     const matchesSearch = 
       item.users?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.users?.vendors?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -211,17 +168,15 @@ const AdminDashboard: React.FC<{
     const matchesType = filterType === 'ALL' ? true : item.exam_type === filterType;
 
     return matchesSearch && matchesDate && matchesStatus && matchesType;
-  });
+  };
 
-  // ✅ การแบ่งหน้า (Pagination)
-  const totalItems = filteredHistory.length;
   const totalPages = itemsPerPage === -1 ? 1 : Math.ceil(totalItems / itemsPerPage);
-  const paginatedData = itemsPerPage === -1 
-    ? filteredHistory 
-    : filteredHistory.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const paginatedData = history;
 
   const exportToExcel = async () => {
-    if (filteredHistory.length === 0) return;
+    const allHistory = await api.getAllExamHistory();
+    const exportHistory = (allHistory || []).filter(matchesHistoryFilters);
+    if (exportHistory.length === 0) return;
 
     // Header row (ลำดับคอลัมน์ตามที่กำหนด)
     const headers = [
@@ -231,7 +186,7 @@ const AdminDashboard: React.FC<{
     ];
 
     // Data rows — ใช้ array เพื่อควบคุมลำดับคอลัมน์ได้แน่นอน
-    const rows = filteredHistory.map(item => {
+    const rows = exportHistory.map(item => {
       const idNum = parseInt((item.users?.national_id || '').replace(/\D/g, '') || '0', 10);
       return [
         new Date(item.created_at),                                       // A – Date object → Excel date
@@ -272,7 +227,7 @@ const AdminDashboard: React.FC<{
   };
 
   const renderPagination = (position: 'top' | 'bottom') => {
-    if (filteredHistory.length === 0) return null;
+    if (totalItems === 0) return null;
     return (
       <div className={`bg-slate-50/50 p-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4 ${position === 'top' ? 'border-b border-slate-100' : 'mt-auto border-t border-slate-200'}`}>
          {/* Page Size Selector */}
@@ -280,7 +235,8 @@ const AdminDashboard: React.FC<{
             <span>แสดง</span>
             <select 
                 value={itemsPerPage} 
-                onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+                aria-label="จำนวนรายการต่อหน้า"
                 className="bg-white border border-slate-200 rounded-lg px-2 py-1 outline-none focus:border-blue-500 shadow-sm font-black text-slate-700"
             >
                 <option value={10}>10</option>
@@ -368,7 +324,7 @@ const AdminDashboard: React.FC<{
                 <button
                   type="button"
                   role="menuitem"
-                  disabled={filteredHistory.length === 0}
+                  disabled={totalItems === 0}
                   onClick={async () => {
                     await exportToExcel();
                     setExportMenuOpen(false);
@@ -512,7 +468,7 @@ const AdminDashboard: React.FC<{
       )}
 
       {/* 3. Data Visualization Charts */}
-      {history.length > 0 && (
+      {stats.total > 0 && (
         <Suspense fallback={<AsyncState compact variant="loading" title="กำลังเตรียมกราฟ" description="ข้อมูลสรุปพร้อมใช้งานแล้ว กำลังโหลดส่วนแสดงผลกราฟ" />}>
           <DashboardCharts chartData={chartData} />
         </Suspense>
@@ -528,7 +484,8 @@ const AdminDashboard: React.FC<{
               placeholder="ค้นหาชื่อ, เลขบัตร หรือชื่อบริษัท..." 
               className="w-full pl-10 pr-4 py-3 sm:py-4 rounded-[1rem] sm:rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-xs sm:text-sm transition-all"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+              aria-label="ค้นหาประวัติการสอบ"
             />
           </div>
           
@@ -538,14 +495,16 @@ const AdminDashboard: React.FC<{
               <input 
                 type="date" 
                 value={filterDate}
-                onChange={(e) => setFilterDate(e.target.value)}
+                onChange={(e) => { setFilterDate(e.target.value); setCurrentPage(1); }}
+                aria-label="กรองวันที่สอบ"
                 className="w-full sm:w-auto pl-9 pr-3 py-3 sm:py-3.5 rounded-[1rem] sm:rounded-2xl border border-slate-100 bg-slate-50 font-bold text-xs outline-none focus:ring-2 focus:ring-blue-500/10 transition-all cursor-pointer"
               />
             </div>
             <div className="flex gap-2 w-full sm:w-auto">
                 <select 
                 value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
+                onChange={(e) => { setFilterStatus(e.target.value); setCurrentPage(1); }}
+                aria-label="กรองสถานะผลสอบ"
                 className="flex-1 sm:flex-none px-3 py-3 sm:py-3.5 rounded-[1rem] sm:rounded-2xl border border-slate-100 bg-slate-50 font-black text-[9px] sm:text-[10px] uppercase outline-none focus:ring-2 focus:ring-blue-500/10 appearance-none cursor-pointer min-w-0 sm:min-w-[120px]"
                 >
                 <option value="ALL">ทุกสถานะ (All)</option>
@@ -554,7 +513,8 @@ const AdminDashboard: React.FC<{
                 </select>
                 <select 
                 value={filterType}
-                onChange={(e) => setFilterType(e.target.value)}
+                onChange={(e) => { setFilterType(e.target.value); setCurrentPage(1); }}
+                aria-label="กรองหลักสูตร"
                 className="flex-1 sm:flex-none px-3 py-3 sm:py-3.5 rounded-[1rem] sm:rounded-2xl border border-slate-100 bg-slate-50 font-black text-[9px] sm:text-[10px] uppercase outline-none focus:ring-2 focus:ring-blue-500/10 appearance-none cursor-pointer min-w-0 sm:min-w-[120px]"
                 >
                 <option value="ALL">ทุกหลักสูตร (All)</option>
@@ -574,7 +534,7 @@ const AdminDashboard: React.FC<{
         {renderPagination('top')}
 
         <div className="grid gap-3 p-4 sm:grid-cols-2 xl:hidden">
-          {paginatedData.length > 0 ? paginatedData.map((item) => (
+          {historyLoading ? <AsyncState compact variant="loading" title="กำลังโหลดหน้าข้อมูล" /> : paginatedData.length > 0 ? paginatedData.map((item) => (
             <article key={item.id} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm" aria-label={`ผลสอบของ ${item.users?.name || 'ผู้ใช้'}`}>
               <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
                 <div className="flex min-w-0 items-center gap-3">

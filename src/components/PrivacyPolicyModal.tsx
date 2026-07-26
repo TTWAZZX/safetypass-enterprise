@@ -1,26 +1,30 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { X, ShieldCheck, Lock } from 'lucide-react';
+import { useDialogFocus } from '../hooks/useDialogFocus';
 
 interface PrivacyPolicyModalProps {
   onClose: () => void;
 }
 
 const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({ onClose }) => {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(true, dialogRef, onClose);
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={onClose} />
+      <div aria-hidden="true" className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={onClose} />
       
       {/* Modal Content */}
-      <div className="bg-white w-full max-w-3xl max-h-[90svh] min-h-0 rounded-[2rem] shadow-2xl border border-slate-100 overflow-hidden relative z-10 animate-in zoom-in-95 duration-300 flex flex-col">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="privacy-policy-title" tabIndex={-1} className="bg-white w-full max-w-3xl max-h-[90svh] min-h-0 rounded-[2rem] shadow-2xl border border-slate-100 overflow-hidden relative z-10 animate-in zoom-in-95 duration-300 flex flex-col focus:outline-none">
         
         {/* Header */}
         <div className="p-5 border-b border-slate-100 bg-slate-50 flex items-center justify-between flex-shrink-0">
           <div>
-            <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Privacy Policy</h3>
+            <h3 id="privacy-policy-title" className="text-lg font-black text-slate-900 uppercase tracking-tight">Privacy Policy</h3>
             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">นโยบายการคุ้มครองข้อมูลส่วนบุคคล</p>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-white rounded-xl transition-all text-slate-400 hover:text-red-500 border border-transparent hover:border-slate-100">
+          <button onClick={onClose} aria-label="ปิดนโยบายความเป็นส่วนตัว" className="min-h-11 min-w-11 p-2 hover:bg-white rounded-xl transition-all text-slate-600 hover:text-red-600 border border-transparent hover:border-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
             <X size={20} />
           </button>
         </div>

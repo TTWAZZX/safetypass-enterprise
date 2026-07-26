@@ -289,14 +289,14 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           <button 
             type="button"
             onClick={() => { setMode('LOGIN'); setError(''); }}
-            className={`flex-1 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${mode === 'LOGIN' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}
+            className={`flex-1 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${mode === 'LOGIN' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600'}`}
           >
             {t('auth.login')}
           </button>
           <button 
             type="button"
             onClick={() => { setMode('REGISTER'); setError(''); }}
-            className={`flex-1 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${mode === 'REGISTER' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}
+            className={`flex-1 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${mode === 'REGISTER' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600'}`}
           >
             {t('auth.register')}
           </button>
@@ -309,7 +309,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           <h2 className="text-xl font-black text-slate-900 tracking-tight uppercase">
             {mode === 'LOGIN' ? 'Welcome Back' : 'Create Account'}
           </h2>
-          <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1.5 flex items-center justify-center gap-1.5">
+          <div className="text-[10px] text-slate-600 font-bold uppercase tracking-widest mt-1.5 flex items-center justify-center gap-1.5">
             <ShieldCheck size={12} className="text-blue-500" /> Security Passport Verification
           </div>
         </div>
@@ -326,25 +326,24 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             )}
 
             <div className="space-y-1.5 text-left">
-              <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('auth.national_id')}</label>
+              <label className="block text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">{t('auth.national_id')}</label>
               <input 
                 required 
-                autoFocus
                 className="w-full px-4 py-3.5 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-sm text-slate-700 transition-all shadow-inner"
                 value={loginId}
                 onChange={e => setLoginId(e.target.value)}
                 placeholder="13-digit National ID"
               />
-              <div className="flex items-center gap-1.5 mt-1.5 ml-1 opacity-80">
+              <div className="flex items-center gap-1.5 mt-1.5 ml-1">
                 <ShieldCheck size={10} className="text-emerald-500" />
-                <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">
+                <span className="text-[8px] font-bold text-slate-600 uppercase tracking-widest">
                   Secure encrypted authentication
                 </span>
               </div>
             </div>
 
             <div className="space-y-1.5 text-left">
-              <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">PIN 4 หลักท้ายบัตรประชาชน</label>
+              <label className="block text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">PIN 4 หลักท้ายบัตรประชาชน</label>
               <input
                 required
                 inputMode="numeric"
@@ -355,7 +354,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 onChange={e => setLoginPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
                 placeholder="4 หลักท้ายบัตรประชาชน"
               />
-              <p className="text-[8px] font-bold text-slate-400 ml-1">ผู้ใช้เดิมใช้เลข 4 หลักท้ายบัตรประชาชนเพื่อย้ายบัญชีครั้งแรก</p>
+              <p className="text-[8px] font-bold text-slate-600 ml-1">ผู้ใช้เดิมใช้เลข 4 หลักท้ายบัตรประชาชนเพื่อย้ายบัญชีครั้งแรก</p>
             </div>
             
             <button disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-2xl shadow-lg shadow-blue-100 transition-all flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95 text-xs uppercase tracking-widest">
@@ -379,7 +378,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 
                 <div className="col-span-2 space-y-1">
-                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex justify-between">
+                    <label className="block text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1 flex justify-between">
                         {t('auth.national_id')}
                         {fetchingUser && <span className="text-blue-500 animate-pulse">กำลังค้นหาข้อมูล...</span>}
                     </label>
@@ -423,9 +422,9 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                             </span>
                           </div>
                       ) : (
-                          <div className="flex items-center gap-1.5 mt-1.5 ml-1 opacity-80">
+                          <div className="flex items-center gap-1.5 mt-1.5 ml-1">
                             <ShieldCheck size={10} className="text-emerald-500" />
-                            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest leading-none">
+                            <span className="text-[8px] font-bold text-slate-600 uppercase tracking-widest leading-none">
                               Protected by military-grade encryption (pgcrypto)
                             </span>
                           </div>
@@ -439,15 +438,15 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 </div>
 
                 <div className="col-span-2 space-y-1">
-                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('auth.full_name')}</label>
+                    <label className="block text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">{t('auth.full_name')}</label>
                     <input required value={name} onChange={e => setName(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs shadow-inner" placeholder="Full Name (EN/TH)" />
                 </div>
                 <div className="space-y-1">
-                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Age / อายุ</label>
+                    <label className="block text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">Age / อายุ</label>
                     <input required type="number" value={age} onChange={e => setAge(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs shadow-inner" placeholder="25" />
                 </div>
                 <div className="space-y-1">
-                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Nationality / สัญชาติ</label>
+                    <label className="block text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">Nationality / สัญชาติ</label>
                     <select 
                       value={isOtherNationality ? 'OTHER' : nationality} 
                       onChange={e => handleNationalityChange(e.target.value)} 
@@ -479,7 +478,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             )}
 
             <div className="space-y-1">
-              <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('auth.company')}</label>
+              <label className="block text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">{t('auth.company')}</label>
               <div className="relative">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                 <input
@@ -511,7 +510,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             
             {vendorId === 'OTHER' && (
               <div className="space-y-1 animate-in slide-in-from-top-2 duration-300">
-                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('auth.other_company')}</label>
+                <label className="block text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">{t('auth.other_company')}</label>
                 <input required value={otherVendor} onChange={e => setOtherVendor(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs" />
               </div>
             )}
@@ -539,14 +538,14 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
                 {selectedPrograms.includes('SUPPLIER_OUTSOURCE') && (
                   <div className="grid grid-cols-1 gap-3 border-t border-emerald-100 pt-3 sm:grid-cols-2">
-                    <label className="space-y-1 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                    <label className="space-y-1 text-[9px] font-black uppercase tracking-widest text-slate-600">
                       ประเภทผู้ใช้
                       <select value={participantType} onChange={(e) => setParticipantType(e.target.value as SupplierOutsourceType)} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-xs font-bold normal-case text-slate-700">
                         <option value="supplier">Supplier ส่งสินค้า/เข้าพื้นที่ชั่วคราว</option>
                         <option value="outsource">Outsource งานทั่วไป</option>
                       </select>
                     </label>
-                    <label className="space-y-1 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                    <label className="space-y-1 text-[9px] font-black uppercase tracking-widest text-slate-600">
                       ประเภทงาน
                       <select value={workType} onChange={(e) => setWorkType(e.target.value as SupplierOutsourceWorkType)} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-xs font-bold normal-case text-slate-700">
                         <option value="Driver">Driver</option>
@@ -554,14 +553,14 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                         <option value="Trainee">Trainee</option>
                       </select>
                     </label>
-                    <label className="space-y-1 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                    <label className="space-y-1 text-[9px] font-black uppercase tracking-widest text-slate-600">
                       วันที่เริ่มเข้าพื้นที่ (ถ้ามี)
                       <input type="date" value={accessStartDate} onChange={(e) => {
                         setAccessStartDate(e.target.value);
                         setAccessEndDate(addOneYearIsoDate(e.target.value));
                       }} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-xs font-bold text-slate-700" />
                     </label>
-                    <label className="space-y-1 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                    <label className="space-y-1 text-[9px] font-black uppercase tracking-widest text-slate-600">
                       วันที่สิ้นสุด (ถ้ามี)
                       <input type="date" value={accessEndDate} min={accessStartDate || undefined} onChange={(e) => setAccessEndDate(e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-xs font-bold text-slate-700" />
                     </label>
@@ -617,7 +616,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         {/* ✅ ส่วน Help & Resources ที่ดึงข้อมูลจากการตั้งค่าแอดมิน */}
         {(manualUrl || supportUrl) && (
           <div className="mt-8 pt-5 border-t border-slate-100 relative z-10">
-            <p className="text-center text-[9px] font-black text-slate-300 uppercase tracking-[0.2em] mb-3">
+            <p className="text-center text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] mb-3">
                 Help & Resources
             </p>
             <div className="flex flex-col gap-2">

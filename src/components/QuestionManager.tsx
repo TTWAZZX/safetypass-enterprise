@@ -277,7 +277,7 @@ const QuestionManager: React.FC = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div className="space-y-4">
-                <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl p-5 text-center cursor-pointer relative overflow-hidden group hover:border-blue-300" onClick={() => imageInputRef.current?.click()}>
+                <div role="button" tabIndex={0} aria-label="เลือกรูปประกอบข้อสอบ" className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl p-5 text-center cursor-pointer relative overflow-hidden group hover:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500" onClick={() => imageInputRef.current?.click()} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); imageInputRef.current?.click(); } }}>
                     <input type="file" ref={imageInputRef} className="hidden" accept="image/*" onChange={handleImageChange} />
                     {previewUrl ? <div className="relative"><img src={previewUrl} className="h-44 mx-auto rounded-2xl object-contain shadow-lg bg-white" /><button onClick={(e) => { e.stopPropagation(); clearImage(); }} aria-label="ลบรูปประกอบข้อสอบ" className="absolute -top-2 -right-2 min-h-11 min-w-11 bg-red-500 text-white p-1 rounded-full border-2 border-white"><X size={14}/></button></div> : <div className="py-10 text-slate-300 flex flex-col items-center gap-2 group-hover:text-blue-400"><ImageIcon size={32}/><span className="text-[10px] font-black uppercase tracking-widest">Media Assets</span></div>}
                 </div>

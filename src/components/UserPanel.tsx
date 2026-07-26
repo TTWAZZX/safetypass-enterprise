@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   User, WorkPermitSession, ExamType, SupplierOutsourceStatus,
   SupplierOutsourceType, SupplierOutsourceWorkType,
@@ -38,6 +38,7 @@ import {
 import { QRCodeSVG } from 'qrcode.react';
 import { useToastContext } from './ToastProvider';
 import liff from '@line/liff'; // ✅ นำเข้า LINE LIFF
+import { useDialogFocus } from '../hooks/useDialogFocus';
 
 const maskNationalID = (id: string) => {
   if (!id || id.length < 13) return id;
@@ -96,6 +97,14 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
   const [showDobModal, setShowDobModal] = useState(!(user as any).date_of_birth);
   const [dobInput, setDobInput] = useState((user as any).date_of_birth || '');
   const [isSavingDob, setIsSavingDob] = useState(false);
+  const supplierDialogRef = useRef<HTMLDivElement>(null);
+  const manualDialogRef = useRef<HTMLDivElement>(null);
+  const qrDialogRef = useRef<HTMLDivElement>(null);
+  const dobDialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(showSupplierEnrollment, supplierDialogRef, () => setShowSupplierEnrollment(false));
+  useDialogFocus(Boolean(viewingManual), manualDialogRef, () => setViewingManual(null));
+  useDialogFocus(showQRFullScreen, qrDialogRef, () => setShowQRFullScreen(false));
+  useDialogFocus(showDobModal, dobDialogRef, () => undefined);
   
   // ✅ State สำหรับจัดการข้อมูล Vendor ในหน้า Edit Profile
   const [vendorsList, setVendorsList] = useState<{id: string, name: string}[]>([]);
@@ -769,13 +778,13 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
 
         {showSupplierEnrollment && supplierOutsourceEnabled && (
           <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-            <div className="w-full max-w-md rounded-[2rem] bg-white p-6 shadow-2xl">
+            <div ref={supplierDialogRef} role="dialog" aria-modal="true" aria-labelledby="supplier-enrollment-title" tabIndex={-1} className="w-full max-w-md rounded-[2rem] bg-white p-6 shadow-2xl focus:outline-none">
               <div className="mb-5 flex items-start justify-between gap-4">
                 <div>
-                  <h3 className="text-lg font-black uppercase text-slate-900">Supplier & Outsource</h3>
-                  <p className="mt-1 text-[10px] font-bold text-slate-400">เพิ่มหรือแก้ไขประเภทผู้ใช้และลักษณะงาน</p>
+                  <h3 id="supplier-enrollment-title" className="text-lg font-black uppercase text-slate-900">Supplier & Outsource</h3>
+                  <p className="mt-1 text-[10px] font-bold text-slate-600">เพิ่มหรือแก้ไขประเภทผู้ใช้และลักษณะงาน</p>
                 </div>
-                <button onClick={() => setShowSupplierEnrollment(false)} className="rounded-full bg-slate-100 p-2 text-slate-500"><X size={18}/></button>
+                <button onClick={() => setShowSupplierEnrollment(false)} aria-label="ปิดหน้าต่าง Supplier & Outsource" className="min-h-11 min-w-11 rounded-full bg-slate-100 p-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"><X size={18}/></button>
               </div>
               <div className="space-y-3">
                 <label className="block text-[9px] font-black uppercase tracking-widest text-slate-400">ประเภทผู้ใช้
@@ -840,9 +849,9 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
             <div className="relative z-10 flex items-center gap-6">
               
               {/* 🔥 แก้ไข URL เข้ารหัส permit_no สำหรับ QR เล็กในหน้าแรก */}
-              <div className="bg-white p-2.5 rounded-2xl shadow-lg active:scale-95 transition-all cursor-pointer" onClick={() => setShowQRFullScreen(true)}>
+              <button type="button" aria-label="ขยาย QR Code ใบอนุญาต" className="bg-white p-2.5 rounded-2xl shadow-lg active:scale-95 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-400" onClick={() => setShowQRFullScreen(true)}>
                 <QRCodeSVG value={`${window.location.origin}/verify?id=${encodeURIComponent(user.national_id)}&permit=${encodeURIComponent(activePermit.permit_no)}`} size={112} />
-              </div>
+              </button>
 
               <div className="text-left">
                 <div className="flex items-center gap-2 mb-2"><span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_#10b981]"></span><div className="text-slate-400 font-bold uppercase tracking-widest text-[9px]">Active Permit</div></div>
@@ -856,7 +865,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
         {/* ✅ Manual Viewer Modal */}
         {viewingManual && (
           <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[100] flex flex-col items-center justify-center p-0 md:p-4"> 
-            <div className="bg-white w-full h-full md:max-w-4xl md:h-[90vh] md:rounded-[2.5rem] flex flex-col overflow-hidden animate-in zoom-in-95 duration-300 shadow-2xl">
+            <div ref={manualDialogRef} role="dialog" aria-modal="true" aria-labelledby="manual-dialog-title" tabIndex={-1} className="bg-white w-full h-full md:max-w-4xl md:h-[90vh] md:rounded-[2.5rem] flex flex-col overflow-hidden animate-in zoom-in-95 duration-300 shadow-2xl focus:outline-none">
               
               {/* 1. ส่วนหัว (Header) */}
               <div className="p-4 md:p-6 border-b flex justify-between items-center bg-slate-50 flex-shrink-0 z-10 relative">
@@ -865,7 +874,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
                     <FileText size={20} className="md:w-6 md:h-6" />
                   </div>
                   <div>
-                      <h3 className="text-base md:text-lg font-black text-slate-900 leading-tight">{viewingManual} Manual</h3>
+                      <h3 id="manual-dialog-title" className="text-base md:text-lg font-black text-slate-900 leading-tight">{viewingManual} Manual</h3>
                       <p className="text-[9px] md:text-[10px] text-slate-400 font-bold uppercase tracking-widest">Safety Documentation</p>
                   </div>
                 </div>
@@ -879,7 +888,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
                     >
                         <Globe2 size={20} className="md:w-6 md:h-6" />
                     </a>
-                    <button onClick={() => setViewingManual(null)} className="p-2 md:p-3 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-xl transition-all">
+                    <button onClick={() => setViewingManual(null)} aria-label="ปิดคู่มือ" className="min-h-11 min-w-11 p-2 md:p-3 hover:bg-red-50 text-slate-600 hover:text-red-600 rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <X size={20} className="md:w-6 md:h-6" />
                     </button>
                 </div>
@@ -900,8 +909,8 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
 
         {/* QR Fullscreen Overlay */}
         {showQRFullScreen && activePermit && !isBanned && (
-          <div className="fixed inset-0 bg-slate-950 z-[200] flex flex-col items-center justify-center text-white p-6 animate-in fade-in duration-300 backdrop-blur-xl" onClick={() => setShowQRFullScreen(false)}>
-            <button className="absolute top-8 right-8 p-4 text-white/50 hover:text-white transition-all"><X size={32} /></button>
+          <div ref={qrDialogRef} role="dialog" aria-modal="true" aria-label="QR Code ใบอนุญาตแบบเต็มจอ" tabIndex={-1} className="fixed inset-0 bg-slate-950 z-[200] flex flex-col items-center justify-center text-white p-6 animate-in fade-in duration-300 backdrop-blur-xl focus:outline-none" onClick={() => setShowQRFullScreen(false)}>
+            <button aria-label="ปิด QR Code" className="absolute top-8 right-8 min-h-11 min-w-11 p-4 text-white/70 hover:text-white transition-all focus:outline-none focus:ring-2 focus:ring-blue-400" onClick={() => setShowQRFullScreen(false)}><X size={32} /></button>
             <div className="bg-white p-10 rounded-[3rem] shadow-[0_0_80px_rgba(59,130,246,0.4)] animate-in zoom-in duration-500">
               
               {/* 🔥 แก้ไข URL เข้ารหัส permit_no สำหรับ QR แบบ Fullscreen */}
@@ -916,11 +925,11 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
         {/* 🛑 Gatekeeper Modal: บังคับกรอกวันเกิด (เด้งทับทุกอย่าง ไม่มีปุ่มปิด) */}
         {showDobModal && (
           <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
-            <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-2xl max-w-sm w-full text-center animate-in zoom-in-95">
+            <div ref={dobDialogRef} role="dialog" aria-modal="true" aria-labelledby="dob-dialog-title" tabIndex={-1} className="bg-white p-6 md:p-8 rounded-[2rem] shadow-2xl max-w-sm w-full text-center animate-in zoom-in-95 focus:outline-none">
               <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-blue-100">
                 <Calendar className="text-blue-600 w-8 h-8" />
               </div>
-              <h2 className="text-xl font-black text-slate-800 uppercase mb-2">อัปเดตข้อมูลส่วนตัว</h2>
+              <h2 id="dob-dialog-title" className="text-xl font-black text-slate-800 uppercase mb-2">อัปเดตข้อมูลส่วนตัว</h2>
               <p className="text-[10px] md:text-xs text-slate-500 mb-6 font-bold leading-relaxed px-2">
                 เพื่อความถูกต้องของข้อมูลความปลอดภัย กรุณาระบุ <span className="text-blue-600">วัน/เดือน/ปีเกิด (ค.ศ.)</span> ของคุณก่อนเข้าใช้งานระบบ
               </p>

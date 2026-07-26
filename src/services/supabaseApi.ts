@@ -515,6 +515,81 @@ export const api = {
     return data;
   },
 
+  getExamHistoryPage: async (params: {
+    page: number;
+    pageSize: number;
+    search?: string;
+    examType?: string;
+    status?: string;
+    date?: string;
+  }): Promise<{ rows: any[]; total: number }> => {
+    const { data, error } = await supabase.rpc('admin_get_exam_history_page', {
+      p_page: params.page,
+      p_page_size: params.pageSize,
+      p_search: params.search || null,
+      p_exam_type: params.examType && params.examType !== 'ALL' ? params.examType : null,
+      p_status: params.status && params.status !== 'ALL' ? params.status : null,
+      p_date: params.date || null,
+    });
+    if (error) throw error;
+    const result = (data || {}) as { rows?: any[]; total?: number };
+    return { rows: result.rows || [], total: Number(result.total || 0) };
+  },
+
+  getDashboardSummary: async (): Promise<{
+    total: number;
+    passed: number;
+    failed: number;
+    suspended: number;
+    compliance: { noCert: number; expired: number; expiring: number };
+    barData: any[];
+    trendData: any[];
+    vendorData: any[];
+  }> => {
+    const { data, error } = await supabase.rpc('admin_get_dashboard_summary');
+    if (error) throw error;
+    const result = (data || {}) as any;
+    return {
+      total: Number(result.total || 0),
+      passed: Number(result.passed || 0),
+      failed: Number(result.failed || 0),
+      suspended: Number(result.suspended || 0),
+      compliance: {
+        noCert: Number(result.compliance?.noCert || 0),
+        expired: Number(result.compliance?.expired || 0),
+        expiring: Number(result.compliance?.expiring || 0),
+      },
+      barData: result.barData || [],
+      trendData: result.trendData || [],
+      vendorData: result.vendorData || [],
+    };
+  },
+
+  getDirectoryPage: async (params: {
+    section: 'USERS' | 'VENDORS' | 'LOGS';
+    page: number;
+    pageSize: number;
+    search?: string;
+    vendorFilter?: string;
+    certFilter?: string;
+  }): Promise<{ rows: any[]; total: number; stats: any | null }> => {
+    const { data, error } = await supabase.rpc('admin_get_directory_page', {
+      p_section: params.section,
+      p_page: params.page,
+      p_page_size: params.pageSize,
+      p_search: params.search || null,
+      p_vendor_filter: params.vendorFilter || null,
+      p_cert_filter: params.certFilter || null,
+    });
+    if (error) throw error;
+    const result = (data || {}) as { rows?: any[]; total?: number; stats?: any };
+    return {
+      rows: result.rows || [],
+      total: Number(result.total || 0),
+      stats: result.stats || null,
+    };
+  },
+
   // ✅ แก้ไข: ลบคอมเมนต์ภาษาไทยออก (สำคัญมาก)
   getReportData: async () => {
     const { data, error } = await supabase.rpc('admin_get_exam_history');
