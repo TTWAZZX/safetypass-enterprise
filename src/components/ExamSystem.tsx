@@ -59,7 +59,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
   // 🛡️ Client-side rate limit: ป้องกัน double-submit (30 วินาที)
   const lastSubmitRef = useRef<number>(0);
 
-  const STORAGE_KEY = `exam_progress_${user.id}_${type}`;
+  const STORAGE_KEY = `exam_progress_${user.id}_${type}${type === ExamType.SUPPLIER_OUTSOURCE ? '_20_questions' : ''}`;
   const getPassingScoreKey = () => type === ExamType.INDUCTION
     ? 'PASSING_SCORE_INDUCTION'
     : type === ExamType.WORK_PERMIT

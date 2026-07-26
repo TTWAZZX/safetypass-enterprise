@@ -165,6 +165,54 @@ export function createSupplierOutsourcePassMessage({
   };
 }
 
+export function createSupplierOutsourceAccessNoticeMessage({
+  name, vendor, participantType, workType, accessStartDate, accessEndDate,
+}) {
+  const formatDate = (value) => value ? new Date(`${value}T00:00:00+07:00`).toLocaleDateString('th-TH', {
+    timeZone: 'Asia/Bangkok', day: 'numeric', month: 'short', year: 'numeric',
+  }) : '-';
+  const participantLabel = participantType === 'supplier' ? 'Supplier' : 'Outsource';
+  return {
+    type: 'flex',
+    altText: `มีการเพิ่มสิทธิ์ Supplier & Outsource: ${name}`,
+    contents: {
+      type: 'bubble',
+      size: 'mega',
+      header: {
+        type: 'box', layout: 'vertical', backgroundColor: '#0F172A',
+        paddingAll: '20px', paddingTop: '22px', paddingBottom: '22px',
+        contents: [
+          { type: 'text', text: 'SECURITY COMPLIANCE NODE', color: '#EAB308', size: 'xxs', weight: 'bold' },
+          { type: 'text', text: 'ACCESS ADDED', color: '#10B981', weight: 'bold', size: 'lg', wrap: true, margin: 'sm' },
+        ],
+      },
+      body: {
+        type: 'box', layout: 'vertical', paddingAll: '20px',
+        contents: [
+          { type: 'text', text: 'ผู้ใช้เพิ่มหรือแก้ไขสิทธิ์ Supplier & Outsource แล้ว ไม่ต้องอนุมัติ', size: 'xs', color: '#64748B', wrap: true },
+          { type: 'separator', margin: 'lg', color: '#E2E8F0' },
+          {
+            type: 'box', layout: 'vertical', margin: 'lg', spacing: 'md',
+            contents: [
+              createDetailRow('ชื่อ', name),
+              createDetailRow('บริษัท', vendor || 'ไม่มีสังกัด'),
+              createDetailRow('ประเภท', participantLabel),
+              createDetailRow('งาน', workType),
+              createDetailRow('เริ่มสิทธิ์', formatDate(accessStartDate)),
+              createDetailRow('สิ้นสุด', formatDate(accessEndDate)),
+              createDetailRow('สถานะ', 'เพิ่มสิทธิ์แล้ว', '#10B981'),
+            ],
+          },
+        ],
+      },
+      footer: {
+        type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '20px', paddingTop: '0px',
+        contents: [createLoginButton()],
+      },
+    },
+  };
+}
+
 function createDetailRow(label, value, valueColor = '#0F172A') {
   return {
     type: 'box',

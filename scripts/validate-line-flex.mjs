@@ -1,5 +1,8 @@
 import fs from 'node:fs';
-import { createSupplierOutsourcePassMessage } from '../api/_lineMessages.js';
+import {
+  createSupplierOutsourceAccessNoticeMessage,
+  createSupplierOutsourcePassMessage,
+} from '../api/_lineMessages.js';
 
 const env = {};
 for (const line of fs.readFileSync('.env.local', 'utf8').split(/\r?\n/)) {
@@ -18,16 +21,24 @@ if (!env.LINE_ACCESS_TOKEN) {
   throw new Error('LINE_ACCESS_TOKEN is required in .env.local');
 }
 
-const message = createSupplierOutsourcePassMessage({
+const passMessage = createSupplierOutsourcePassMessage({
   name: 'ผู้ใช้ทดสอบ',
   vendor: 'บริษัททดสอบ',
   participantType: 'supplier',
   workType: 'Driver',
-  score: 9,
-  totalQuestions: 10,
+  score: 20,
+  totalQuestions: 20,
   testDate: '2026-07-26T00:00:00.000Z',
   expiryDate: '2027-07-26T23:59:59.000Z',
   verificationToken: '123e4567-e89b-42d3-a456-426614174000',
+});
+const accessNotice = createSupplierOutsourceAccessNoticeMessage({
+  name: 'ผู้ใช้ทดสอบ',
+  vendor: 'บริษัททดสอบ',
+  participantType: 'supplier',
+  workType: 'Driver',
+  accessStartDate: '2026-07-26',
+  accessEndDate: '2027-07-26',
 });
 
 const response = await fetch('https://api.line.me/v2/bot/message/validate/push', {
@@ -36,7 +47,7 @@ const response = await fetch('https://api.line.me/v2/bot/message/validate/push',
     'Content-Type': 'application/json',
     Authorization: `Bearer ${env.LINE_ACCESS_TOKEN}`,
   },
-  body: JSON.stringify({ messages: [message] }),
+  body: JSON.stringify({ messages: [passMessage, accessNotice] }),
 });
 
 const responseText = await response.text();

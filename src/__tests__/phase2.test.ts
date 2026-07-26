@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { createSupplierOutsourcePassMessage } from '../../api/_lineMessages.js';
+import {
+  createSupplierOutsourceAccessNoticeMessage,
+  createSupplierOutsourcePassMessage,
+} from '../../api/_lineMessages.js';
 import { createSupplierOutsourceWorkbook, sanitizeExcelText } from '../services/excelExport';
 
 describe('Supplier & Outsource Phase 2', () => {
@@ -9,8 +12,8 @@ describe('Supplier & Outsource Phase 2', () => {
       vendor: 'บริษัท ทดสอบ จำกัด',
       participantType: 'supplier',
       workType: 'Driver',
-      score: 9,
-      totalQuestions: 10,
+      score: 20,
+      totalQuestions: 20,
       testDate: '2026-07-26T00:00:00.000Z',
       expiryDate: '2027-07-26T23:59:59.000Z',
       verificationToken: '123e4567-e89b-42d3-a456-426614174000',
@@ -24,6 +27,20 @@ describe('Supplier & Outsource Phase 2', () => {
     expect(payload).toContain('เข้าสู่ระบบ / Login');
     expect(message.altText.length).toBeLessThanOrEqual(400);
     expect(payload).toContain('https://safetypass-enterprise.vercel.app');
+    expect(payload).not.toMatch(/\?{3,}/);
+    expect(payload).not.toContain('\uFFFD');
+  });
+
+  it('creates an informational LINE notice without an approval action', () => {
+    const message = createSupplierOutsourceAccessNoticeMessage({
+      name: 'ผู้ใช้ทดสอบ', vendor: 'บริษัท ทดสอบ จำกัด', participantType: 'outsource',
+      workType: 'Trainee', accessStartDate: '2026-07-26', accessEndDate: '2027-07-26',
+    });
+    const payload = JSON.stringify(message);
+    expect(payload).toContain('เพิ่มสิทธิ์แล้ว');
+    expect(payload).toContain('ไม่ต้องอนุมัติ');
+    expect(payload).toContain('เข้าสู่ระบบ / Login');
+    expect(payload).not.toContain('อนุมัติสิทธิ์');
     expect(payload).not.toMatch(/\?{3,}/);
     expect(payload).not.toContain('\uFFFD');
   });

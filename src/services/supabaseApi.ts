@@ -435,6 +435,24 @@ export const api = {
     if (error) throw error;
   },
 
+  adminSetSupplierOutsourceAccessBulk: async (payload: {
+    userIds: string[];
+    participantType: SupplierOutsourceType;
+    workType: SupplierOutsourceWorkType;
+    accessStartDate?: string;
+    accessEndDate?: string;
+  }): Promise<number> => {
+    const { data, error } = await supabase.rpc('admin_set_supplier_outsource_access_bulk', {
+      user_ids_param: payload.userIds,
+      participant_type_param: payload.participantType,
+      work_type_param: payload.workType,
+      access_start_date_param: payload.accessStartDate || null,
+      access_end_date_param: payload.accessEndDate || null,
+    });
+    if (error) throw error;
+    return Number(data || 0);
+  },
+
   getSupplierOutsourceLaunchStatus: async () => {
     const { data, error } = await supabase.rpc('admin_get_supplier_outsource_launch_status');
     if (error) throw error;

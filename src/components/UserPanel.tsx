@@ -5,6 +5,7 @@ import {
 } from '../types';
 import { api as mockApi } from '../services/supabaseApi';
 import { supabase } from '../services/supabaseClient'; 
+import { addOneYearIsoDate, getTodayIsoDate } from '../utils/accessDates';
 import { useTranslation } from '../context/LanguageContext';
 import ExamSystem from './ExamSystem';
 import DigitalCard from './DigitalCard'; 
@@ -235,14 +236,41 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
         accessStartDate: supplierStartDate || undefined,
         accessEndDate: supplierEndDate || undefined,
       });
+      let notificationSent = true;
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const accessToken = sessionData.session?.access_token;
+        if (!accessToken) throw new Error('Session unavailable');
+        const response = await fetch('/api/notify-admin-supplier-access', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!response.ok) throw new Error('LINE notification failed');
+      } catch (notificationError) {
+        notificationSent = false;
+        console.error('Supplier and Outsource access notification error:', notificationError);
+      }
       await loadSupplierStatus();
       setShowSupplierEnrollment(false);
-      showToast(supplierStatus ? 'อัปเดตสิทธิ์ Supplier & Outsource เรียบร้อยแล้ว' : 'เพิ่มสิทธิ์ Supplier & Outsource เรียบร้อยแล้ว', 'success');
+      showToast(
+        notificationSent
+          ? (supplierStatus ? 'อัปเดตสิทธิ์และแจ้งแอดมินทาง LINE แล้ว' : 'เพิ่มสิทธิ์และแจ้งแอดมินทาง LINE แล้ว')
+          : 'บันทึกสิทธิ์เรียบร้อยแล้ว แต่ส่งข้อความ LINE ไม่สำเร็จ',
+        notificationSent ? 'success' : 'warning',
+      );
     } catch (error: any) {
       showToast('เพิ่มสิทธิ์ไม่สำเร็จ: ' + error.message, 'error');
     } finally {
       setSupplierSaving(false);
     }
+  };
+
+  const openSupplierEnrollment = () => {
+    const today = getTodayIsoDate();
+    const selectedStartDate = supplierStatus?.access_start_date || today;
+    setSupplierStartDate(selectedStartDate);
+    setSupplierEndDate(supplierStatus?.access_end_date || addOneYearIsoDate(selectedStartDate));
+    setShowSupplierEnrollment(true);
   };
 
   // ✅ 2. ดึงรายชื่อบริษัททั้งหมดมาเก็บไว้ทำ Dropdown ตอนกด Edit
@@ -719,7 +747,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
                         สอบใหม่ / Retake
                       </button>
                     )}
-                    <button disabled={isBanned} onClick={() => setShowSupplierEnrollment(true)} className="flex-1 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-[9px] font-black uppercase tracking-widest text-emerald-700 disabled:opacity-40">
+                    <button disabled={isBanned} onClick={openSupplierEnrollment} className="flex-1 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-[9px] font-black uppercase tracking-widest text-emerald-700 disabled:opacity-40">
                       {supplierStatus ? 'แก้ไขข้อมูล' : 'เพิ่มสิทธิ์'}
                     </button>
                   </div>
@@ -763,7 +791,10 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
                 </label>
                 <div className="grid grid-cols-2 gap-3">
                   <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">วันที่เริ่ม
-                    <input type="date" value={supplierStartDate} onChange={(e) => setSupplierStartDate(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs font-bold text-slate-700" />
+                    <input type="date" value={supplierStartDate} onChange={(e) => {
+                      setSupplierStartDate(e.target.value);
+                      setSupplierEndDate(addOneYearIsoDate(e.target.value));
+                    }} className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs font-bold text-slate-700" />
                   </label>
                   <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">วันที่สิ้นสุด
                     <input type="date" min={supplierStartDate || undefined} value={supplierEndDate} onChange={(e) => setSupplierEndDate(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs font-bold text-slate-700" />

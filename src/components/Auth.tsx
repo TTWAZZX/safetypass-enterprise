@@ -11,6 +11,7 @@ import {
   Search, CheckCircle
 } from 'lucide-react';
 import PrivacyPolicyModal from './PrivacyPolicyModal';
+import { addOneYearIsoDate } from '../utils/accessDates';
 
 interface AuthProps {
   onLogin: (user: User) => void;
@@ -522,7 +523,10 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                     </label>
                     <label className="space-y-1 text-[9px] font-black uppercase tracking-widest text-slate-400">
                       วันที่เริ่มเข้าพื้นที่ (ถ้ามี)
-                      <input type="date" value={accessStartDate} onChange={(e) => setAccessStartDate(e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-xs font-bold text-slate-700" />
+                      <input type="date" value={accessStartDate} onChange={(e) => {
+                        setAccessStartDate(e.target.value);
+                        setAccessEndDate(addOneYearIsoDate(e.target.value));
+                      }} className="w-full rounded-xl border border-slate-200 bg-white p-3 text-xs font-bold text-slate-700" />
                     </label>
                     <label className="space-y-1 text-[9px] font-black uppercase tracking-widest text-slate-400">
                       วันที่สิ้นสุด (ถ้ามี)

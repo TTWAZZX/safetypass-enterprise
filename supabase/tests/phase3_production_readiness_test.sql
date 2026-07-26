@@ -30,6 +30,13 @@ insert into public.questions(
   '[{"text_th":"ถูก","text_en":"Correct","is_correct":true},{"text_th":"ผิด","text_en":"Incorrect","is_correct":false}]'::jsonb,
   0, 'SUPPLIER_OUTSOURCE', true, 'MULTIPLE_CHOICE'
 );
+insert into public.questions(
+  id, content_th, content_en, choices_json, correct_choice_index, type, is_active, pattern
+)
+select gen_random_uuid(), 'คำถามทดสอบ Phase 3 เพิ่มเติม ' || value, 'Additional Phase 3 question ' || value,
+  '[{"text_th":"ถูก","text_en":"Correct","is_correct":true},{"text_th":"ผิด","text_en":"Incorrect","is_correct":false}]'::jsonb,
+  0, 'SUPPLIER_OUTSOURCE', true, 'MULTIPLE_CHOICE'
+from generate_series(1, 19) value;
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
@@ -39,6 +46,7 @@ do $$
 declare
   question_value record;
   result_value jsonb;
+  answers_value jsonb;
   pass_token uuid;
 begin
   perform public.add_my_supplier_outsource_access('supplier', 'Driver', current_date, current_date + 30);
@@ -52,11 +60,9 @@ begin
     raise exception 'Question answer leaked to client';
   end if;
 
-  result_value := public.submit_safety_exam(
-    'SUPPLIER_OUTSOURCE',
-    '{"88888888-8888-4888-8888-888888888888":0}'::jsonb,
-    null
-  );
+  select jsonb_object_agg(id::text, '0'::jsonb) into answers_value
+  from public.get_exam_questions('SUPPLIER_OUTSOURCE');
+  result_value := public.submit_safety_exam('SUPPLIER_OUTSOURCE', answers_value, null);
   if not (result_value ->> 'passed')::boolean then raise exception 'Supplier pass failed'; end if;
   pass_token := (result_value ->> 'verificationToken')::uuid;
   perform set_config('phase3.pass_token', pass_token::text, true);
@@ -75,14 +81,15 @@ select set_config('request.jwt.claims', '{"sub":"11111111-1111-4111-8111-1111111
 do $$
 declare
   result_value jsonb;
+  wrong_answers_value jsonb;
+  correct_answers_value jsonb;
   pass_token uuid := current_setting('phase3.pass_token')::uuid;
   status_value record;
 begin
-  result_value := public.submit_safety_exam(
-    'SUPPLIER_OUTSOURCE',
-    '{"88888888-8888-4888-8888-888888888888":1}'::jsonb,
-    null
-  );
+  select jsonb_object_agg(id::text, '1'::jsonb), jsonb_object_agg(id::text, '0'::jsonb)
+  into wrong_answers_value, correct_answers_value
+  from public.get_exam_questions('SUPPLIER_OUTSOURCE');
+  result_value := public.submit_safety_exam('SUPPLIER_OUTSOURCE', wrong_answers_value, null);
   if (result_value ->> 'passed')::boolean then raise exception 'Failed retake passed unexpectedly'; end if;
 
   select * into status_value from public.get_my_supplier_outsource_status();
@@ -92,11 +99,7 @@ begin
   end if;
 
   begin
-    perform public.submit_safety_exam(
-      'SUPPLIER_OUTSOURCE',
-      '{"88888888-8888-4888-8888-888888888888":0}'::jsonb,
-      null
-    );
+    perform public.submit_safety_exam('SUPPLIER_OUTSOURCE', correct_answers_value, null);
     raise exception 'Rate limit did not block a repeated submission';
   exception when raise_exception then
     if sqlerrm = 'Rate limit did not block a repeated submission' then raise; end if;

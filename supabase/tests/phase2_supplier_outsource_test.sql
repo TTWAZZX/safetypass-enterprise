@@ -10,6 +10,13 @@ insert into public.questions(
   '[{"text_th":"ถูก","text_en":"Correct","is_correct":true}]'::jsonb,
   0, 'SUPPLIER_OUTSOURCE', true, 'MULTIPLE_CHOICE'
 );
+insert into public.questions(
+  id, content_th, content_en, choices_json, correct_choice_index, type, is_active, pattern
+)
+select gen_random_uuid(), 'คำถามทดสอบเพิ่มเติม ' || value, 'Additional test question ' || value,
+  '[{"text_th":"ถูก","text_en":"Correct","is_correct":true}]'::jsonb,
+  0, 'SUPPLIER_OUTSOURCE', true, 'MULTIPLE_CHOICE'
+from generate_series(1, 19) value;
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
@@ -22,6 +29,7 @@ do $$
 declare
   choices_value jsonb;
   result_value jsonb;
+  answers_value jsonb;
   status_value record;
 begin
   if not exists (
@@ -42,18 +50,17 @@ begin
     raise exception 'Supplier question exposed the answer';
   end if;
 
-  select public.submit_safety_exam(
-    'SUPPLIER_OUTSOURCE',
-    '{"66666666-6666-4666-8666-666666666666":0}'::jsonb,
-    null
-  ) into result_value;
+  select jsonb_object_agg(id::text, '0'::jsonb) into answers_value
+  from public.get_exam_questions('SUPPLIER_OUTSOURCE');
+  select public.submit_safety_exam('SUPPLIER_OUTSOURCE', answers_value, null) into result_value;
   if (result_value ->> 'passed')::boolean is not true
      or nullif(result_value ->> 'verificationToken', '') is null then
-    raise exception 'Supplier exam did not create a verified pass';
+    raise exception 'Supplier exam did not create a verified pass: %', result_value;
   end if;
 
   select * into status_value from public.get_my_supplier_outsource_status();
-  if status_value.participant_type <> 'supplier' or status_value.last_score <> 1
+  if status_value.participant_type <> 'supplier' or status_value.last_score <> 20
+     or status_value.total_questions <> 20
      or status_value.verification_token is null or status_value.expires_at <= now() then
     raise exception 'Supplier status RPC returned an invalid result';
   end if;
@@ -144,17 +151,30 @@ begin
     select 1 from public.user_training_access
     where user_id = '77777777-7777-4777-8777-777777777777' and work_type = 'Passenger'
   ) then raise exception 'Admin access update failed'; end if;
+  if public.admin_set_supplier_outsource_access_bulk(
+    array[
+      '11111111-1111-4111-8111-111111111111'::uuid,
+      '77777777-7777-4777-8777-777777777777'::uuid
+    ], 'supplier', 'Driver', current_date, null
+  ) <> 2 then raise exception 'Admin bulk access count is invalid'; end if;
+  if exists (
+    select 1 from public.user_training_access
+    where user_id in (
+      '11111111-1111-4111-8111-111111111111',
+      '77777777-7777-4777-8777-777777777777'
+    ) and (access_start_date <> current_date or access_end_date <> (current_date + interval '1 year')::date)
+  ) then raise exception 'Admin bulk access dates are invalid'; end if;
   select * into launch_value from public.admin_get_supplier_outsource_launch_status();
-  if launch_value.active_question_count <> 1 then raise exception 'Launch status question count is invalid'; end if;
+  if launch_value.active_question_count <> 20 then raise exception 'Launch status question count is invalid'; end if;
   perform public.admin_set_supplier_outsource_feature(true);
   update public.questions set is_active = false where id = '66666666-6666-4666-8666-666666666666';
   perform public.admin_set_supplier_outsource_feature(false);
   begin
     perform public.admin_set_supplier_outsource_feature(true);
-    raise exception 'Feature enabled without active questions';
+    raise exception 'Feature enabled with fewer than 20 active questions';
   exception
     when raise_exception then
-      if sqlerrm = 'Feature enabled without active questions' then raise; end if;
+      if sqlerrm = 'Feature enabled with fewer than 20 active questions' then raise; end if;
   end;
   update public.questions set is_active = true where id = '66666666-6666-4666-8666-666666666666';
 end;
