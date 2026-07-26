@@ -43,6 +43,8 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [vendorSearch, setVendorSearch] = useState('');
+  const [vendorsLoading, setVendorsLoading] = useState(false);
+  const [vendorsError, setVendorsError] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [fetchingUser, setFetchingUser] = useState(false);
@@ -58,10 +60,23 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     vendor.name.toLocaleLowerCase().includes(vendorSearch.trim().toLocaleLowerCase())
   );
 
-  useEffect(() => {
-    if (mode === 'REGISTER') {
-      api.getVendors().then(setVendors);
+  const loadRegistrationVendors = async () => {
+    setVendorsLoading(true);
+    setVendorsError('');
+    try {
+      const approvedVendors = await api.getVendors();
+      setVendors(approvedVendors);
+    } catch (vendorError: any) {
+      console.error('Registration vendor load failed:', vendorError);
+      setVendors([]);
+      setVendorsError('โหลดรายชื่อบริษัทไม่สำเร็จ กรุณาลองอีกครั้ง');
+    } finally {
+      setVendorsLoading(false);
     }
+  };
+
+  useEffect(() => {
+    if (mode === 'REGISTER') void loadRegistrationVendors();
   }, [mode]);
 
   useEffect(() => {
@@ -443,10 +458,21 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 />
               </div>
               <select required value={vendorId} onChange={e => setVendorId(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs appearance-none cursor-pointer shadow-inner">
-                <option value="">-- Select Company --</option>
+                <option value="">{vendorsLoading ? 'กำลังโหลดรายชื่อบริษัท...' : '-- Select Company --'}</option>
                 {filteredVendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                 <option value="OTHER">Other (ระบุเพิ่ม)</option>
               </select>
+              {vendorsError && (
+                <div role="alert" className="flex items-center justify-between gap-3 rounded-xl border border-red-100 bg-red-50 px-3 py-2">
+                  <span className="text-[9px] font-bold text-red-600">{vendorsError}</span>
+                  <button type="button" onClick={loadRegistrationVendors} disabled={vendorsLoading} className="shrink-0 rounded-lg bg-red-600 px-3 py-1.5 text-[8px] font-black text-white disabled:opacity-50">
+                    ลองอีกครั้ง
+                  </button>
+                </div>
+              )}
+              {!vendorsLoading && !vendorsError && vendorSearch.trim() && filteredVendors.length === 0 && (
+                <p className="px-1 text-[9px] font-bold text-amber-600">ไม่พบบริษัทที่ตรงกับคำค้นหา สามารถเลือก Other เพื่อระบุบริษัทใหม่ได้</p>
+              )}
             </div>
             
             {vendorId === 'OTHER' && (

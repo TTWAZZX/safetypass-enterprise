@@ -202,12 +202,9 @@ export const api = {
   ===================================================== */
 
   getVendors: async (): Promise<Vendor[]> => {
-    const { data } = await supabase
-      .from('vendors')
-      .select('*')
-      .eq('status', 'APPROVED')
-      .order('name')
-    return data || []
+    const { data, error } = await supabase.rpc('get_public_registration_vendors');
+    if (error) throw error;
+    return (data || []) as Vendor[];
   },
 
   getPendingVendors: async (): Promise<Vendor[]> => {
