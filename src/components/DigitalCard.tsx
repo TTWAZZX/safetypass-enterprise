@@ -1,6 +1,5 @@
 import React, { useRef, useState } from 'react';
 import QRCode from 'react-qr-code';
-import html2canvas from 'html2canvas';
 import { User, WorkPermitSession, SupplierOutsourceStatus } from '../types';
 import { 
   Download, 
@@ -76,6 +75,7 @@ const DigitalCard: React.FC<DigitalCardProps> = ({
     setDownloading(true);
     try {
       await new Promise(resolve => setTimeout(resolve, 800)); // เพิ่มเวลาให้ฟอนต์โหลดเสร็จสมบูรณ์
+      const { default: html2canvas } = await import('html2canvas');
       const canvas = await html2canvas(cardRef.current, { 
         scale: 3, 
         useCORS: true, 

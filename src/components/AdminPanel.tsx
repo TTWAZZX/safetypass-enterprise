@@ -1,13 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { lazy, Suspense, useState, useEffect } from 'react';
 import { api } from '../services/supabaseApi';
 
-// ✅ Import ไฟล์ทั้งหมดเข้ามารวมกัน
-import AdminDashboard from './AdminDashboard';
-import QuestionManager from './QuestionManager';
-import VendorManager from './VendorManager';
-import SettingsManager from './SettingsManager';
-import SupplierOutsourceManager from './SupplierOutsourceManager';
 import AsyncState from './AsyncState';
+
+const AdminDashboard = lazy(() => import('./AdminDashboard'));
+const QuestionManager = lazy(() => import('./QuestionManager'));
+const VendorManager = lazy(() => import('./VendorManager'));
+const SettingsManager = lazy(() => import('./SettingsManager'));
+const SupplierOutsourceManager = lazy(() => import('./SupplierOutsourceManager'));
 
 import {
   LayoutGrid,
@@ -109,13 +109,15 @@ const AdminPanel: React.FC = () => {
         )}
 
         {/* ✅ ส่ง searchQuery ต่อไปยัง Component ย่อย */}
-        <div className="animate-in fade-in duration-500 w-full h-full">
-            {activePage === 'DASHBOARD' && <AdminDashboard onNavigateToUsers={() => setActivePage('VENDORS')} onNavigateToSupplier={() => setActivePage('SUPPLIER_OUTSOURCE')} />}
-            {activePage === 'QUESTIONS' && <QuestionManager />}
-            {activePage === 'VENDORS' && <VendorManager initialSearch={searchQuery} />}
-            {activePage === 'SUPPLIER_OUTSOURCE' && <SupplierOutsourceManager />}
-            {activePage === 'SETTINGS' && <SettingsManager />}
-        </div>
+        <Suspense fallback={<AsyncState variant="loading" title="กำลังเปิดส่วนจัดการ" description="กำลังโหลดเฉพาะเครื่องมือที่เลือก" />}>
+          <div className="animate-in fade-in duration-500 w-full h-full">
+              {activePage === 'DASHBOARD' && <AdminDashboard onNavigateToUsers={() => setActivePage('VENDORS')} onNavigateToSupplier={() => setActivePage('SUPPLIER_OUTSOURCE')} />}
+              {activePage === 'QUESTIONS' && <QuestionManager />}
+              {activePage === 'VENDORS' && <VendorManager initialSearch={searchQuery} />}
+              {activePage === 'SUPPLIER_OUTSOURCE' && <SupplierOutsourceManager />}
+              {activePage === 'SETTINGS' && <SettingsManager />}
+          </div>
+        </Suspense>
       </main>
     </div>
   );

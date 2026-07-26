@@ -3,6 +3,10 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
 import ErrorBoundary from './components/ErrorBoundary';
+import { initializeMotionPreference } from './services/motionPreference';
+
+// Apply the stored/OS motion preference before React paints to avoid animation flash.
+initializeMotionPreference();
 
 // 🔍 ค้นหา Root Element สำหรับการ Render
 const rootElement = document.getElementById('root');

@@ -1,12 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { lazy, Suspense, useState, useEffect } from 'react';
 import { User } from './types';
 import { supabase } from './services/supabaseClient';
 import { LanguageProvider, useTranslation } from './context/LanguageContext';
-import Auth from './components/Auth';
-import UserPanel from './components/UserPanel';
-import AdminPanel from './components/AdminPanel';
 import LanguageSwitcher from './components/LanguageSwitcher';
-import ExamHistory from './components/ExamHistory'; 
 import {
   Shield,
   LogOut,
@@ -19,11 +15,19 @@ import {
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './components/ToastProvider';
-import VerifyPage from './components/VerifyPage';
 import { PageSkeleton } from './components/Skeleton'; 
+import MotionPreferenceToggle from './components/MotionPreferenceToggle';
+import { MotionPreferenceProvider, useMotionPreference } from './context/MotionPreferenceContext';
+
+const Auth = lazy(() => import('./components/Auth'));
+const UserPanel = lazy(() => import('./components/UserPanel'));
+const AdminPanel = lazy(() => import('./components/AdminPanel'));
+const ExamHistory = lazy(() => import('./components/ExamHistory'));
+const VerifyPage = lazy(() => import('./components/VerifyPage'));
 
 const AppContent: React.FC = () => {
   const { t, language } = useTranslation();
+  const { reduceMotion } = useMotionPreference();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
@@ -59,7 +63,7 @@ const AppContent: React.FC = () => {
       } catch (err) {
         console.error('Init error:', err);
       } finally {
-        setTimeout(() => setLoading(false), 800);
+        setLoading(false);
       }
     };
 
@@ -86,13 +90,13 @@ const AppContent: React.FC = () => {
       setActiveTab('HOME');
     }
     setTimeout(() => {
-      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+      window.scrollTo({ top: document.body.scrollHeight, behavior: reduceMotion ? 'auto' : 'smooth' });
     }, 100);
   };
 
   // ✅ แก้ให้รองรับ Query Parameter เช่น /verify?id=1234
   if (currentPath.startsWith('/verify')) {
-    return <VerifyPage />;
+    return <Suspense fallback={<PageSkeleton />}><VerifyPage /></Suspense>;
   }
 
   if (loading) {
@@ -120,10 +124,11 @@ const AppContent: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-3 md:gap-5">
+          <div className="flex items-center gap-2 md:gap-4">
             <div className="bg-slate-800/50 rounded-lg p-1 border border-slate-700">
                <LanguageSwitcher />
             </div>
+            <MotionPreferenceToggle />
 
             {currentUser && (
               <div className="flex items-center gap-3 pl-3 md:pl-5 border-l border-slate-700">
@@ -152,28 +157,30 @@ const AppContent: React.FC = () => {
 
       {/* Main Content */}
       <main className="flex-grow relative z-0">
-        {!currentUser ? (
-          <Auth onLogin={handleLogin} />
-        ) : (
-          <ProtectedRoute
-            user={currentUser}
-            requiredRole={currentUser.role === 'ADMIN' ? 'ADMIN' : 'USER'}
-          >
-            {currentUser.role === 'ADMIN' ? (
-              <AdminPanel />
-            ) : (
-              <div className="animate-in fade-in duration-500">
-                {activeTab === 'HOME' ? (
-                  <UserPanel user={currentUser} onUserUpdate={handleLogin} />
-                ) : (
-                  <div className="max-w-2xl mx-auto p-4">
-                    <ExamHistory userId={currentUser.id} onBack={() => setActiveTab('HOME')} />
-                  </div>
-                )}
-              </div>
-            )}
-          </ProtectedRoute>
-        )}
+        <Suspense fallback={<PageSkeleton />}>
+          {!currentUser ? (
+            <Auth onLogin={handleLogin} />
+          ) : (
+            <ProtectedRoute
+              user={currentUser}
+              requiredRole={currentUser.role === 'ADMIN' ? 'ADMIN' : 'USER'}
+            >
+              {currentUser.role === 'ADMIN' ? (
+                <AdminPanel />
+              ) : (
+                <div className="animate-in fade-in duration-500">
+                  {activeTab === 'HOME' ? (
+                    <UserPanel user={currentUser} onUserUpdate={handleLogin} />
+                  ) : (
+                    <div className="max-w-2xl mx-auto p-4">
+                      <ExamHistory userId={currentUser.id} onBack={() => setActiveTab('HOME')} />
+                    </div>
+                  )}
+                </div>
+              )}
+            </ProtectedRoute>
+          )}
+        </Suspense>
       </main>
 
       {/* --- 📱 SMART BOTTOM NAVIGATION (Toggleable) --- */}
@@ -203,7 +210,7 @@ const AppContent: React.FC = () => {
             <div className="bg-slate-900 border border-white/10 rounded-full p-2 flex items-center justify-around shadow-[0_20px_40px_rgba(0,0,0,0.4)] will-change-transform">
               
               <button 
-                onClick={() => { setActiveTab('HOME'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                onClick={() => { setActiveTab('HOME'); window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' }); }}
                 className={`p-3 flex flex-col items-center gap-1 transition-all active:scale-90 ${activeTab === 'HOME' ? 'text-blue-400' : 'text-slate-400'}`}
               >
                 <Home size={20} />
@@ -220,7 +227,7 @@ const AppContent: React.FC = () => {
               </button>
 
               <button 
-                onClick={() => { setActiveTab('LOGS'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                onClick={() => { setActiveTab('LOGS'); window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' }); }}
                 className={`p-3 flex flex-col items-center gap-1 transition-all active:scale-90 ${activeTab === 'LOGS' ? 'text-blue-400' : 'text-slate-400'}`}
               >
                 <History size={20} />
@@ -249,11 +256,13 @@ const AppContent: React.FC = () => {
 
 const App: React.FC = () => (
   <LanguageProvider>
-    <ToastProvider>
-      <ErrorBoundary>
-        <AppContent />
-      </ErrorBoundary>
-    </ToastProvider>
+    <MotionPreferenceProvider>
+      <ToastProvider>
+        <ErrorBoundary>
+          <AppContent />
+        </ErrorBoundary>
+      </ToastProvider>
+    </MotionPreferenceProvider>
   </LanguageProvider>
 );
 
