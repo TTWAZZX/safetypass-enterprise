@@ -150,6 +150,7 @@ async function installMocks(page) {
         check_user_exists: [{ user_exists: true, requires_registration: false, is_active: true }],
         get_my_decrypted_id: currentRole === 'ADMIN' ? adminNationalId : userNationalId,
         get_public_registration_vendors: [{ id: vendorId, name: 'บริษัททดสอบ', status: 'APPROVED' }],
+        admin_get_vendor_duplicate_groups: [],
         get_public_support_links: [{ manual_url: 'https://example.com/manual', support_url: 'https://line.me/' }],
         get_public_feature_flags: [{ supplier_outsource_enabled: true }],
         get_runtime_system_settings: [
@@ -194,10 +195,6 @@ async function installMocks(page) {
         }],
         admin_get_supplier_outsource_launch_status: [{ enabled: true, active_question_count: 20 }],
         admin_list_users: [profile('USER')],
-        admin_get_directory_page: {
-          rows: [profile('USER')], total: 1,
-          stats: { total_users: 1, active_users: 1, suspended_users: 0, certified_users: 1 },
-        },
         submit_safety_exam: {
           score: payload.exam_type_param === 'SUPPLIER_OUTSOURCE' ? 20 : 10,
           passed: true,
@@ -206,6 +203,44 @@ async function installMocks(page) {
           expiresAt: future,
         },
       };
+      if (rpc === 'find_vendor_name_matches') {
+        const searchName = String(payload.search_name_param || '').trim();
+        if (searchName === 'บริษัททดสอบ') {
+          return json(route, [{ id: vendorId, name: 'บริษัททดสอบ', status: 'APPROVED', match_type: 'EXACT', match_score: 1 }]);
+        }
+        if (searchName.includes('ทดสอบ')) {
+          return json(route, [{ id: vendorId, name: 'บริษัททดสอบ', status: 'APPROVED', match_type: 'SIMILAR', match_score: 0.82 }]);
+        }
+        return json(route, []);
+      }
+      if (rpc === 'admin_save_vendor') {
+        const name = String(payload.name_param || '').trim();
+        if (name === 'บริษัททดสอบ') {
+          return json(route, {
+            saved: false, created: false, reason: 'EXACT',
+            vendor: { id: vendorId, name: 'บริษัททดสอบ', status: 'APPROVED' }, matches: [],
+          });
+        }
+        if (name.includes('ทดสอบ') && payload.allow_similar_param !== true) {
+          return json(route, {
+            saved: false, created: false, reason: 'SIMILAR', vendor: null,
+            matches: [{ id: vendorId, name: 'บริษัททดสอบ', status: 'APPROVED', match_type: 'SIMILAR', match_score: 0.82 }],
+          });
+        }
+        return json(route, {
+          saved: true, created: !payload.vendor_id_param, reason: 'SAVED', matches: [],
+          vendor: { id: payload.vendor_id_param || '20000000-0000-4000-8000-000000000002', name, status: payload.status_param },
+        });
+      }
+      if (rpc === 'admin_get_directory_page') {
+        if (payload.p_section === 'VENDORS') {
+          return json(route, { rows: [{ id: vendorId, name: 'บริษัททดสอบ', status: 'APPROVED', created_at: '2026-07-29T00:00:00.000Z' }], total: 1, stats: null });
+        }
+        return json(route, {
+          rows: [profile('USER')], total: 1,
+          stats: { total_users: 1, active_users: 1, suspended_users: 0, certified_users: 1 },
+        });
+      }
       if (rpc === 'get_exam_questions') return json(route, examQuestions(payload.exam_type_param || 'INDUCTION'));
       if (rpc === 'admin_get_question_revisions') {
         return json(route, getManagedRevisions(payload.question_id_param));
@@ -369,6 +404,17 @@ try {
   const userPage = await userContext.newPage();
   await installMocks(userPage);
   userPage.on('dialog', (dialog) => dialog.accept());
+  await userPage.goto(appUrl, { waitUntil: 'domcontentloaded' });
+  await userPage.getByRole('button', { name: 'ลงทะเบียน', exact: true }).click();
+  await userPage.getByRole('heading', { name: 'Create Account', exact: false }).waitFor();
+  const registrationVendorSelect = userPage.locator('select[required]').filter({ has: userPage.locator('option[value="OTHER"]') });
+  await registrationVendorSelect.selectOption('OTHER');
+  await userPage.locator('input[autocomplete="organization"]').fill('บริษัททดสอบ');
+  await userPage.getByText('พบบริษัทนี้ในระบบแล้ว', { exact: true }).waitFor();
+  await userPage.getByRole('button', { name: 'เลือกบริษัทนี้', exact: true }).click();
+  if (await registrationVendorSelect.inputValue() !== vendorId) throw new Error('Registration did not reuse the existing vendor');
+  await assertA11y(userPage, 'mobile registration vendor duplicate guard');
+  await userPage.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
   await login(userPage, userNationalId);
   await userPage.getByRole('heading', { name: 'ผู้ใช้ทดสอบระบบ', exact: true }).waitFor();
   await userPage.getByText('Supplier & Outsource', { exact: true }).first().waitFor();
@@ -404,6 +450,31 @@ try {
 
   await adminPage.getByRole('button', { name: /Vendors & Users/i }).click();
   await adminPage.getByText('User & Vendor Compliance', { exact: false }).waitFor();
+  await adminPage.getByRole('button', { name: /New Entry/i }).click();
+  const vendorDialog = adminPage.getByRole('dialog', { name: 'เพิ่มบริษัทใหม่' });
+  await vendorDialog.waitFor();
+  await vendorDialog.getByLabel('ชื่อบริษัท').fill('บริษัททดสอบ');
+  await vendorDialog.getByText('ไม่สามารถบันทึกชื่อซ้ำได้', { exact: true }).waitFor();
+  if (await vendorDialog.getByRole('button', { name: 'เพิ่มบริษัท', exact: true }).isEnabled()) throw new Error('Exact duplicate vendor save button is enabled');
+  await assertDialogFitsViewport(adminPage, '[aria-labelledby="vendor-dialog-title"]', 'Vendor duplicate modal');
+  await assertA11y(adminPage, 'vendor duplicate modal', '[aria-labelledby="vendor-dialog-title"]');
+  await vendorDialog.getByRole('button', { name: 'ปิด', exact: true }).click();
+
+  await adminPage.getByRole('button', { name: /New Entry/i }).click();
+  const similarVendorDialog = adminPage.getByRole('dialog', { name: 'เพิ่มบริษัทใหม่' });
+  await similarVendorDialog.getByLabel('ชื่อบริษัท').fill('บริษัททดสอบ สาขาใหม่');
+  await similarVendorDialog.getByText('พบชื่อใกล้เคียง กรุณาตรวจสอบ', { exact: true }).waitFor();
+  if (await similarVendorDialog.getByRole('button', { name: 'เพิ่มบริษัท', exact: true }).isEnabled()) throw new Error('Similar vendor save button is enabled before confirmation');
+  await similarVendorDialog.getByLabel(/ตรวจสอบแล้ว ยืนยันว่าเป็นคนละบริษัท/).check();
+  if (!(await similarVendorDialog.getByRole('button', { name: 'เพิ่มบริษัท', exact: true }).isEnabled())) throw new Error('Similar vendor save button did not enable after confirmation');
+  await similarVendorDialog.getByRole('button', { name: 'ปิด', exact: true }).click();
+
+  await adminPage.getByRole('button', { name: /New Entry/i }).click();
+  const uniqueVendorDialog = adminPage.getByRole('dialog', { name: 'เพิ่มบริษัทใหม่' });
+  await uniqueVendorDialog.getByLabel('ชื่อบริษัท').fill('บริษัทใหม่เวนเดอร์');
+  await uniqueVendorDialog.getByText('ไม่พบชื่อซ้ำหรือชื่อใกล้เคียง', { exact: true }).waitFor();
+  await uniqueVendorDialog.getByRole('button', { name: 'เพิ่มบริษัท', exact: true }).click();
+  await adminPage.getByText('เพิ่มบริษัทสำเร็จ', { exact: true }).waitFor();
   await adminPage.getByRole('button', { name: /^Personnel$/i }).click();
   const workbook = new ExcelJSModule.Workbook();
   const sheet = workbook.addWorksheet('Users');

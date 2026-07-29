@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase } from '../services/supabaseClient';
 import { api } from '../services/supabaseApi';
+import { Vendor, VendorNameMatch, VendorStatus } from '../types';
 import { useToastContext } from './ToastProvider';
 import { downloadWorkbook } from '../services/excelExport';
 import { readFirstWorksheetRows } from '../services/excelImport';
@@ -17,6 +19,11 @@ const maskNationalID = (id: string | null | undefined) => {
   if (!id || id.length < 13) return '-------------';
   return `${id.substring(0, 3)}••••••${id.substring(9)}`;
 };
+
+const normalizeVendorNameForComparison = (name: string) => name
+  .trim()
+  .toLocaleLowerCase()
+  .replace(/[\s\p{P}\p{S}]+/gu, '');
 
 const processExcelDate = (excelDate: any): string | null => {
     if (!excelDate) return null;
@@ -85,11 +92,32 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
   });
   const [isOtherNationality, setIsOtherNationality] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [vendorDialogOpen, setVendorDialogOpen] = useState(false);
+  const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
+  const [vendorFormName, setVendorFormName] = useState('');
+  const [vendorFormStatus, setVendorFormStatus] = useState<VendorStatus>(VendorStatus.PENDING);
+  const [vendorMatches, setVendorMatches] = useState<VendorNameMatch[]>([]);
+  const [vendorMatchLoading, setVendorMatchLoading] = useState(false);
+  const [vendorMatchError, setVendorMatchError] = useState('');
+  const [allowSimilarVendor, setAllowSimilarVendor] = useState(false);
+  const [savingVendor, setSavingVendor] = useState(false);
+  const [vendorDuplicateGroups, setVendorDuplicateGroups] = useState<Array<{
+    normalized_name: string;
+    vendor_count: number;
+    vendors: Array<Pick<Vendor, 'id' | 'name' | 'status' | 'created_at'>>;
+  }>>([]);
+  const [vendorImportReview, setVendorImportReview] = useState<Array<{
+    inputName: string;
+    reason: 'EXACT' | 'SIMILAR';
+    matches: string[];
+  }>>([]);
 
   const userFileInputRef = useRef<HTMLInputElement>(null);
   const vendorFileInputRef = useRef<HTMLInputElement>(null);
   const editDialogRef = useRef<HTMLDivElement>(null);
+  const vendorDialogRef = useRef<HTMLDivElement>(null);
   useDialogFocus(isEditModalOpen, editDialogRef, () => setIsEditModalOpen(false));
+  useDialogFocus(vendorDialogOpen, vendorDialogRef, () => setVendorDialogOpen(false));
 
   useEffect(() => {
     setCurrentPage(1);
@@ -153,6 +181,53 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     return () => clearInterval(timer);
   }, [activeTab, currentPage, itemsPerPage, searchQuery, selectedVendorFilter, certFilter]);
 
+  const loadVendorDuplicateGroups = async () => {
+    try {
+      setVendorDuplicateGroups(await api.getVendorDuplicateGroups());
+    } catch (duplicateError) {
+      console.error('Vendor duplicate report failed:', duplicateError);
+      setVendorDuplicateGroups([]);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'VENDORS') void loadVendorDuplicateGroups();
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (!vendorDialogOpen || vendorFormName.trim().length < 2) {
+      setVendorMatches([]);
+      setVendorMatchError('');
+      setVendorMatchLoading(false);
+      return;
+    }
+
+    let active = true;
+    setVendorMatchLoading(true);
+    setVendorMatchError('');
+    const timer = window.setTimeout(() => {
+      api.findVendorNameMatches(vendorFormName.trim(), editingVendor?.id)
+        .then((matches) => {
+          if (active) setVendorMatches(matches);
+        })
+        .catch((matchError) => {
+          console.error('Vendor name match failed:', matchError);
+          if (active) {
+            setVendorMatches([]);
+            setVendorMatchError('ตรวจสอบชื่อบริษัทไม่สำเร็จ กรุณาลองอีกครั้ง');
+          }
+        })
+        .finally(() => {
+          if (active) setVendorMatchLoading(false);
+        });
+    }, 300);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [vendorDialogOpen, vendorFormName, editingVendor?.id]);
+
   const getAllDirectoryRows = async (section: 'USERS' | 'VENDORS') => {
     const pageSize = 1000;
     const rows: any[] = [];
@@ -187,15 +262,104 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     } catch (err: any) { showToast(err.message, 'error'); }
   };
 
-  const handleEditVendor = async (id: string, currentName: string) => {
-    const newName = window.prompt("แก้ไขชื่อบริษัท (Edit Company Name):", currentName);
-    if (!newName || newName === currentName) return;
-    const { error } = await supabase.from('vendors').update({ name: newName }).eq('id', id);
-    if (error) showToast(error.message, 'error');
-    else { 
-      showToast('แก้ไขชื่อบริษัทสำเร็จ', 'success'); 
-      logAction('EDIT_VENDOR', currentName, `Changed to ${newName}`);
-      loadData(); 
+  const closeVendorDialog = (force = false) => {
+    if (savingVendor && !force) return;
+    setVendorDialogOpen(false);
+    setEditingVendor(null);
+    setVendorMatches([]);
+    setVendorMatchError('');
+    setAllowSimilarVendor(false);
+  };
+
+  const handleEditVendor = (vendor: Vendor) => {
+    setEditingVendor(vendor);
+    setVendorFormName(vendor.name);
+    setVendorFormStatus(vendor.status || VendorStatus.PENDING);
+    setVendorMatches([]);
+    setVendorMatchError('');
+    setAllowSimilarVendor(false);
+    setVendorDialogOpen(true);
+  };
+
+  const handleUseExistingVendor = (match: VendorNameMatch) => {
+    setVendorDialogOpen(false);
+    setEditingVendor(null);
+    setVendorMatches([]);
+    setSearchQuery(match.name);
+    setCurrentPage(1);
+    showToast(`แสดงบริษัทเดิม: ${match.name}`, 'info');
+  };
+
+  const handleSaveVendor = async () => {
+    const trimmedName = vendorFormName.trim();
+    const unchangedName = Boolean(editingVendor)
+      && normalizeVendorNameForComparison(trimmedName) === normalizeVendorNameForComparison(editingVendor?.name || '');
+    const exactMatch = unchangedName ? undefined : vendorMatches.find((match) => match.match_type === 'EXACT');
+    const similarMatches = vendorMatches.filter((match) => match.match_type === 'SIMILAR');
+    if (!trimmedName) {
+      showToast('กรุณาระบุชื่อบริษัท', 'error');
+      return;
+    }
+    if (exactMatch) {
+      showToast(`มีบริษัท ${exactMatch.name} อยู่ในระบบแล้ว`, 'error');
+      return;
+    }
+    if (similarMatches.length > 0 && !allowSimilarVendor) {
+      showToast('กรุณาตรวจสอบชื่อที่ใกล้เคียงและยืนยันว่าเป็นคนละบริษัท', 'info');
+      return;
+    }
+
+    setSavingVendor(true);
+    try {
+      const result = await api.adminSaveVendor({
+        id: editingVendor?.id,
+        name: trimmedName,
+        status: vendorFormStatus,
+        allowSimilar: allowSimilarVendor,
+      });
+
+      if (!result.saved) {
+        setVendorMatches(result.matches || (result.vendor ? [{
+          ...result.vendor,
+          match_type: 'EXACT' as const,
+          match_score: 1,
+        }] : []));
+        setAllowSimilarVendor(false);
+        showToast(result.reason === 'EXACT' ? 'พบชื่อบริษัทซ้ำในระบบ' : 'พบชื่อบริษัทที่ใกล้เคียง กรุณาตรวจสอบก่อนบันทึก', 'info');
+        return;
+      }
+
+      const previousName = editingVendor?.name;
+      showToast(editingVendor ? 'แก้ไขชื่อบริษัทสำเร็จ' : 'เพิ่มบริษัทสำเร็จ', 'success');
+      void logAction(editingVendor ? 'EDIT_VENDOR' : 'CREATE_VENDOR', trimmedName,
+        editingVendor ? `Changed from ${previousName} to ${trimmedName}` : `Status ${vendorFormStatus}`);
+      closeVendorDialog(true);
+      await Promise.all([loadData(), loadVendorDuplicateGroups()]);
+
+      if (result.created && vendorFormStatus === VendorStatus.PENDING) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.access_token) {
+            await fetch('/api/notify-admin', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${session.access_token}`,
+              },
+              body: JSON.stringify({ vendorName: trimmedName }),
+            });
+          }
+        } catch (notificationError) {
+          console.error('LINE Admin Notification Trigger Error:', notificationError);
+        }
+      }
+    } catch (saveError: any) {
+      const message = saveError?.message?.includes('DUPLICATE_VENDOR_NAME')
+        ? 'มีชื่อบริษัทนี้อยู่ในระบบแล้ว กรุณาใช้รายการเดิม'
+        : saveError?.message || 'บันทึกบริษัทไม่สำเร็จ';
+      showToast(message, 'error');
+    } finally {
+      setSavingVendor(false);
     }
   };
 
@@ -350,24 +514,44 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     if (!file) return;
     e.target.value = '';
     setImportingVendors(true); 
+    setVendorImportReview([]);
 
     try {
         const data = await readFirstWorksheetRows(file);
         
-        let successCount = 0; let skipCount = 0;
+        let successCount = 0;
+        let duplicateCount = 0;
+        let similarCount = 0;
+        const reviewItems: Array<{ inputName: string; reason: 'EXACT' | 'SIMILAR'; matches: string[] }> = [];
 
         for (const row of data) {
           const rawName = row['Company Name'] || row['Vendor'] || row['Name'];
           if (rawName && rawName.toString().trim() !== '') {
             const trimmedName = rawName.toString().trim();
-            const { data: existingVendor } = await supabase.from('vendors').select('name').eq('name', trimmedName).maybeSingle();
-            if (existingVendor) { skipCount++; continue; }
-            const { error: insertError } = await supabase.from('vendors').insert([{ name: trimmedName, status: 'APPROVED' }]);
-            if (!insertError) successCount++;
+            const result = await api.adminSaveVendor({
+              name: trimmedName,
+              status: VendorStatus.APPROVED,
+              allowSimilar: false,
+            });
+            if (result.saved) successCount++;
+            else if (result.reason === 'EXACT') {
+              duplicateCount++;
+              reviewItems.push({ inputName: trimmedName, reason: 'EXACT', matches: result.vendor ? [result.vendor.name] : [] });
+            }
+            else {
+              similarCount++;
+              reviewItems.push({ inputName: trimmedName, reason: 'SIMILAR', matches: result.matches.map((match) => match.name) });
+            }
           }
         }
-        if (successCount > 0) { showToast(`นำเข้าบริษัทสำเร็จ ${successCount} บริษัท (ซ้ำ ${skipCount} รายการ)`, 'success'); loadData(); } 
-        else if (skipCount > 0) { showToast(`ข้อมูลทั้งหมด ${skipCount} รายการมีอยู่ในระบบแล้ว`, 'info'); } 
+        setVendorImportReview(reviewItems);
+        if (successCount > 0) {
+          showToast(`นำเข้าสำเร็จ ${successCount} บริษัท · ซ้ำ ${duplicateCount} · ชื่อคล้ายรอตรวจ ${similarCount}`, 'success');
+          await Promise.all([loadData(), loadVendorDuplicateGroups()]);
+        }
+        else if (duplicateCount > 0 || similarCount > 0) {
+          showToast(`ไม่มีรายการใหม่: ซ้ำ ${duplicateCount} · ชื่อคล้ายรอตรวจ ${similarCount}`, 'info');
+        }
         else { showToast('ไม่พบข้อมูลที่จะนำเข้า', 'error'); }
       } catch (err) {
         console.error("❌ Error:", err); 
@@ -377,33 +561,14 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
       }
   };
 
-  const handleAddVendor = async () => {
-    const name = window.prompt("ชื่อบริษัทใหม่ (New Company Name):");
-    if (!name) return;
-    
-    const { error } = await supabase.from('vendors').insert([{ name, status: 'PENDING' }]);
-    
-    if (error) {
-      showToast(error.message, 'error');
-    } else { 
-      showToast('ลงทะเบียนบริษัทแล้ว กรุณารอการอนุมัติ', 'success'); 
-      logAction('CREATE_VENDOR', name); 
-      loadData(); 
-
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        fetch('/api/notify-admin', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            vendorName: name,
-            adminEmail: user?.email || 'System Admin'
-          })
-        }).catch(e => console.error("LINE Admin Notification Trigger Error:", e));
-      } catch (err) {
-        console.error("Fail to trigger LINE Admin API:", err);
-      }
-    }
+  const handleAddVendor = () => {
+    setEditingVendor(null);
+    setVendorFormName('');
+    setVendorFormStatus(VendorStatus.PENDING);
+    setVendorMatches([]);
+    setVendorMatchError('');
+    setAllowSimilarVendor(false);
+    setVendorDialogOpen(true);
   };
 
   const handleDeleteVendor = async (id: string, name: string) => {
@@ -584,6 +749,18 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     );
   };
 
+  const vendorNameUnchanged = Boolean(editingVendor)
+    && normalizeVendorNameForComparison(vendorFormName) === normalizeVendorNameForComparison(editingVendor?.name || '');
+  const exactVendorDialogMatch = vendorNameUnchanged
+    ? undefined
+    : vendorMatches.find((match) => match.match_type === 'EXACT');
+  const similarVendorDialogMatches = vendorMatches.filter((match) => match.match_type === 'SIMILAR');
+  const vendorSaveDisabled = savingVendor
+    || vendorMatchLoading
+    || !vendorFormName.trim()
+    || Boolean(exactVendorDialogMatch)
+    || (similarVendorDialogMatches.length > 0 && !allowSimilarVendor);
+
   return (
     <div className="space-y-4 md:space-y-6 text-left animate-in fade-in duration-500 pb-10 relative px-2 md:px-0">
       
@@ -691,6 +868,38 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
             )}
           </div>
         </div>
+
+        {activeTab === 'VENDORS' && vendorDuplicateGroups.length > 0 && (
+          <div role="status" className="mx-4 mt-3 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 md:mx-6">
+            <ShieldAlert size={18} className="mt-0.5 shrink-0 text-amber-600" aria-hidden="true" />
+            <div>
+              <p className="text-[10px] font-black text-amber-800">พบข้อมูลชื่อบริษัทซ้ำเดิม {vendorDuplicateGroups.length} กลุ่ม</p>
+              <p className="mt-1 text-[9px] font-bold leading-relaxed text-amber-700">ระบบป้องกันการเพิ่มชื่อซ้ำรายการใหม่แล้ว และยังไม่ได้รวม ลบ หรือแก้ข้อมูลเดิมโดยอัตโนมัติ</p>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'VENDORS' && vendorImportReview.length > 0 && (
+          <div role="status" className="mx-4 mt-3 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 md:mx-6">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-black text-blue-800">รายการจากไฟล์ Import ที่ไม่ได้เพิ่ม {vendorImportReview.length} รายการ</p>
+                <p className="mt-1 text-[9px] font-bold text-blue-700">ตรวจชื่อเดิมหรือชื่อใกล้เคียงด้านล่าง แล้วแก้ไฟล์หรือเพิ่มผ่านปุ่ม New Entry</p>
+              </div>
+              <button type="button" onClick={() => setVendorImportReview([])} aria-label="ปิดผลตรวจ Import" className="min-h-11 min-w-11 shrink-0 rounded-xl bg-white p-3 text-blue-700"><X size={15} /></button>
+            </div>
+            <ul className="mt-3 space-y-2">
+              {vendorImportReview.slice(0, 5).map((item, index) => (
+                <li key={`${item.inputName}-${index}`} className="rounded-xl bg-white/90 px-3 py-2 text-[9px] font-bold text-slate-700">
+                  <span className="font-black">{item.inputName}</span>
+                  <span className="mx-2 text-blue-400">→</span>
+                  {item.reason === 'EXACT' ? 'ซ้ำกับ' : 'ใกล้เคียง'} {item.matches.join(', ') || 'รายการในระบบ'}
+                </li>
+              ))}
+            </ul>
+            {vendorImportReview.length > 5 && <p className="mt-2 text-[9px] font-bold text-blue-700">และอีก {vendorImportReview.length - 5} รายการ</p>}
+          </div>
+        )}
 
         {/* Bulk Actions Bar */}
         {activeTab === 'USERS' && selectedIds.size > 0 && (
@@ -844,7 +1053,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                               {activeTab === 'VENDORS' && item.status === 'PENDING' && (
                                 <button onClick={() => handleUpdateVendorStatus(item.id, item.name, 'REJECTED')} title="Reject" className="p-2.5 rounded-xl border text-red-500 hover:bg-red-50 active:scale-90 transition-all"><Ban size={16} /></button>
                               )}
-                              <button onClick={() => activeTab === 'VENDORS' ? handleEditVendor(item.id, item.name) : handleEditUser(item)} aria-label={`แก้ไข ${item.name}`} className="p-2.5 rounded-xl border border-slate-100 text-slate-600 hover:text-blue-700 hover:bg-blue-50 active:scale-90 transition-all shadow-sm"><Edit3 size={16} /></button>
+                              <button onClick={() => activeTab === 'VENDORS' ? handleEditVendor(item as Vendor) : handleEditUser(item)} aria-label={`แก้ไข ${item.name}`} className="p-2.5 rounded-xl border border-slate-100 text-slate-600 hover:text-blue-700 hover:bg-blue-50 active:scale-90 transition-all shadow-sm"><Edit3 size={16} /></button>
                               {activeTab === 'USERS' && (
                                 <>
                                   <button onClick={() => handleResetTraining(item.id, item.name)} title="Reset Compliance" className="p-2.5 rounded-xl border border-amber-100 text-amber-500 hover:bg-amber-50 transition-all active:scale-90 shadow-sm"><RotateCcw size={16} /></button>
@@ -976,7 +1185,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                             {activeTab === 'VENDORS' && item.status === 'PENDING' && (
                               <button onClick={() => handleUpdateVendorStatus(item.id, item.name, 'REJECTED')} aria-label={`ไม่อนุมัติบริษัท ${item.name}`} className="min-h-11 min-w-11 p-2.5 rounded-xl border border-red-200 text-red-500 bg-red-50 active:scale-90 transition-all"><Ban size={14} /></button>
                             )}
-                            <button onClick={() => activeTab === 'VENDORS' ? handleEditVendor(item.id, item.name) : handleEditUser(item)} aria-label={`แก้ไข ${item.name}`} className="min-h-11 min-w-11 p-2.5 rounded-xl border border-slate-200 text-slate-500 bg-white active:scale-90 transition-all"><Edit3 size={14} /></button>
+                            <button onClick={() => activeTab === 'VENDORS' ? handleEditVendor(item as Vendor) : handleEditUser(item)} aria-label={`แก้ไข ${item.name}`} className="min-h-11 min-w-11 p-2.5 rounded-xl border border-slate-200 text-slate-500 bg-white active:scale-90 transition-all"><Edit3 size={14} /></button>
                             {activeTab === 'USERS' && (
                               <>
                                 <button onClick={() => handleResetTraining(item.id, item.name)} aria-label={`รีเซ็ตการอบรมของ ${item.name}`} className="min-h-11 min-w-11 p-2.5 rounded-xl border border-amber-200 text-amber-500 bg-amber-50 active:scale-90 transition-all"><RotateCcw size={14} /></button>
@@ -1003,6 +1212,102 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
           )}
         </div>
       </div>
+
+      {vendorDialogOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-3 sm:p-5">
+          <button type="button" aria-label="ปิดหน้าต่างจัดการบริษัท" className="absolute inset-0 h-full w-full bg-slate-950/65 backdrop-blur-sm" onClick={() => closeVendorDialog()} />
+          <div ref={vendorDialogRef} role="dialog" aria-modal="true" aria-labelledby="vendor-dialog-title" tabIndex={-1} className="relative z-10 flex max-h-[calc(100dvh-1.5rem)] w-full max-w-xl flex-col overflow-hidden rounded-[1.75rem] border border-white/50 bg-white shadow-2xl focus:outline-none sm:max-h-[calc(100dvh-2.5rem)] sm:rounded-[2rem]">
+            <div className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-100 bg-white px-5 py-4 sm:px-7 sm:py-5">
+              <div>
+                <h3 id="vendor-dialog-title" className="text-lg font-black text-slate-900">{editingVendor ? 'แก้ไขบริษัท' : 'เพิ่มบริษัทใหม่'}</h3>
+                <p className="mt-1 text-[9px] font-bold text-slate-500">ระบบจะตรวจชื่อซ้ำและชื่อใกล้เคียงก่อนบันทึก</p>
+              </div>
+              <button type="button" onClick={() => closeVendorDialog()} disabled={savingVendor} aria-label="ปิด" className="min-h-11 min-w-11 rounded-full bg-slate-100 p-3 text-slate-600 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"><X size={18} /></button>
+            </div>
+
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-5 sm:px-7">
+              <label className="block space-y-2">
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">ชื่อบริษัท</span>
+                <div className="relative">
+                  <Building2 size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+                  <input
+                    value={vendorFormName}
+                    onChange={(event) => {
+                      setVendorFormName(event.target.value);
+                      setAllowSimilarVendor(false);
+                    }}
+                    autoComplete="organization"
+                    aria-describedby="admin-vendor-match-status"
+                    placeholder="พิมพ์ชื่อบริษัท"
+                    className="min-h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-4 text-base font-bold outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
+                  />
+                </div>
+              </label>
+
+              <label className="block space-y-2">
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">สถานะ</span>
+                <select value={vendorFormStatus} onChange={(event) => setVendorFormStatus(event.target.value as VendorStatus)} className="min-h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-base font-bold outline-none focus:border-blue-500 focus:bg-white">
+                  <option value={VendorStatus.PENDING}>รออนุมัติ</option>
+                  <option value={VendorStatus.APPROVED}>อนุมัติแล้ว</option>
+                  <option value={VendorStatus.REJECTED}>ปฏิเสธ</option>
+                </select>
+              </label>
+
+              <div id="admin-vendor-match-status" className="space-y-3" aria-live="polite">
+                {vendorMatchLoading && <p className="flex items-center gap-2 text-[10px] font-bold text-slate-500"><Loader2 size={14} className="animate-spin" /> กำลังตรวจสอบชื่อบริษัท...</p>}
+                {vendorMatchError && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-[10px] font-bold text-red-700">{vendorMatchError}</p>}
+
+                {exactVendorDialogMatch && (
+                  <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
+                    <p className="text-[10px] font-black text-red-700">ไม่สามารถบันทึกชื่อซ้ำได้</p>
+                    <p className="mt-1 text-sm font-bold text-slate-800">{exactVendorDialogMatch.name}</p>
+                    <p className="mt-1 text-[9px] font-bold text-slate-600">สถานะ: {exactVendorDialogMatch.status}</p>
+                    <button type="button" onClick={() => handleUseExistingVendor(exactVendorDialogMatch)} className="mt-3 min-h-11 rounded-xl bg-slate-900 px-4 text-[9px] font-black text-white">ไปที่บริษัทนี้</button>
+                  </div>
+                )}
+
+                {!exactVendorDialogMatch && similarVendorDialogMatches.length > 0 && (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                    <p className="text-[10px] font-black text-amber-800">พบชื่อใกล้เคียง กรุณาตรวจสอบ</p>
+                    <div className="mt-3 space-y-2">
+                      {similarVendorDialogMatches.map((match) => (
+                        <div key={match.id} className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-[10px] font-bold text-slate-800">{match.name}</p>
+                            <p className="text-[8px] font-bold text-slate-500">{match.status} · ใกล้เคียง {Math.round(Number(match.match_score) * 100)}%</p>
+                          </div>
+                          <button type="button" onClick={() => handleUseExistingVendor(match)} className="min-h-11 shrink-0 rounded-lg border border-slate-200 px-3 text-[8px] font-black text-slate-700">ดูรายการเดิม</button>
+                        </div>
+                      ))}
+                    </div>
+                    <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-xl border border-amber-200 bg-white p-3">
+                      <input type="checkbox" checked={allowSimilarVendor} onChange={(event) => setAllowSimilarVendor(event.target.checked)} className="mt-0.5 h-4 w-4 accent-amber-600" />
+                      <span className="text-[9px] font-bold leading-relaxed text-amber-800">ตรวจสอบแล้ว ยืนยันว่าเป็นคนละบริษัทกับรายการข้างต้น</span>
+                    </label>
+                  </div>
+                )}
+
+                {!vendorMatchLoading && !vendorMatchError && vendorFormName.trim().length >= 2 && vendorMatches.length === 0 && (
+                  <p className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-[10px] font-bold text-emerald-700"><CheckCircle size={14} /> ไม่พบชื่อซ้ำหรือชื่อใกล้เคียง</p>
+                )}
+              </div>
+            </div>
+
+            <div className="grid shrink-0 grid-cols-1 gap-2 border-t border-slate-100 bg-white p-4 sm:grid-cols-2 sm:px-7">
+              <button type="button" onClick={() => closeVendorDialog()} disabled={savingVendor} className="min-h-12 rounded-2xl border border-slate-200 bg-slate-50 text-[10px] font-black text-slate-600 disabled:opacity-50">ยกเลิก</button>
+              <button type="button" onClick={handleSaveVendor} disabled={vendorSaveDisabled} aria-describedby={vendorSaveDisabled ? 'vendor-save-disabled-reason' : undefined} className="min-h-12 rounded-2xl bg-blue-600 text-[10px] font-black text-white shadow-lg shadow-blue-100 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none">
+                {savingVendor ? <Loader2 size={16} className="mx-auto animate-spin" /> : editingVendor ? 'บันทึกการแก้ไข' : 'เพิ่มบริษัท'}
+              </button>
+              {vendorSaveDisabled && !savingVendor && (
+                <p id="vendor-save-disabled-reason" className="text-center text-[9px] font-bold text-amber-700 sm:col-span-2">
+                  {exactVendorDialogMatch ? 'มีชื่อบริษัทนี้อยู่แล้ว กรุณาใช้รายการเดิม' : similarVendorDialogMatches.length > 0 && !allowSimilarVendor ? 'กรุณายืนยันว่าเป็นคนละบริษัทก่อนบันทึก' : vendorMatchLoading ? 'กรุณารอระบบตรวจสอบชื่อบริษัท' : 'กรุณาระบุชื่อบริษัท'}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
 
       {/* 📝 EDIT USER MODAL */}
       {isEditModalOpen && (

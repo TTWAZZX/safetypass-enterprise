@@ -84,6 +84,22 @@ export interface Vendor {
   created_at?: string;
 }
 
+export interface VendorNameMatch {
+  id: string;
+  name: string;
+  status: VendorStatus;
+  match_type: 'EXACT' | 'SIMILAR';
+  match_score: number;
+}
+
+export interface VendorSaveResult {
+  saved: boolean;
+  created: boolean;
+  reason: 'SAVED' | 'EXACT' | 'SIMILAR';
+  vendor: Pick<Vendor, 'id' | 'name' | 'status'> | null;
+  matches: VendorNameMatch[];
+}
+
 // ✅ User ปรับปรุงใหม่รองรับ avatar_url จาก LINE
 export interface User {
   id: string;
@@ -100,7 +116,10 @@ export interface User {
   created_at: string;
   vendors?: {             
     name: string;
+    status?: VendorStatus;
   };
+  vendor_request_created?: boolean;
+  vendor_resolution?: 'SELECTED' | 'EXISTING_APPROVED' | 'EXISTING_PENDING' | 'CREATED_PENDING';
 }
 
 export interface ExamLog {

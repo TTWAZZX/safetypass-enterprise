@@ -2,7 +2,7 @@ import { supabase } from '../services/supabaseClient'; // ✅ เพิ่มบ
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/supabaseApi';
 import {
-  User, Vendor, TrainingProgram, SupplierOutsourceType, SupplierOutsourceWorkType,
+  User, Vendor, VendorNameMatch, TrainingProgram, SupplierOutsourceType, SupplierOutsourceWorkType,
 } from '../types';
 import { useTranslation } from '../context/LanguageContext';
 import { 
@@ -48,6 +48,9 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [vendorSearch, setVendorSearch] = useState('');
   const [vendorsLoading, setVendorsLoading] = useState(false);
   const [vendorsError, setVendorsError] = useState('');
+  const [vendorMatches, setVendorMatches] = useState<VendorNameMatch[]>([]);
+  const [vendorMatchLoading, setVendorMatchLoading] = useState(false);
+  const [vendorMatchError, setVendorMatchError] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [fetchingUser, setFetchingUser] = useState(false);
@@ -77,7 +80,13 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     accessEndDate,
     pdpaAccepted,
   };
-  const registrationDisabledReason = getRegistrationDisabledReason(registrationState);
+  const exactVendorMatch = vendorMatches.find((match) => match.match_type === 'EXACT');
+  const vendorDuplicateDisabledReason = exactVendorMatch?.status === 'APPROVED'
+    ? 'พบบริษัทนี้ในระบบแล้ว กรุณากดเลือกบริษัทเดิมก่อนลงทะเบียน'
+    : exactVendorMatch?.status === 'REJECTED'
+      ? 'ชื่อบริษัทนี้ไม่พร้อมใช้งาน กรุณาติดต่อแอดมิน'
+      : '';
+  const registrationDisabledReason = vendorDuplicateDisabledReason || getRegistrationDisabledReason(registrationState);
   const registrationStep = getRegistrationStepIndex(registrationState);
 
   const loadRegistrationVendors = async () => {
@@ -100,6 +109,40 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   }, [mode]);
 
   useEffect(() => {
+    if (mode !== 'REGISTER' || vendorId !== 'OTHER' || otherVendor.trim().length < 2) {
+      setVendorMatches([]);
+      setVendorMatchError('');
+      setVendorMatchLoading(false);
+      return;
+    }
+
+    let active = true;
+    setVendorMatchLoading(true);
+    setVendorMatchError('');
+    const timer = window.setTimeout(() => {
+      api.findVendorNameMatches(otherVendor.trim())
+        .then((matches) => {
+          if (active) setVendorMatches(matches);
+        })
+        .catch((matchError) => {
+          console.error('Vendor name match failed:', matchError);
+          if (active) {
+            setVendorMatches([]);
+            setVendorMatchError('ตรวจสอบชื่อบริษัทไม่สำเร็จ กรุณาลองพิมพ์ใหม่อีกครั้ง');
+          }
+        })
+        .finally(() => {
+          if (active) setVendorMatchLoading(false);
+        });
+    }, 300);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [mode, vendorId, otherVendor]);
+
+  useEffect(() => {
     api.getPublicFeatureFlags()
       .then(({ supplierOutsourceEnabled: enabled }) => setSupplierOutsourceEnabled(enabled))
       .catch(() => setSupplierOutsourceEnabled(false));
@@ -109,6 +152,16 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     setSelectedPrograms((current) => current.includes(program)
       ? current.filter((item) => item !== program)
       : [...current, program]);
+  };
+
+  const selectExistingVendor = (match: VendorNameMatch) => {
+    if (match.status !== 'APPROVED') return;
+    setVendorId(match.id);
+    setVendorSearch(match.name);
+    setOtherVendor('');
+    setVendorMatches([]);
+    setVendorMatchError('');
+    setInfoMsg(`เลือกบริษัท ${match.name} เรียบร้อยแล้ว`);
   };
 
   useEffect(() => {
@@ -235,7 +288,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       );
 
       // 🔥 ✅ แก้ไข: เติมคำว่า await เพื่อให้ระบบ "รอ" ส่ง LINE ให้เสร็จก่อนเปลี่ยนหน้า
-      if (vendorId === 'OTHER' && otherVendor.trim() !== '') {
+      if (user.vendor_request_created === true) {
         try {
           const { data: { session } } = await supabase.auth.getSession();
           if (!session?.access_token) throw new Error('No active session');
@@ -272,6 +325,8 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
          
          setInfoMsg('พบว่าคุณมีบัญชีในระบบแล้ว! กรุณากด Login เพื่อเข้าใช้งาน');
          setTimeout(() => setInfoMsg(''), 6000); 
+      } else if (errorMsg.includes('Vendor name is unavailable') || errorMsg.includes('DUPLICATE_VENDOR_NAME')) {
+         setError('ชื่อบริษัทนี้มีอยู่ในระบบหรือไม่พร้อมใช้งาน กรุณาเลือกบริษัทเดิมหรือติดต่อแอดมิน');
       } else {
          setError('Registration failed: ' + errorMsg);
       }
@@ -446,8 +501,9 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                     <input required type="number" value={age} onChange={e => setAge(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs shadow-inner" placeholder="25" />
                 </div>
                 <div className="space-y-1">
-                    <label className="block text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">Nationality / สัญชาติ</label>
-                    <select 
+                    <label htmlFor="registration-nationality" className="block text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">Nationality / สัญชาติ</label>
+                    <select
+                      id="registration-nationality"
                       value={isOtherNationality ? 'OTHER' : nationality} 
                       onChange={e => handleNationalityChange(e.target.value)} 
                       className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs appearance-none cursor-pointer"
@@ -478,7 +534,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             )}
 
             <div className="space-y-1">
-              <label className="block text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">{t('auth.company')}</label>
+              <label htmlFor="registration-vendor" className="block text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">{t('auth.company')}</label>
               <div className="relative">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                 <input
@@ -490,7 +546,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                   aria-label="ค้นหาชื่อบริษัท"
                 />
               </div>
-              <select required value={vendorId} onChange={e => setVendorId(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs appearance-none cursor-pointer shadow-inner">
+              <select id="registration-vendor" required value={vendorId} onChange={e => setVendorId(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs appearance-none cursor-pointer shadow-inner">
                 <option value="">{vendorsLoading ? 'กำลังโหลดรายชื่อบริษัท...' : '-- Select Company --'}</option>
                 {filteredVendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                 <option value="OTHER">Other (ระบุเพิ่ม)</option>
@@ -509,9 +565,67 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             </div>
             
             {vendorId === 'OTHER' && (
-              <div className="space-y-1 animate-in slide-in-from-top-2 duration-300">
+              <div className="space-y-2 animate-in slide-in-from-top-2 duration-300">
                 <label className="block text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">{t('auth.other_company')}</label>
-                <input required value={otherVendor} onChange={e => setOtherVendor(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs" />
+                <input
+                  required
+                  value={otherVendor}
+                  onChange={e => setOtherVendor(e.target.value)}
+                  aria-describedby="vendor-name-match-status"
+                  autoComplete="organization"
+                  placeholder="พิมพ์ชื่อบริษัท ระบบจะตรวจรายการซ้ำให้ทันที"
+                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs"
+                />
+                <div id="vendor-name-match-status" className="space-y-2" aria-live="polite">
+                  {vendorMatchLoading && (
+                    <p className="flex items-center gap-2 px-1 text-[9px] font-bold text-slate-500">
+                      <Loader2 size={12} className="animate-spin" aria-hidden="true" /> กำลังตรวจสอบชื่อบริษัท...
+                    </p>
+                  )}
+                  {vendorMatchError && <p role="alert" className="px-1 text-[9px] font-bold text-red-600">{vendorMatchError}</p>}
+                  {exactVendorMatch?.status === 'APPROVED' && (
+                    <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
+                      <p className="text-[9px] font-black text-blue-800">พบบริษัทนี้ในระบบแล้ว</p>
+                      <div className="mt-2 flex items-center justify-between gap-3">
+                        <span className="min-w-0 truncate text-[10px] font-bold text-slate-800">{exactVendorMatch.name}</span>
+                        <button type="button" onClick={() => selectExistingVendor(exactVendorMatch)} className="min-h-11 shrink-0 rounded-xl bg-blue-600 px-4 text-[9px] font-black text-white hover:bg-blue-700">
+                          เลือกบริษัทนี้
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {exactVendorMatch?.status === 'PENDING' && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[9px] font-bold text-amber-800">
+                      มีคำขอบริษัท “{exactVendorMatch.name}” รออนุมัติอยู่แล้ว ระบบจะใช้รายการเดิมและไม่ส่งแจ้งเตือนซ้ำ
+                    </div>
+                  )}
+                  {exactVendorMatch?.status === 'REJECTED' && (
+                    <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-[9px] font-bold text-red-700">
+                      บริษัท “{exactVendorMatch.name}” เคยถูกปฏิเสธ กรุณาติดต่อแอดมินก่อนลงทะเบียน
+                    </div>
+                  )}
+                  {!exactVendorMatch && vendorMatches.some((match) => match.match_type === 'SIMILAR') && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                      <p className="text-[9px] font-black text-amber-800">พบชื่อบริษัทที่ใกล้เคียง กรุณาตรวจสอบก่อนเพิ่มใหม่</p>
+                      <div className="mt-2 space-y-2">
+                        {vendorMatches.filter((match) => match.match_type === 'SIMILAR').slice(0, 3).map((match) => (
+                          <div key={match.id} className="flex items-center justify-between gap-3 rounded-lg bg-white/80 px-3 py-2">
+                            <div className="min-w-0">
+                              <p className="truncate text-[10px] font-bold text-slate-800">{match.name}</p>
+                              <p className="text-[8px] font-bold text-slate-500">{match.status === 'APPROVED' ? 'อนุมัติแล้ว' : match.status === 'PENDING' ? 'รออนุมัติ' : 'ไม่พร้อมใช้งาน'}</p>
+                            </div>
+                            {match.status === 'APPROVED' && (
+                              <button type="button" onClick={() => selectExistingVendor(match)} className="min-h-11 shrink-0 rounded-lg border border-blue-200 bg-blue-50 px-3 text-[8px] font-black text-blue-700">
+                                เลือก
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      <p className="mt-2 text-[8px] font-bold text-amber-700">หากไม่ใช่บริษัทเดียวกัน สามารถลงทะเบียนชื่อที่พิมพ์ต่อได้</p>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

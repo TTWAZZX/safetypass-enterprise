@@ -2,7 +2,7 @@ import { supabase } from './supabaseClient'
 import {
   User, Vendor, ExamType, Question, WorkPermitSession, SupplierOutsourceStatus,
   SupplierOutsourceReportRow, SupplierOutsourceType, SupplierOutsourceWorkType,
-  TrainingProgram, QuestionRevision,
+  TrainingProgram, QuestionRevision, VendorNameMatch, VendorSaveResult, VendorStatus,
 } from '../types'
 
 const createPinPassword = (nationalId: string, pin: string) => `SafetyPass-${nationalId}-${pin}`;
@@ -171,16 +171,14 @@ export const api = {
       nationality_param: nationality,
       other_vendor_name_param: otherVendorName?.trim() || null,
     };
-    const registrationResponse = trainingSelection
-      ? await supabase.rpc('complete_registration_v2', {
-          ...registrationArgs,
-          program_codes_param: trainingSelection.programs,
-          participant_type_param: trainingSelection.participantType || null,
-          work_type_param: trainingSelection.workType || null,
-          access_start_date_param: trainingSelection.accessStartDate || null,
-          access_end_date_param: trainingSelection.accessEndDate || null,
-        })
-      : await supabase.rpc('complete_registration', registrationArgs);
+    const registrationResponse = await supabase.rpc('complete_registration_v3', {
+      ...registrationArgs,
+      program_codes_param: trainingSelection?.programs || ['CONTRACTOR'],
+      participant_type_param: trainingSelection?.participantType || null,
+      work_type_param: trainingSelection?.workType || null,
+      access_start_date_param: trainingSelection?.accessStartDate || null,
+      access_end_date_param: trainingSelection?.accessEndDate || null,
+    });
     const { data: registeredUser, error: registrationError } = registrationResponse;
 
     if (registrationError) {
@@ -205,6 +203,42 @@ export const api = {
     const { data, error } = await supabase.rpc('get_public_registration_vendors');
     if (error) throw error;
     return (data || []) as Vendor[];
+  },
+
+  findVendorNameMatches: async (name: string, excludeVendorId?: string | null): Promise<VendorNameMatch[]> => {
+    const { data, error } = await supabase.rpc('find_vendor_name_matches', {
+      search_name_param: name,
+      exclude_vendor_id_param: excludeVendorId || null,
+      limit_param: 5,
+    });
+    if (error) throw error;
+    return (data || []) as VendorNameMatch[];
+  },
+
+  adminSaveVendor: async (input: {
+    id?: string | null;
+    name: string;
+    status?: VendorStatus | 'PENDING' | 'APPROVED' | 'REJECTED';
+    allowSimilar?: boolean;
+  }): Promise<VendorSaveResult> => {
+    const { data, error } = await supabase.rpc('admin_save_vendor', {
+      vendor_id_param: input.id || null,
+      name_param: input.name,
+      status_param: input.status || 'PENDING',
+      allow_similar_param: input.allowSimilar === true,
+    });
+    if (error) throw error;
+    return data as VendorSaveResult;
+  },
+
+  getVendorDuplicateGroups: async () => {
+    const { data, error } = await supabase.rpc('admin_get_vendor_duplicate_groups');
+    if (error) throw error;
+    return (data || []) as Array<{
+      normalized_name: string;
+      vendor_count: number;
+      vendors: Array<Pick<Vendor, 'id' | 'name' | 'status' | 'created_at'>>;
+    }>;
   },
 
   getPendingVendors: async (): Promise<Vendor[]> => {

@@ -8,7 +8,9 @@ const sizes = new Map();
 for (const file of jsFiles) sizes.set(file, (await stat(join(assetsDirectory, file))).size);
 
 const find = (prefix) => [...sizes.entries()].find(([file]) => file.startsWith(prefix));
-const main = [...sizes.entries()].find(([file]) => /^index-[\w-]+\.js$/.test(file));
+const main = [...sizes.entries()]
+  .filter(([file]) => /^index-[\w-]+\.js$/.test(file))
+  .sort((left, right) => right[1] - left[1])[0];
 const excel = find('exceljs.min-');
 const charts = find('DashboardCharts-');
 const userPanel = find('UserPanel-');
