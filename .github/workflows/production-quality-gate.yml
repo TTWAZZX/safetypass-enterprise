@@ -25,10 +25,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -64,4 +64,13 @@ jobs:
         run: npm run test:a11y
 
       - name: Authenticated E2E and accessibility
-        run: npm run test:e2e
+        shell: bash
+        run: |
+          set +e
+          npm run test:e2e 2>&1 | tee e2e.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            message=$(tail -n 40 e2e.log | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::error file=scripts/check-e2e.mjs::$message"
+            exit "$status"
+          fi
