@@ -78,6 +78,38 @@ async function installMocks(page) {
     content_th: managedQuestions[8].content_th,
     content_en: managedQuestions[8].content_en,
   };
+  const questionSnapshot = (question) => JSON.parse(JSON.stringify(question));
+  const managedRevisions = new Map(managedQuestions.map((question, questionIndex) => [question.id, [
+    {
+      id: `51000000-0000-4000-8000-${String(questionIndex * 10 + 2).padStart(12, '0')}`,
+      question_id: question.id,
+      revision_no: 2,
+      change_type: 'SAVE',
+      note: null,
+      changed_by: adminId,
+      changed_by_name: 'ผู้ดูแลระบบทดสอบ',
+      changed_at: '2026-07-29T02:00:00.000Z',
+      snapshot: questionSnapshot(question),
+    },
+    {
+      id: `51000000-0000-4000-8000-${String(questionIndex * 10 + 1).padStart(12, '0')}`,
+      question_id: question.id,
+      revision_no: 1,
+      change_type: 'BASELINE',
+      note: null,
+      changed_by: null,
+      changed_by_name: 'ระบบ',
+      changed_at: '2026-07-29T01:00:00.000Z',
+      snapshot: questionSnapshot({ ...question, is_active: false }),
+    },
+  ]]));
+  const getManagedRevisions = (questionId) => {
+    const revisions = managedRevisions.get(questionId) || [];
+    const currentRevision = Math.max(0, ...revisions.map((revision) => revision.revision_no));
+    return revisions
+      .map((revision) => ({ ...revision, is_current: revision.revision_no === currentRevision }))
+      .sort((left, right) => right.revision_no - left.revision_no);
+  };
   await page.route('**/auth/v1/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -175,8 +207,35 @@ async function installMocks(page) {
         },
       };
       if (rpc === 'get_exam_questions') return json(route, examQuestions(payload.exam_type_param || 'INDUCTION'));
+      if (rpc === 'admin_get_question_revisions') {
+        return json(route, getManagedRevisions(payload.question_id_param));
+      }
+      if (rpc === 'admin_restore_question_revision') {
+        const revisions = managedRevisions.get(payload.question_id_param) || [];
+        const selectedRevision = revisions.find((revision) => revision.id === payload.revision_id_param);
+        if (!selectedRevision) return json(route, { message: 'Revision not found' }, 404);
+        managedQuestions = managedQuestions.map((question) => question.id === payload.question_id_param
+          ? { ...question, ...questionSnapshot(selectedRevision.snapshot), id: question.id }
+          : question);
+        const restoredQuestion = managedQuestions.find((question) => question.id === payload.question_id_param);
+        const nextRevision = Math.max(0, ...revisions.map((revision) => revision.revision_no)) + 1;
+        revisions.push({
+          id: `52000000-0000-4000-8000-${String(nextRevision).padStart(12, '0')}`,
+          question_id: payload.question_id_param,
+          revision_no: nextRevision,
+          change_type: 'RESTORE',
+          note: `Restored revision ${selectedRevision.revision_no}`,
+          changed_by: adminId,
+          changed_by_name: 'ผู้ดูแลระบบทดสอบ',
+          changed_at: '2026-07-29T03:00:00.000Z',
+          snapshot: questionSnapshot(restoredQuestion),
+        });
+        managedRevisions.set(payload.question_id_param, revisions);
+        return json(route, payload.question_id_param);
+      }
       if (rpc === 'admin_save_question') {
         const questionId = payload.question_id_param || '30000000-0000-4000-8000-000000999999';
+        const previousQuestion = managedQuestions.find((question) => question.id === questionId);
         const savedQuestion = {
           id: questionId,
           type: payload.exam_type_param,
@@ -192,6 +251,27 @@ async function installMocks(page) {
         const existingIndex = managedQuestions.findIndex((question) => question.id === questionId);
         if (existingIndex >= 0) managedQuestions = managedQuestions.map((question) => question.id === questionId ? { ...question, ...savedQuestion } : question);
         else managedQuestions = [savedQuestion, ...managedQuestions];
+        const revisions = managedRevisions.get(questionId) || [];
+        const nextRevision = Math.max(0, ...revisions.map((revision) => revision.revision_no)) + 1;
+        const changeType = !previousQuestion
+          ? 'CREATE'
+          : previousQuestion.is_active !== true && savedQuestion.is_active === true
+            ? 'PUBLISH'
+            : previousQuestion.is_active === true && savedQuestion.is_active !== true
+              ? 'UNPUBLISH'
+              : 'SAVE';
+        revisions.push({
+          id: `53000000-0000-4000-8000-${String(nextRevision).padStart(12, '0')}`,
+          question_id: questionId,
+          revision_no: nextRevision,
+          change_type: changeType,
+          note: null,
+          changed_by: adminId,
+          changed_by_name: 'ผู้ดูแลระบบทดสอบ',
+          changed_at: '2026-07-29T04:00:00.000Z',
+          snapshot: questionSnapshot(savedQuestion),
+        });
+        managedRevisions.set(questionId, revisions);
         return json(route, questionId);
       }
       if (Object.hasOwn(rpcResponses, rpc)) return json(route, rpcResponses[rpc]);
@@ -336,6 +416,20 @@ try {
   await adminPage.getByRole('button', { name: 'ดูตัวเลือกและเฉลย' }).first().click();
   await adminPage.getByText('ตัวเลือกและเฉลย', { exact: true }).first().waitFor();
   await assertA11y(adminPage, 'desktop question manager');
+  const firstQuestionCard = adminPage.locator('[id="question-card-30000000-0000-4000-8000-000000000001"]');
+  await firstQuestionCard.getByRole('button', { name: /ดูประวัติคำถาม/ }).click();
+  await adminPage.getByRole('dialog', { name: 'ประวัติและการกู้คืนคำถาม' }).waitFor();
+  await adminPage.getByText('รุ่นที่ 2', { exact: true }).waitFor();
+  await adminPage.getByText('รุ่นที่ 1', { exact: true }).waitFor();
+  await adminPage.getByText('ข้อมูลตั้งต้น', { exact: true }).waitFor();
+  await assertA11y(adminPage, 'question revision history');
+  await adminPage.getByRole('button', { name: 'กู้คืนรุ่นนี้' }).click();
+  await adminPage.getByText(/กู้คืน Q-000001 เป็นรุ่นที่ 1 สำเร็จ/).waitFor();
+  await adminPage.getByText('กู้คืนข้อมูล', { exact: true }).waitFor();
+  await adminPage.getByText('รุ่นที่ 3', { exact: true }).waitFor();
+  await adminPage.getByRole('button', { name: 'ปิดประวัติคำถาม' }).click();
+  await firstQuestionCard.getByRole('button', { name: 'เผยแพร่ Q-000001' }).click();
+  await adminPage.getByText(/เผยแพร่ Q-000001 สำเร็จ/).waitFor();
   await adminPage.getByRole('button', { name: /แก้ไขคำถาม Q-/ }).first().click();
   await adminPage.getByRole('dialog', { name: 'Edit Question' }).waitFor();
   await adminPage.getByText('ข้อ 1 จาก 10', { exact: true }).waitFor();

@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { api } from '../services/supabaseApi';
 import { supabase } from '../services/supabaseClient';
-import { ExamType, Question, QuestionPattern } from '../types'; 
+import { ExamType, Question, QuestionPattern, QuestionRevision } from '../types';
 import { readFirstWorksheetRows } from '../services/excelImport';
 import { 
   Plus, Save, Trash2, BookOpen, Ticket, Loader2, 
   Edit3, Upload, Download, X, Search, Image as ImageIcon,
   ChevronLeft, ChevronRight, RefreshCw, AlertCircle, CheckCircle2,
-  ListFilter, Hash, HelpCircle, ArrowRightLeft, ChevronDown, Copy, SlidersHorizontal
+  ListFilter, Hash, HelpCircle, ArrowRightLeft, ChevronDown, Copy, SlidersHorizontal,
+  History, RotateCcw
 } from 'lucide-react';
 import AsyncState from './AsyncState';
 import { useDialogFocus } from '../hooks/useDialogFocus';
@@ -119,6 +120,15 @@ type PatternFilter = 'ALL' | QuestionPattern;
 type StatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
 type QualityFilter = 'ALL' | 'COMPLETE' | 'INCOMPLETE' | 'DUPLICATE';
 
+const revisionActionLabels: Record<QuestionRevision['change_type'], string> = {
+  BASELINE: 'ข้อมูลตั้งต้น',
+  CREATE: 'สร้างคำถาม',
+  SAVE: 'บันทึกการแก้ไข',
+  PUBLISH: 'เผยแพร่',
+  UNPUBLISH: 'เปลี่ยนเป็นฉบับร่าง',
+  RESTORE: 'กู้คืนข้อมูล',
+};
+
 const QuestionManager: React.FC = () => {
   const { showToast } = useToastContext();
   const [questions, setQuestions] = useState<any[]>([]);
@@ -155,9 +165,15 @@ const QuestionManager: React.FC = () => {
   const [editingIsActive, setEditingIsActive] = useState(true);
   const [isEditorDirty, setIsEditorDirty] = useState(false);
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
+  const [publishingId, setPublishingId] = useState<string | null>(null);
   const [lastSavedQuestion, setLastSavedQuestion] = useState<{ id: string; savedAt: Date } | null>(null);
   const [highlightedQuestionId, setHighlightedQuestionId] = useState<string | null>(null);
   const [expandedAnswerIds, setExpandedAnswerIds] = useState<Set<string>>(() => new Set());
+  const [revisionQuestion, setRevisionQuestion] = useState<any | null>(null);
+  const [questionRevisions, setQuestionRevisions] = useState<QuestionRevision[]>([]);
+  const [revisionLoading, setRevisionLoading] = useState(false);
+  const [revisionError, setRevisionError] = useState('');
+  const [restoringRevisionId, setRestoringRevisionId] = useState<string | null>(null);
 
   const questionQualityMap = useMemo(() => new Map(
     questions.map((question) => [question.id, getQuestionQualityIssues(question)]),
@@ -167,6 +183,7 @@ const QuestionManager: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const editDialogRef = useRef<HTMLElement>(null);
+  const historyDialogRef = useRef<HTMLElement>(null);
   const questionCardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -188,11 +205,11 @@ const QuestionManager: React.FC = () => {
   }, [highlightedQuestionId, currentPage, questions]);
 
   useEffect(() => {
-    if (!editingId) return;
+    if (!editingId && !revisionQuestion) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = previousOverflow; };
-  }, [editingId]);
+  }, [editingId, revisionQuestion]);
 
   const fetchQuestions = async (options: { showLoading?: boolean; resetPage?: boolean } = {}) => {
     const { showLoading = true, resetPage = true } = options;
@@ -322,7 +339,7 @@ const QuestionManager: React.FC = () => {
         || getQuestionCode(question.id).toLowerCase().includes(keyword);
       const matchesPattern = patternFilter === 'ALL' || question.pattern === patternFilter;
       const matchesStatus = statusFilter === 'ALL'
-        || (statusFilter === 'ACTIVE' ? question.is_active !== false : question.is_active === false);
+        || (statusFilter === 'ACTIVE' ? question.is_active === true : question.is_active !== true);
       const issues = questionQualityMap.get(question.id) || [];
       const matchesQuality = qualityFilter === 'ALL'
         || (qualityFilter === 'COMPLETE' && issues.length === 0)
@@ -368,7 +385,54 @@ const QuestionManager: React.FC = () => {
     highlightTimerRef.current = setTimeout(() => setHighlightedQuestionId(null), 5000);
   };
 
+  const loadQuestionRevisions = async (questionId: string) => {
+    setRevisionLoading(true);
+    setRevisionError('');
+    try {
+      const revisions = await api.getQuestionRevisions(questionId);
+      setQuestionRevisions(revisions);
+    } catch (error: any) {
+      setRevisionError(error?.message || 'ไม่สามารถโหลดประวัติคำถามได้');
+    } finally {
+      setRevisionLoading(false);
+    }
+  };
+
+  const handleOpenRevisionHistory = (question: any) => {
+    setRevisionQuestion(question);
+    setQuestionRevisions([]);
+    loadQuestionRevisions(question.id);
+  };
+
+  const closeRevisionHistory = () => {
+    if (restoringRevisionId) return;
+    setRevisionQuestion(null);
+    setQuestionRevisions([]);
+    setRevisionError('');
+  };
+
+  const handleRestoreRevision = async (revision: QuestionRevision) => {
+    if (!revisionQuestion || revision.is_current) return;
+    const questionCode = getQuestionCode(revisionQuestion.id);
+    if (!window.confirm(`กู้คืน ${questionCode} กลับเป็นรุ่นที่ ${revision.revision_no} หรือไม่?\nเนื้อหา เฉลย รูปภาพ และสถานะเผยแพร่จะกลับไปตามรุ่นนี้`)) return;
+
+    setRestoringRevisionId(revision.id);
+    try {
+      await api.restoreQuestionRevision(revisionQuestion.id, revision.id);
+      setRevisionQuestion((current: any) => current ? { ...current, ...revision.snapshot, id: current.id } : current);
+      await fetchQuestions({ showLoading: false, resetPage: false });
+      await loadQuestionRevisions(revisionQuestion.id);
+      markQuestionSaved(revisionQuestion.id);
+      showToast(`กู้คืน ${questionCode} เป็นรุ่นที่ ${revision.revision_no} สำเร็จ`, 'success');
+    } catch (error: any) {
+      showToast(`กู้คืนข้อมูลไม่สำเร็จ: ${error.message}`, 'error');
+    } finally {
+      setRestoringRevisionId(null);
+    }
+  };
+
   useDialogFocus(Boolean(editingId), editDialogRef, requestCloseEditor);
+  useDialogFocus(Boolean(revisionQuestion), historyDialogRef, closeRevisionHistory);
 
   const handleSave = async (mode: 'close' | 'next' = 'close') => {
     if(!th || !en) return alert("กรุณากรอกโจทย์");
@@ -408,7 +472,7 @@ const QuestionManager: React.FC = () => {
           choices_json: finalChoices,
           correct_choice_index: correctIndex,
           image_url: imageUrl,
-          is_active: editingId ? editingIsActive : true
+          is_active: editingIsActive
       };
       const wasEditing = Boolean(editingId);
       const savedId = editingId
@@ -469,11 +533,19 @@ const QuestionManager: React.FC = () => {
   };
 
   const handleToggleActive = async (question: any) => {
+    const willPublish = question.is_active !== true;
+    const actionText = willPublish ? 'เผยแพร่คำถามนี้เข้าสู่ชุดข้อสอบ' : 'เปลี่ยนคำถามนี้กลับเป็นฉบับร่าง';
+    if (!window.confirm(`${actionText} หรือไม่?`)) return;
+    setPublishingId(question.id);
     try {
-      await api.updateQuestion(question.id, { ...question, is_active: !question.is_active });
-      fetchQuestions();
+      const savedId = await api.updateQuestion(question.id, { ...question, is_active: willPublish });
+      await fetchQuestions({ showLoading: false, resetPage: false });
+      markQuestionSaved(savedId);
+      showToast(`${willPublish ? 'เผยแพร่' : 'บันทึกเป็นฉบับร่าง'} ${getQuestionCode(question.id)} สำเร็จ`, 'success');
     } catch (error: any) {
-      alert('เปลี่ยนสถานะไม่สำเร็จ: ' + error.message);
+      showToast(`เปลี่ยนสถานะไม่สำเร็จ: ${error.message}`, 'error');
+    } finally {
+      setPublishingId(null);
     }
   };
 
@@ -494,6 +566,8 @@ const QuestionManager: React.FC = () => {
         if (!contentTh || !contentEn) continue;
         const importedPattern = (value(['pattern', 'รูปแบบ']) || 'MULTIPLE_CHOICE').toUpperCase() as QuestionPattern;
         const importedType = (value(['type', 'exam type', 'ประเภทข้อสอบ']) || examType).toUpperCase();
+        const publicationStatus = value(['status', 'publication status', 'is_active', 'สถานะ']).toLowerCase();
+        const importedIsActive = !['draft', 'inactive', 'off', 'false', '0', 'ฉบับร่าง'].includes(publicationStatus);
         const correct = Math.max(0, Number(value(['correct choice', 'correct_choice_index', 'คำตอบที่ถูก'])) - 1 || 0);
         const importedChoices = [1, 2, 3, 4].map((index) => ({
           text_th: value([`choice ${index} th`, `choice_${index}_th`, `ตัวเลือก ${index} ไทย`]),
@@ -510,7 +584,7 @@ const QuestionManager: React.FC = () => {
             : importedChoices,
           correct_choice_index: correct,
           image_url: null,
-          is_active: true,
+          is_active: importedIsActive,
         });
         imported++;
       }
@@ -622,6 +696,14 @@ const QuestionManager: React.FC = () => {
                     <button onClick={() => { setExamType(ExamType.WORK_PERMIT); if (editingId) setIsEditorDirty(true); }} className={`min-h-11 flex-1 py-3 rounded-xl font-black text-[10px] transition-all ${examType === ExamType.WORK_PERMIT ? 'bg-purple-700 text-white shadow-md' : 'text-slate-600 hover:text-slate-800'}`}>WORK PERMIT</button>
                     <button onClick={() => { setExamType(ExamType.SUPPLIER_OUTSOURCE); if (editingId) setIsEditorDirty(true); }} className={`min-h-11 flex-1 py-3 rounded-xl font-black text-[9px] transition-all ${examType === ExamType.SUPPLIER_OUTSOURCE ? 'bg-emerald-700 text-white shadow-md' : 'text-slate-600 hover:text-slate-800'}`}>SUPPLIER & OUTSOURCE</button>
                 </div>
+                <fieldset className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                  <legend className="px-2 text-[9px] font-black text-slate-700">สถานะคำถาม</legend>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button type="button" aria-pressed={!editingIsActive} onClick={() => { setEditingIsActive(false); if (editingId) setIsEditorDirty(true); }} className={`min-h-11 rounded-xl border text-[10px] font-black ${!editingIsActive ? 'border-amber-300 bg-amber-100 text-amber-950' : 'border-slate-200 bg-white text-slate-700'}`}>ฉบับร่าง</button>
+                    <button type="button" aria-pressed={editingIsActive} onClick={() => { setEditingIsActive(true); if (editingId) setIsEditorDirty(true); }} className={`min-h-11 rounded-xl border text-[10px] font-black ${editingIsActive ? 'border-emerald-300 bg-emerald-100 text-emerald-900' : 'border-slate-200 bg-white text-slate-700'}`}>เผยแพร่</button>
+                  </div>
+                  <p className="mt-2 text-[9px] text-slate-600">ฉบับร่างจะไม่ถูกนำไปสุ่มในข้อสอบจนกว่าจะเผยแพร่</p>
+                </fieldset>
             </div>
             <div className="space-y-4">
                 {(pattern === QuestionPattern.MULTIPLE_CHOICE || pattern === QuestionPattern.TRUE_FALSE) && (
@@ -660,11 +742,111 @@ const QuestionManager: React.FC = () => {
             disabled={isSaving || uploadingImage}
             className={`${editingId ? 'flex-1' : 'w-full md:w-auto'} inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-slate-900 px-8 text-xs font-black text-white shadow-xl hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50`}
           >
-            {isSaving || uploadingImage ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>} {editingId ? 'บันทึกและปิด' : 'บันทึกคำถาม'}
+            {isSaving || uploadingImage ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>} {editingId ? 'บันทึกและปิด' : editingIsActive ? 'บันทึกและเผยแพร่' : 'บันทึกฉบับร่าง'}
           </button>
         </div>
       </section>
       </div>
+
+      {revisionQuestion && (
+        <div
+          className="fixed inset-0 z-[210] flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm sm:p-6"
+          onMouseDown={(event) => { if (event.target === event.currentTarget) closeRevisionHistory(); }}
+        >
+          <section
+            ref={historyDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="question-history-title"
+            tabIndex={-1}
+            className="flex max-h-[calc(100vh-1.5rem)] w-full max-w-4xl flex-col overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-2xl focus:outline-none sm:max-h-[calc(100vh-3rem)]"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-5 sm:px-7">
+              <div className="min-w-0">
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-[9px] font-black text-blue-800">
+                    <History size={13}/> ประวัติการแก้ไข
+                  </span>
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[9px] font-black text-slate-700">
+                    {getQuestionCode(revisionQuestion.id)}
+                  </span>
+                </div>
+                <h3 id="question-history-title" className="text-lg font-black text-slate-950 sm:text-xl">ประวัติและการกู้คืนคำถาม</h3>
+                <p className="mt-1 line-clamp-2 text-xs font-bold leading-relaxed text-slate-600">{revisionQuestion.content_th}</p>
+              </div>
+              <button
+                type="button"
+                onClick={closeRevisionHistory}
+                disabled={Boolean(restoringRevisionId)}
+                aria-label="ปิดประวัติคำถาม"
+                className="inline-flex min-h-11 min-w-11 flex-none items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <X size={18}/>
+              </button>
+            </div>
+
+            <div className="overflow-y-auto p-4 sm:p-6">
+              {revisionLoading ? (
+                <AsyncState compact variant="loading" title="กำลังโหลดประวัติคำถาม" />
+              ) : revisionError ? (
+                <AsyncState compact variant="error" title="โหลดประวัติคำถามไม่สำเร็จ" description={revisionError} onRetry={() => loadQuestionRevisions(revisionQuestion.id)} />
+              ) : questionRevisions.length === 0 ? (
+                <AsyncState compact variant="empty" title="ยังไม่มีประวัติการแก้ไข" description="เมื่อบันทึกหรือเปลี่ยนสถานะคำถาม ระบบจะแสดงแต่ละรุ่นไว้ที่นี่" />
+              ) : (
+                <ol className="space-y-3">
+                  {questionRevisions.map((revision) => {
+                    const snapshot = revision.snapshot || ({} as Question);
+                    const isPublished = snapshot.is_active === true;
+                    return (
+                      <li key={revision.id} className={`rounded-2xl border p-4 ${revision.is_current ? 'border-blue-300 bg-blue-50/70 shadow-sm' : 'border-slate-200 bg-white'}`}>
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-sm font-black text-slate-950">รุ่นที่ {revision.revision_no}</span>
+                              <span className="rounded-full bg-slate-100 px-2 py-1 text-[9px] font-black text-slate-700">
+                                {revisionActionLabels[revision.change_type] || revision.change_type}
+                              </span>
+                              <span className={`rounded-full border px-2 py-1 text-[9px] font-black ${isPublished ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
+                                {isPublished ? 'เผยแพร่' : 'ฉบับร่าง'}
+                              </span>
+                              {revision.is_current && <span className="rounded-full bg-blue-700 px-2 py-1 text-[9px] font-black text-white">รุ่นปัจจุบัน</span>}
+                            </div>
+                            <p className="mt-2 text-[10px] font-bold text-slate-600">
+                              {revision.changed_by_name || 'ผู้ดูแลระบบ'} • {new Date(revision.changed_at).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' })}
+                            </p>
+                            {revision.note && <p className="mt-1 text-[10px] font-bold text-slate-700">หมายเหตุ: {revision.note}</p>}
+                          </div>
+                          {!revision.is_current && (
+                            <button
+                              type="button"
+                              onClick={() => handleRestoreRevision(revision)}
+                              disabled={Boolean(restoringRevisionId)}
+                              className="inline-flex min-h-11 flex-none items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 text-[10px] font-black text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {restoringRevisionId === revision.id ? <Loader2 size={15} className="animate-spin"/> : <RotateCcw size={15}/>} กู้คืนรุ่นนี้
+                            </button>
+                          )}
+                        </div>
+                        <details className="mt-3 rounded-xl border border-slate-200 bg-white px-3 py-2">
+                          <summary className="cursor-pointer text-[10px] font-black text-blue-800">ดูข้อมูลในรุ่นนี้</summary>
+                          <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
+                            <p className="text-xs font-black leading-relaxed text-slate-900">{snapshot.content_th || 'ไม่มีคำถามภาษาไทย'}</p>
+                            <p className="text-[10px] font-bold italic leading-relaxed text-slate-600">{snapshot.content_en || 'ไม่มีคำถามภาษาอังกฤษ'}</p>
+                            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[10px] font-black text-emerald-900">
+                              เฉลย: {getAnswerSummary(snapshot)}
+                            </div>
+                          </div>
+                        </details>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
 
       {/* 🔵 Master Repository List */}
       <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-slate-100 shadow-sm min-h-[500px]">
@@ -719,7 +901,7 @@ const QuestionManager: React.FC = () => {
             <div>
               <label htmlFor="question-status-filter" className="mb-1 block text-[9px] font-black text-slate-700">สถานะใช้งาน</label>
               <select id="question-status-filter" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as StatusFilter)} className="min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-800">
-                <option value="ALL">ทุกสถานะ</option><option value="ACTIVE">เปิดใช้งาน</option><option value="INACTIVE">ปิดใช้งาน</option>
+                <option value="ALL">ทุกสถานะ</option><option value="ACTIVE">เผยแพร่</option><option value="INACTIVE">ฉบับร่าง</option>
               </select>
             </div>
             <div>
@@ -784,8 +966,25 @@ const QuestionManager: React.FC = () => {
                                     </span>
                                   )}
                                 </div>
-                                <div className="flex gap-1">
-                                    <button onClick={() => handleToggleActive(q)} aria-label={`${q.is_active ? 'ปิด' : 'เปิด'}การใช้งานข้อสอบ`} className={`min-h-11 min-w-11 rounded-lg px-2 text-[8px] font-black ${q.is_active ? 'bg-emerald-50 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>{q.is_active ? 'ON' : 'OFF'}</button>
+                                <div className="flex flex-wrap gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleActive(q)}
+                                      disabled={publishingId === q.id}
+                                      aria-label={q.is_active === true ? `เปลี่ยน ${questionCode} เป็นฉบับร่าง` : `เผยแพร่ ${questionCode}`}
+                                      className={`inline-flex min-h-11 min-w-[72px] items-center justify-center gap-1 rounded-lg px-2 text-[8px] font-black disabled:cursor-not-allowed disabled:opacity-50 ${q.is_active === true ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-900'}`}
+                                    >
+                                      {publishingId === q.id && <Loader2 size={13} className="animate-spin"/>} {q.is_active === true ? 'เผยแพร่' : 'ฉบับร่าง'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenRevisionHistory(q)}
+                                      aria-label={`ดูประวัติคำถาม ${questionCode}`}
+                                      title="ดูประวัติและกู้คืนข้อมูล"
+                                      className="min-h-11 min-w-11 p-3 text-slate-600 transition-colors hover:text-violet-700 active:scale-90"
+                                    >
+                                      <History size={16}/>
+                                    </button>
                                     <button
                                       onClick={() => handleDuplicate(q)}
                                       disabled={duplicatingId === q.id}

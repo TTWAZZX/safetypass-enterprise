@@ -64,6 +64,19 @@ export interface Question {
   created_at?: string;
 }
 
+export interface QuestionRevision {
+  id: string;
+  question_id: string;
+  revision_no: number;
+  change_type: 'BASELINE' | 'CREATE' | 'SAVE' | 'PUBLISH' | 'UNPUBLISH' | 'RESTORE';
+  note?: string | null;
+  changed_by?: string | null;
+  changed_by_name: string;
+  changed_at: string;
+  snapshot: Question;
+  is_current: boolean;
+}
+
 export interface Vendor {
   id: string;
   name: string;

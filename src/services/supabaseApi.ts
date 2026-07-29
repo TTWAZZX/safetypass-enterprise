@@ -2,7 +2,7 @@ import { supabase } from './supabaseClient'
 import {
   User, Vendor, ExamType, Question, WorkPermitSession, SupplierOutsourceStatus,
   SupplierOutsourceReportRow, SupplierOutsourceType, SupplierOutsourceWorkType,
-  TrainingProgram,
+  TrainingProgram, QuestionRevision,
 } from '../types'
 
 const createPinPassword = (nationalId: string, pin: string) => `SafetyPass-${nationalId}-${pin}`;
@@ -342,6 +342,23 @@ export const api = {
       correct_choice_index_param: updates.correct_choice_index ?? 0,
       image_url_param: updates.image_url || null,
       is_active_param: updates.is_active ?? true,
+    })
+    if (error) throw error
+    return data as string
+  },
+
+  getQuestionRevisions: async (questionId: string) => {
+    const { data, error } = await supabase.rpc('admin_get_question_revisions', {
+      question_id_param: questionId,
+    })
+    if (error) throw error
+    return (data || []) as QuestionRevision[]
+  },
+
+  restoreQuestionRevision: async (questionId: string, revisionId: string) => {
+    const { data, error } = await supabase.rpc('admin_restore_question_revision', {
+      question_id_param: questionId,
+      revision_id_param: revisionId,
     })
     if (error) throw error
     return data as string
