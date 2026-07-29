@@ -235,7 +235,7 @@ try {
   await installMocks(userPage);
   userPage.on('dialog', (dialog) => dialog.accept());
   await login(userPage, userNationalId);
-  await userPage.getByText('ผู้ใช้ทดสอบระบบ', { exact: true }).waitFor();
+  await userPage.getByRole('heading', { name: 'ผู้ใช้ทดสอบระบบ', exact: true }).waitFor();
   await userPage.getByText('Supplier & Outsource', { exact: true }).first().waitFor();
   await assertA11y(userPage, 'mobile user dashboard');
 
