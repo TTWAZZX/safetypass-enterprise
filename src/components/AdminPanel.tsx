@@ -103,7 +103,7 @@ const AdminPanel: React.FC = () => {
                          activePage === 'VENDORS' ? 'User & Vendor Compliance' :
                          activePage === 'SUPPLIER_OUTSOURCE' ? 'Supplier & Outsource Program' : 'System Configuration'}
                     </h1>
-                    <p className="text-[10px] md:text-xs text-slate-400 font-bold tracking-widest uppercase mt-1">Management Access • Secure Node</p>
+                    <p className="text-[10px] md:text-xs text-slate-600 font-bold tracking-widest uppercase mt-1">Management Access • Secure Node</p>
                 </div>
             </div>
         )}
@@ -132,7 +132,7 @@ const SidebarButton = ({ icon, label, active, onClick, badge }: any) => (
 );
 
 const MobileTab = ({ icon, label, active, onClick, badge }: any) => (
-  <button onClick={onClick} className={`flex min-h-11 flex-col items-center justify-center gap-1 relative flex-1 py-2 transition-all ${active ? 'text-blue-600' : 'text-slate-400'}`}>
+  <button onClick={onClick} className={`flex min-h-11 flex-col items-center justify-center gap-1 relative flex-1 py-2 transition-all ${active ? 'text-blue-700' : 'text-slate-600'}`}>
     <div className={`transition-transform duration-300 ${active ? 'scale-110 -translate-y-1' : ''}`}>{icon}</div>
     <span className="text-[8px] font-black uppercase tracking-tighter">{label}</span>
     {active && <div className="absolute bottom-0 w-1 h-1 bg-blue-600 rounded-full" />}

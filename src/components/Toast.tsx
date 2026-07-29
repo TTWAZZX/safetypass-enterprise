@@ -28,10 +28,10 @@ const Toast: React.FC<ToastProps> = ({
 
   // ✅ ปรับโทนสีให้พรีเมียมขึ้นด้วย Gradient และ Shadow
   const styles = {
-    success: 'bg-emerald-600/95 border-emerald-500 shadow-emerald-200/50',
-    error: 'bg-rose-600/95 border-rose-500 shadow-rose-200/50',
-    warning: 'bg-amber-500/95 border-amber-400 shadow-amber-200/50',
-    info: 'bg-blue-600/95 border-blue-500 shadow-blue-200/50'
+    success: 'bg-emerald-700/95 border-emerald-600 shadow-emerald-200/50',
+    error: 'bg-rose-700/95 border-rose-600 shadow-rose-200/50',
+    warning: 'bg-amber-800/95 border-amber-700 shadow-amber-200/50',
+    info: 'bg-blue-700/95 border-blue-600 shadow-blue-200/50'
   };
 
   // ✅ แมพไอคอนให้ตรงจุดประสงค์
@@ -63,6 +63,7 @@ const Toast: React.FC<ToastProps> = ({
 
       <button 
         onClick={() => onClose(id)}
+        aria-label="ปิดข้อความแจ้งเตือน"
         className="flex-shrink-0 p-3 hover:bg-white/20 rounded-xl transition-all active:scale-75 group"
       >
         <X size={16} className="opacity-60 group-hover:opacity-100 transition-opacity" />

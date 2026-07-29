@@ -199,7 +199,7 @@ async function installMocks(page) {
       { status: 'PASSED', exam_type: 'SUPPLIER_OUTSOURCE' },
       { status: 'FAILED', exam_type: 'SUPPLIER_OUTSOURCE' },
     ]);
-    if (table === 'questions') return json(route, []);
+    if (table === 'questions') return json(route, request.method() === 'GET' ? examQuestions('INDUCTION') : []);
     if (table === 'audit_logs') return json(route, []);
     return json(route, []);
   });
@@ -215,10 +215,11 @@ async function login(page, nationalId) {
   await page.getByRole('button', { name: /^Login/i }).click();
 }
 
-async function assertA11y(page, label) {
-  const results = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-    .analyze();
+async function assertA11y(page, label, scope) {
+  let builder = new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']);
+  if (scope) builder = builder.include(scope);
+  const results = await builder.analyze();
   if (results.violations.length > 0) {
     const summary = results.violations.map((violation) => `${violation.id}(${violation.nodes.length})`).join(', ');
     const details = results.violations.flatMap((violation) => violation.nodes.slice(0, 20).map((node) =>
@@ -233,7 +234,7 @@ let browser;
 try {
   browser = await chromium.launch({ headless: true });
 
-  const userContext = await browser.newContext({ viewport: { width: 390, height: 844 }, acceptDownloads: true });
+  const userContext = await browser.newContext({ viewport: { width: 390, height: 844 }, acceptDownloads: true, reducedMotion: 'reduce' });
   const userPage = await userContext.newPage();
   await installMocks(userPage);
   userPage.on('dialog', (dialog) => dialog.accept());
@@ -246,17 +247,17 @@ try {
   await userPage.getByText('คู่มือความปลอดภัย', { exact: true }).waitFor();
   await userPage.locator('input[type="checkbox"]').check();
   await userPage.getByRole('button', { name: /เริ่มทำข้อสอบ/ }).click();
-  await userPage.getByText('คำถามทดสอบ 1', { exact: true }).waitFor();
+  await userPage.getByText(/^คำถามทดสอบ \d+$/, { exact: true }).first().waitFor();
   await userPage.getByText('คำตอบ ก', { exact: true }).first().click();
   await userPage.reload({ waitUntil: 'domcontentloaded' });
   await userPage.getByRole('button', { name: /สอบใหม่ \/ Retake/i }).click();
   await userPage.getByText('พบข้อสอบที่ยังทำไม่เสร็จ', { exact: true }).waitFor();
   await userPage.getByRole('button', { name: /กลับไปทำต่อ/ }).click();
-  await userPage.getByText('คำถามทดสอบ 1', { exact: true }).waitFor();
+  await userPage.getByText(/^คำถามทดสอบ \d+$/, { exact: true }).first().waitFor();
   await assertA11y(userPage, 'mobile resumed exam');
   await userContext.close();
 
-  const adminContext = await browser.newContext({ viewport: { width: 1365, height: 900 }, acceptDownloads: true });
+  const adminContext = await browser.newContext({ viewport: { width: 1365, height: 900 }, acceptDownloads: true, reducedMotion: 'reduce' });
   const adminPage = await adminContext.newPage();
   await installMocks(adminPage);
   await login(adminPage, adminNationalId);
@@ -271,6 +272,7 @@ try {
 
   await adminPage.getByRole('button', { name: /Vendors & Users/i }).click();
   await adminPage.getByText('User & Vendor Compliance', { exact: false }).waitFor();
+  await adminPage.getByRole('button', { name: /^Personnel$/i }).click();
   const workbook = new ExcelJSModule.Workbook();
   const sheet = workbook.addWorksheet('Users');
   sheet.addRow(['Name', 'National ID', 'Vendor', 'Role', 'Age', 'Nationality']);
@@ -286,12 +288,18 @@ try {
 
   await adminPage.getByRole('button', { name: /^Questions$/i }).click();
   await adminPage.getByText('Assessment Manager', { exact: false }).waitFor();
+  await adminPage.getByText('Master Repository', { exact: true }).waitFor();
   await assertA11y(adminPage, 'desktop question manager');
-  await adminPage.getByRole('button', { name: /Supplier & Outsource/i }).click();
-  await adminPage.getByText('Supplier & Outsource Program', { exact: false }).waitFor();
+  await adminPage.getByRole('button', { name: 'แก้ไขข้อสอบ' }).first().click();
+  await adminPage.getByRole('dialog', { name: 'Edit Question' }).waitFor();
+  await assertA11y(adminPage, 'question edit modal', '#question-edit-dialog');
+  await adminPage.keyboard.press('Escape');
+  await adminPage.getByRole('dialog', { name: 'Edit Question' }).waitFor({ state: 'detached' });
+  await adminPage.getByRole('button', { name: 'Supplier & Outsource', exact: true }).click();
+  await adminPage.getByText('Program Control & Reporting', { exact: true }).waitFor();
   await assertA11y(adminPage, 'desktop supplier manager');
   await adminPage.getByRole('button', { name: /^Settings$/i }).click();
-  await adminPage.getByText('System Configuration', { exact: false }).waitFor();
+  await adminPage.getByText('Threshold Settings', { exact: false }).waitFor();
   await assertA11y(adminPage, 'desktop settings');
 
   await adminPage.setViewportSize({ width: 390, height: 844 });

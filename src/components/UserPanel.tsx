@@ -592,9 +592,9 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
                         {/* 1. ชื่อและตำแหน่ง */}
                         <div className="text-center md:text-left mb-4">
                             <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight uppercase leading-none">{user.name}</h2>
-                            <p className="text-[10px] md:text-xs font-bold text-blue-500 uppercase tracking-widest mt-1.5 flex items-center justify-center md:justify-start gap-1.5">
-                               <ShieldCheck size={14} className={isBanned ? 'text-red-500' : 'text-blue-500'} />
-                               <span className={isBanned ? 'text-red-500' : 'text-blue-500'}>
+                            <p className="text-[10px] md:text-xs font-bold text-blue-700 uppercase tracking-widest mt-1.5 flex items-center justify-center md:justify-start gap-1.5">
+                               <ShieldCheck size={14} className={isBanned ? 'text-red-700' : 'text-blue-700'} />
+                               <span className={isBanned ? 'text-red-700' : 'text-blue-700'}>
                                   {user.role === 'ADMIN' ? 'System Administrator' : 'Authorized Personnel'}
                                </span>
                             </p>
@@ -610,7 +610,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
                             
                             {/* แถวที่ 1: สังกัด และ เลขบัตร */}
                             <div className="col-span-2 md:col-span-1 z-10">
-                                <span className="text-[8px] md:text-[9px] text-slate-400 font-black uppercase tracking-widest flex items-center gap-1">
+                                <span className="text-[8px] md:text-[9px] text-slate-600 font-black uppercase tracking-widest flex items-center gap-1">
                                     <Building2 size={10}/> Company / Vendor
                                 </span>
                                 <span className="text-xs md:text-sm font-bold text-slate-800 truncate block mt-0.5">
@@ -618,7 +618,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
                                 </span>
                             </div>
                             <div className="col-span-2 md:col-span-1 z-10">
-                                <span className="text-[8px] md:text-[9px] text-slate-400 font-black uppercase tracking-widest flex items-center gap-1">
+                                <span className="text-[8px] md:text-[9px] text-slate-600 font-black uppercase tracking-widest flex items-center gap-1">
                                     <Ticket size={10}/> National ID / Passport
                                 </span>
                                 <span className="text-xs md:text-sm font-bold text-slate-800 font-mono mt-0.5 flex items-center gap-1.5">
@@ -632,7 +632,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
 
                             {/* แถวที่ 2: วันเกิด/อายุ และ สัญชาติ */}
                             <div className="col-span-1 z-10">
-                                <span className="text-[8px] md:text-[9px] text-slate-400 font-black uppercase tracking-widest flex items-center gap-1">
+                                <span className="text-[8px] md:text-[9px] text-slate-600 font-black uppercase tracking-widest flex items-center gap-1">
                                     <Calendar size={10}/> DOB & Age
                                 </span>
                                 <span className="text-xs md:text-sm font-bold text-slate-800 mt-0.5 flex flex-wrap items-baseline gap-1">
@@ -643,7 +643,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
                                 </span>
                             </div>
                             <div className="col-span-1 z-10">
-                                <span className="text-[8px] md:text-[9px] text-slate-400 font-black uppercase tracking-widest flex items-center gap-1">
+                                <span className="text-[8px] md:text-[9px] text-slate-600 font-black uppercase tracking-widest flex items-center gap-1">
                                     <Globe2 size={10}/> Nationality
                                 </span>
                                 <span className="text-xs md:text-sm font-bold text-slate-800 mt-0.5 block">
@@ -659,7 +659,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
               <div className="flex gap-2 w-full md:w-auto mt-2 md:mt-0 justify-center">
                   {isEditing ? (
                     <div className="flex gap-2 w-full flex-col md:flex-row">
-                        <button onClick={handleUpdateProfile} disabled={isSaving} className="flex-1 w-full bg-emerald-600 text-white py-2.5 px-4 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all">
+                        <button onClick={handleUpdateProfile} disabled={isSaving} className="flex-1 w-full bg-emerald-700 text-white py-2.5 px-4 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all hover:bg-emerald-800">
                           {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save
                         </button>
                         <button onClick={() => setIsEditing(false)} className="w-full md:w-auto px-4 py-2.5 bg-slate-100 text-slate-500 rounded-xl text-[10px] font-black uppercase hover:bg-slate-200">Cancel</button>
@@ -678,7 +678,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
                <div className={`w-1.5 h-6 rounded-full shadow-sm ${isBanned ? 'bg-red-500' : 'bg-blue-600'}`}></div>
                <h3 className="text-xs font-black text-slate-500 uppercase tracking-[0.2em]">Safety Journey</h3>
              </div>
-             <button onClick={() => setShowHistory(true)} className="text-[10px] font-bold text-blue-500 flex items-center gap-1 hover:text-blue-700 uppercase bg-blue-50 px-3 py-1.5 rounded-full">
+             <button onClick={() => setShowHistory(true)} className="text-[10px] font-bold text-blue-700 flex items-center gap-1 hover:text-blue-800 uppercase bg-blue-50 px-3 py-1.5 rounded-full">
                 History <ChevronRight size={12} />
              </button>
           </div>
@@ -725,7 +725,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
                           {supplierPassActive ? (supplierPassNearExpiry ? 'ใกล้หมดอายุ' : 'ผ่าน') : supplierStatus?.last_status === 'FAILED' ? 'ไม่ผ่าน' : supplierStatus ? 'พร้อมสอบ' : 'ยังไม่มีสิทธิ์'}
                         </span>
                       </div>
-                      <p className="mt-1 text-[10px] font-bold text-slate-400">
+                      <p className="mt-1 text-[10px] font-bold text-slate-600">
                         {supplierStatus ? `${supplierStatus.participant_type} • ${supplierStatus.work_type}` : 'สำหรับ Supplier ส่งสินค้า/เข้าพื้นที่ชั่วคราว และ Outsource งานทั่วไป'}
                       </p>
                       {supplierStatus && (
@@ -739,7 +739,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {supplierStatus && (
-                      <button disabled={isBanned} onClick={() => supplierPassActive && !supplierPassNearExpiry ? (setCardType('SUPPLIER_OUTSOURCE'), setShowCard(true)) : setActiveStage('SUPPLIER_OUTSOURCE')} className="flex-1 rounded-xl bg-emerald-600 px-4 py-3 text-[9px] font-black uppercase tracking-widest text-white disabled:opacity-40">
+                      <button disabled={isBanned} onClick={() => supplierPassActive && !supplierPassNearExpiry ? (setCardType('SUPPLIER_OUTSOURCE'), setShowCard(true)) : setActiveStage('SUPPLIER_OUTSOURCE')} className="flex-1 rounded-xl bg-emerald-700 px-4 py-3 text-[9px] font-black uppercase tracking-widest text-white hover:bg-emerald-800 disabled:opacity-40">
                         {supplierPassActive && !supplierPassNearExpiry ? 'ดูบัตร' : 'เริ่มสอบ'}
                       </button>
                     )}
@@ -974,7 +974,7 @@ const ResourceCard = ({ icon, title, desc, onClick }: any) => (
     <div className="p-4 bg-slate-50 text-blue-600 rounded-2xl group-active:bg-blue-600 group-active:text-white transition-all shadow-inner">{icon}</div>
     <div className="min-w-0">
       <h4 className="font-black text-slate-800 text-xs truncate uppercase tracking-tight mb-1">{title}</h4>
-      <div className="text-[9px] text-slate-400 font-bold uppercase truncate tracking-wide">{desc}</div>
+      <div className="text-[9px] text-slate-600 font-bold uppercase truncate tracking-wide">{desc}</div>
     </div>
   </button>
 );
@@ -1001,10 +1001,10 @@ const StageCard = ({ title, isActive, isNearExpiry, expiryDate, icon, onClick, o
                 
                 {/* 🏷️ Badge มุมขวาบน */}
                 <div className={`absolute top-4 right-4 flex items-center gap-1.5 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ${
-                  statusType === 'PASSED' ? 'bg-emerald-50 text-emerald-600' :
-                  statusType === 'WARNING' ? 'bg-amber-50 text-amber-600 animate-soft-pulse' :
-                  statusType === 'BANNED' ? 'bg-red-100 text-red-600' :
-                  'bg-slate-50 text-slate-400'
+                  statusType === 'PASSED' ? 'bg-emerald-50 text-emerald-800' :
+                  statusType === 'WARNING' ? 'bg-amber-50 text-amber-800 animate-soft-pulse' :
+                  statusType === 'BANNED' ? 'bg-red-100 text-red-700' :
+                  'bg-slate-50 text-slate-600'
                 }`}>
                   {statusType === 'PASSED' && <CheckCircle2 size={10} />}
                   {statusType === 'WARNING' && <AlertTriangle size={10} />}
@@ -1026,10 +1026,10 @@ const StageCard = ({ title, isActive, isNearExpiry, expiryDate, icon, onClick, o
                         <div className="text-left">
                             <h4 className="font-black text-slate-800 text-sm leading-tight mb-1 uppercase tracking-tight">{title}</h4>
                             <div className={`text-[9px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${
-                                statusType === 'BANNED' ? 'text-red-500' :
-                                statusType === 'PASSED' ? 'text-emerald-500' : 
-                                disabled ? 'text-slate-400' : 
-                                `text-${color}-500`
+                                statusType === 'BANNED' ? 'text-red-700' :
+                                statusType === 'PASSED' ? 'text-emerald-700' :
+                                disabled ? 'text-slate-600' :
+                                `text-${color}-700`
                             }`}>
                                 {statusType === 'PASSED' ? <CheckCircle2 size={10} /> : 
                                  statusType === 'BANNED' ? <AlertTriangle size={10} /> : 
@@ -1048,18 +1048,18 @@ const StageCard = ({ title, isActive, isNearExpiry, expiryDate, icon, onClick, o
                     <div className="text-left">
                         {statusType === 'BANNED' ? (
                              <div className="flex flex-col">
-                                 <span className="text-[8px] font-black text-red-400 uppercase tracking-widest">Status</span>
+                                 <span className="text-[8px] font-black text-red-700 uppercase tracking-widest">Status</span>
                                  <span className="text-[10px] font-bold text-red-600">Suspended</span>
                              </div>
                         ) : expiryDate ? (
                             <div className="flex flex-col">
-                                <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest">Valid Until</span>
-                                <span className={`text-[10px] font-bold ${isNearExpiry ? 'text-amber-500' : 'text-slate-600'}`}>{new Date(expiryDate).toLocaleDateString(language === 'th' ? 'th-TH' : 'en-US')}</span>
+                                <span className="text-[8px] font-black text-slate-600 uppercase tracking-widest">Valid Until</span>
+                                <span className={`text-[10px] font-bold ${isNearExpiry ? 'text-amber-700' : 'text-slate-600'}`}>{new Date(expiryDate).toLocaleDateString(language === 'th' ? 'th-TH' : 'en-US')}</span>
                             </div>
                         ) : (
                             <div className="flex flex-col">
-                                <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest">Action Required</span>
-                                <span className="text-[10px] font-bold text-slate-400">Step Not Started</span>
+                                <span className="text-[8px] font-black text-slate-600 uppercase tracking-widest">Action Required</span>
+                                <span className="text-[10px] font-bold text-slate-600">Step Not Started</span>
                             </div>
                         )}
                     </div>

@@ -40,7 +40,7 @@ const AsyncState: React.FC<AsyncStateProps> = ({
         {variant === 'error' && <AlertTriangle size={26} aria-hidden="true" />}
       </div>
       <h3 className="text-sm font-black text-slate-800">{title || content.title}</h3>
-      <p className="mt-2 max-w-md text-[11px] font-bold leading-relaxed text-slate-400">
+      <p className="mt-2 max-w-md text-[11px] font-bold leading-relaxed text-slate-600">
         {description || content.description}
       </p>
       {variant === 'error' && onRetry && (

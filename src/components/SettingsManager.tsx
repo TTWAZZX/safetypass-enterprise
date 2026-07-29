@@ -130,7 +130,7 @@ const SettingsManager: React.FC = () => {
         </div>
         <div>
            <h2 className="text-xl md:text-2xl font-black text-slate-900 uppercase tracking-tight">System Configuration</h2>
-           <p className="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">ตั้งค่าระบบและเกณฑ์การทดสอบ (Global Parameters)</p>
+           <p className="text-[10px] md:text-xs font-bold text-slate-600 uppercase tracking-widest mt-1">ตั้งค่าระบบและเกณฑ์การทดสอบ (Global Parameters)</p>
         </div>
       </div>
 
@@ -144,8 +144,8 @@ const SettingsManager: React.FC = () => {
                     <ShieldAlert size={24} />
                 </div>
                 <div>
-                    <h3 className="text-base md:text-lg font-black text-slate-800 uppercase">Threshold Settings <span className="text-xs md:text-sm font-bold text-slate-400 normal-case">| เกณฑ์การทดสอบ</span></h3>
-                    <p className="text-[10px] md:text-xs text-slate-400 font-bold mt-1">กำหนดเกณฑ์คะแนนขั้นต่ำสำหรับการผ่านการทดสอบ (Passing Score)</p>
+                    <h3 className="text-base md:text-lg font-black text-slate-800 uppercase">Threshold Settings <span className="text-xs md:text-sm font-bold text-slate-600 normal-case">| เกณฑ์การทดสอบ</span></h3>
+                    <p className="text-[10px] md:text-xs text-slate-600 font-bold mt-1">กำหนดเกณฑ์คะแนนขั้นต่ำสำหรับการผ่านการทดสอบ (Passing Score)</p>
                 </div>
             </div>
 
@@ -155,9 +155,9 @@ const SettingsManager: React.FC = () => {
                     <div className="flex justify-between items-start md:items-center mb-4 gap-2">
                         <label className="text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-widest flex flex-col">
                             Induction Pass Rate
-                            <span className="text-[9px] text-slate-400 font-bold mt-0.5">เกณฑ์ผ่านปฐมนิเทศ</span>
+                            <span className="text-[9px] text-slate-600 font-bold mt-0.5">เกณฑ์ผ่านปฐมนิเทศ</span>
                         </label>
-                        <span className={`shrink-0 px-3 py-1 rounded-full text-[9px] md:text-[10px] font-black border ${inductionScore >= 80 ? 'bg-emerald-100 text-emerald-600 border-emerald-200' : 'bg-amber-100 text-amber-600 border-amber-200'}`}>
+                        <span className={`shrink-0 px-3 py-1 rounded-full text-[9px] md:text-[10px] font-black border ${inductionScore >= 80 ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-amber-100 text-amber-800 border-amber-200'}`}>
                             {inductionScore >= 80 ? 'STRICT' : 'STANDARD'}
                         </span>
                     </div>
@@ -166,6 +166,7 @@ const SettingsManager: React.FC = () => {
                             type="range" 
                             min="0" max="100" step="5"
                             value={inductionScore}
+                            aria-label="เกณฑ์ผ่าน Induction"
                             onChange={(e) => setInductionScore(Number(e.target.value))}
                             className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
                         />
@@ -180,9 +181,9 @@ const SettingsManager: React.FC = () => {
                     <div className="flex justify-between items-start md:items-center mb-4 gap-2">
                         <label className="text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-widest flex flex-col">
                             Work Permit Pass Rate
-                            <span className="text-[9px] text-slate-400 font-bold mt-0.5">เกณฑ์ผ่านใบอนุญาตทำงาน</span>
+                            <span className="text-[9px] text-slate-600 font-bold mt-0.5">เกณฑ์ผ่านใบอนุญาตทำงาน</span>
                         </label>
-                        <span className={`shrink-0 px-3 py-1 rounded-full text-[9px] md:text-[10px] font-black border ${permitScore >= 80 ? 'bg-emerald-100 text-emerald-600 border-emerald-200' : 'bg-amber-100 text-amber-600 border-amber-200'}`}>
+                        <span className={`shrink-0 px-3 py-1 rounded-full text-[9px] md:text-[10px] font-black border ${permitScore >= 80 ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-amber-100 text-amber-800 border-amber-200'}`}>
                             {permitScore >= 80 ? 'STRICT' : 'STANDARD'}
                         </span>
                     </div>
@@ -191,6 +192,7 @@ const SettingsManager: React.FC = () => {
                             type="range" 
                             min="0" max="100" step="5"
                             value={permitScore}
+                            aria-label="เกณฑ์ผ่าน Work Permit"
                             onChange={(e) => setPermitScore(Number(e.target.value))}
                             className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
                         />
@@ -201,14 +203,14 @@ const SettingsManager: React.FC = () => {
                 </div>
                 <div className="bg-slate-50 p-5 md:p-6 rounded-3xl border border-slate-200 hover:border-emerald-300 transition-all group">
                     <div className="flex justify-between items-start md:items-center mb-4 gap-2">
-                        <label className="text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-widest flex flex-col">Supplier & Outsource Pass Rate<span className="text-[9px] text-slate-400 font-bold mt-0.5">เกณฑ์ผ่าน Supplier & Outsource</span></label>
-                        <span className="shrink-0 px-3 py-1 rounded-full text-[9px] font-black border bg-emerald-100 text-emerald-600 border-emerald-200">PROGRAM</span>
+                        <label className="text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-widest flex flex-col">Supplier & Outsource Pass Rate<span className="text-[9px] text-slate-600 font-bold mt-0.5">เกณฑ์ผ่าน Supplier & Outsource</span></label>
+                        <span className="shrink-0 px-3 py-1 rounded-full text-[9px] font-black border bg-emerald-100 text-emerald-800 border-emerald-200">PROGRAM</span>
                     </div>
                     <div className="flex items-center gap-3 md:gap-4">
-                        <input type="range" min="0" max="100" step="5" value={supplierScore} onChange={(e) => setSupplierScore(Number(e.target.value))} className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600" />
+                        <input type="range" aria-label="เกณฑ์ผ่าน Supplier & Outsource" min="0" max="100" step="5" value={supplierScore} onChange={(e) => setSupplierScore(Number(e.target.value))} className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600" />
                         <div className="w-14 h-14 md:w-16 md:h-16 shrink-0 bg-white rounded-2xl border-2 border-emerald-100 flex items-center justify-center text-lg md:text-xl font-black text-slate-800 shadow-sm">{supplierScore}%</div>
                     </div>
-                    <label className="mt-4 block text-[9px] font-black uppercase tracking-widest text-slate-400">อายุบัตร (วัน)
+                    <label className="mt-4 block text-[9px] font-black uppercase tracking-widest text-slate-600">อายุบัตร (วัน)
                       <input type="number" min="1" max="3650" value={supplierValidityDays} onChange={(e) => setSupplierValidityDays(Number(e.target.value))} className="mt-1 w-full rounded-xl border border-slate-200 bg-white p-3 text-xs font-bold text-slate-700" />
                     </label>
                 </div>
@@ -221,8 +223,8 @@ const SettingsManager: React.FC = () => {
                         <LinkIcon size={24} />
                     </div>
                     <div>
-                        <h3 className="text-base md:text-lg font-black text-slate-800 uppercase">Support Links <span className="text-xs md:text-sm font-bold text-slate-400 normal-case">| ลิงก์คู่มือและติดต่อ</span></h3>
-                        <p className="text-[10px] md:text-xs text-slate-400 font-bold mt-1">ตั้งค่าลิงก์ที่แสดงในหน้าเข้าสู่ระบบ (Displayed on Login Page)</p>
+                        <h3 className="text-base md:text-lg font-black text-slate-800 uppercase">Support Links <span className="text-xs md:text-sm font-bold text-slate-600 normal-case">| ลิงก์คู่มือและติดต่อ</span></h3>
+                        <p className="text-[10px] md:text-xs text-slate-600 font-bold mt-1">ตั้งค่าลิงก์ที่แสดงในหน้าเข้าสู่ระบบ (Displayed on Login Page)</p>
                     </div>
                 </div>
 
@@ -238,7 +240,7 @@ const SettingsManager: React.FC = () => {
                             onChange={(e) => setManualUrl(e.target.value)}
                             className="w-full bg-slate-50 border border-slate-200 p-3 md:p-4 rounded-2xl font-bold text-xs md:text-sm shadow-inner outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all text-slate-700"
                         />
-                        <p className="text-[9px] text-slate-400 font-bold ml-1">เว้นว่างไว้หากไม่ต้องการให้แสดงปุ่มคู่มือ</p>
+                        <p className="text-[9px] text-slate-600 font-bold ml-1">เว้นว่างไว้หากไม่ต้องการให้แสดงปุ่มคู่มือ</p>
                     </div>
 
                     <div className="space-y-2">
@@ -252,7 +254,7 @@ const SettingsManager: React.FC = () => {
                             onChange={(e) => setSupportUrl(e.target.value)}
                             className="w-full bg-slate-50 border border-slate-200 p-3 md:p-4 rounded-2xl font-bold text-xs md:text-sm shadow-inner outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all text-slate-700"
                         />
-                        <p className="text-[9px] text-slate-400 font-bold ml-1">เว้นว่างไว้หากไม่ต้องการให้แสดงปุ่มติดต่อ</p>
+                        <p className="text-[9px] text-slate-600 font-bold ml-1">เว้นว่างไว้หากไม่ต้องการให้แสดงปุ่มติดต่อ</p>
                     </div>
                 </div>
             </div>
@@ -278,8 +280,8 @@ const SettingsManager: React.FC = () => {
             <FileText size={28} strokeWidth={2.5} />
           </div>
           <div>
-            <h3 className="text-lg md:text-2xl font-black text-slate-900 leading-none uppercase tracking-tight mb-1 md:mb-0">Resource Center <span className="text-xs md:text-sm font-bold text-slate-400 normal-case mt-1 sm:mt-0 block sm:inline">| จัดการไฟล์ระบบ</span></h3>
-            <p className="text-slate-400 text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] mt-1.5">Manage Study Materials (PDF Assets)</p>
+            <h3 className="text-lg md:text-2xl font-black text-slate-900 leading-none uppercase tracking-tight mb-1 md:mb-0">Resource Center <span className="text-xs md:text-sm font-bold text-slate-600 normal-case mt-1 sm:mt-0 block sm:inline">| จัดการไฟล์ระบบ</span></h3>
+            <p className="text-slate-600 text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] mt-1.5">Manage Study Materials (PDF Assets)</p>
           </div>
         </div>
         
@@ -305,12 +307,12 @@ const SettingsManager: React.FC = () => {
         </div>
 
         <div className="mt-6 md:mt-10 p-4 md:p-5 bg-amber-50/50 rounded-2xl md:rounded-3xl border border-amber-100 flex flex-col sm:flex-row items-start gap-3 md:gap-4">
-            <div className="p-2 bg-white rounded-xl shadow-sm text-amber-500 shrink-0">
+            <div className="p-2 bg-white rounded-xl shadow-sm text-amber-800 shrink-0">
                 <AlertTriangle size={20} />
             </div>
             <div className="space-y-1">
                 <p className="text-[10px] md:text-xs font-black text-amber-800 uppercase tracking-tight">Deployment Notice</p>
-                <p className="text-[10px] md:text-[11px] text-amber-700/80 font-bold leading-relaxed">
+                <p className="text-[10px] md:text-[11px] text-amber-900 font-bold leading-relaxed">
                     Uploading a new document will permanently overwrite the existing file.<br className="hidden sm:block"/>
                     การอัปโหลดไฟล์เอกสารใหม่จะทับไฟล์เดิมที่อยู่บนระบบทันที
                 </p>
@@ -327,7 +329,7 @@ const ManualUploadCard = ({ title, type, isUploading, onUpload }: any) => (
       <FileText size={32} strokeWidth={1.5} className="md:w-9 md:h-9" />
     </div>
     <h4 className="font-black text-slate-800 text-sm md:text-lg uppercase tracking-tight mb-1">{title}</h4>
-    <p className="text-[8px] md:text-[9px] font-black text-slate-400 tracking-[0.2em] uppercase mb-6 md:mb-8">Asset Format: Adobe PDF</p>
+    <p className="text-[8px] md:text-[9px] font-black text-slate-600 tracking-[0.2em] uppercase mb-6 md:mb-8">Asset Format: Adobe PDF</p>
     
     <label className="cursor-pointer relative w-full">
       <input 

@@ -69,12 +69,12 @@ export const ToastProvider: React.FC<Props> = ({ children }) => {
               animate-in slide-in-from-top-4 fade-in duration-300 w-full md:w-auto
               ${
                 toast.type === 'success'
-                  ? 'bg-emerald-600/95 border-emerald-500 text-white'
+                  ? 'bg-emerald-700/95 border-emerald-600 text-white'
                   : toast.type === 'error'
-                  ? 'bg-red-600/95 border-red-500 text-white'
+                  ? 'bg-red-700/95 border-red-600 text-white'
                   : toast.type === 'warning'
-                  ? 'bg-amber-500/95 border-amber-400 text-white'
-                  : 'bg-blue-600/95 border-blue-500 text-white'
+                  ? 'bg-amber-800/95 border-amber-700 text-white'
+                  : 'bg-blue-700/95 border-blue-600 text-white'
               }
             `}
           >
@@ -92,6 +92,7 @@ export const ToastProvider: React.FC<Props> = ({ children }) => {
 
             <button 
               onClick={() => removeToast(toast.id)}
+              aria-label="ปิดข้อความแจ้งเตือน"
               className="p-1 hover:bg-white/20 rounded-lg transition-colors"
             >
               <X size={14} className="opacity-70" />

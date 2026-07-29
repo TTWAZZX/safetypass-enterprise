@@ -247,7 +247,7 @@ const AdminDashboard: React.FC<{
                 <option value={-1}>ทั้งหมด (All)</option>
             </select>
             <span>รายการ</span>
-            <span className="ml-2 hidden sm:inline text-slate-400 font-medium">| จากทั้งหมด {totalItems} รายการ</span>
+            <span className="ml-2 hidden sm:inline text-slate-600 font-medium">| จากทั้งหมด {totalItems} รายการ</span>
          </div>
 
          {/* Prev / Next Buttons */}
@@ -270,7 +270,7 @@ const AdminDashboard: React.FC<{
                 <span className="hidden md:inline">ถัดไป</span> <ChevronRight size={16} />
             </button>
          </div>
-         <span className="sm:hidden text-slate-400 font-bold text-[9px] uppercase mt-1">รวมทั้งหมด {totalItems} รายการ</span>
+         <span className="sm:hidden text-slate-600 font-bold text-[9px] uppercase mt-1">รวมทั้งหมด {totalItems} รายการ</span>
       </div>
     );
   };
@@ -290,9 +290,9 @@ const AdminDashboard: React.FC<{
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 border-b border-slate-200 pb-6 mt-4">
         <div className="space-y-1 w-full md:w-auto">
           <h2 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 tracking-tight uppercase flex items-center gap-2">
-            Dashboard Analytics <span className="hidden sm:inline text-sm text-slate-400 font-medium normal-case ml-2 border-l-2 pl-3">ภาพรวมระบบ</span>
+            Dashboard Analytics <span className="hidden sm:inline text-sm text-slate-600 font-medium normal-case ml-2 border-l-2 pl-3">ภาพรวมระบบ</span>
           </h2>
-          <div className="text-slate-400 font-bold uppercase text-[9px] md:text-[10px] tracking-[0.2em] flex items-center gap-2">
+          <div className="text-slate-600 font-bold uppercase text-[9px] md:text-[10px] tracking-[0.2em] flex items-center gap-2">
             <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" /> 
             Real-time Security Metrics
           </div>
@@ -332,7 +332,7 @@ const AdminDashboard: React.FC<{
                   className="w-full rounded-xl px-4 py-3 text-left transition-colors hover:bg-blue-50 focus:bg-blue-50 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <span className="block text-[10px] font-black uppercase text-slate-800">รายงานผู้รับเหมาเดิม</span>
-                  <span className="mt-1 block text-[9px] font-bold text-slate-400">Contractor report</span>
+                  <span className="mt-1 block text-[9px] font-bold text-slate-600">Contractor report</span>
                 </button>
                 <button
                   type="button"
@@ -345,7 +345,7 @@ const AdminDashboard: React.FC<{
                     {supplierExportLoading && <Loader2 size={13} className="animate-spin" />}
                     รายงาน Supplier & Outsource
                   </span>
-                  <span className="mt-1 block text-[9px] font-bold text-slate-400">Supplier Epass Check Member</span>
+                  <span className="mt-1 block text-[9px] font-bold text-slate-600">Supplier Epass Check Member</span>
                 </button>
               </div>
             )}
@@ -412,10 +412,10 @@ const AdminDashboard: React.FC<{
           </div>
           <div className="flex items-center gap-2">
             <div className="rounded-xl border border-emerald-100 bg-white px-4 py-2 text-right shadow-sm">
-              <p className="text-[8px] font-black text-slate-400">อัตราสอบผ่าน</p>
-              <p className="text-2xl font-black tabular-nums text-emerald-600">{supplierMetrics.passRate}%</p>
+              <p className="text-[8px] font-black text-slate-600">อัตราสอบผ่าน</p>
+              <p className="text-2xl font-black tabular-nums text-emerald-700">{supplierMetrics.passRate}%</p>
             </div>
-            {onNavigateToSupplier && <button type="button" onClick={onNavigateToSupplier} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-[9px] font-black text-white transition-colors hover:bg-emerald-700">ดูรายละเอียด <ArrowRight size={14}/></button>}
+            {onNavigateToSupplier && <button type="button" onClick={onNavigateToSupplier} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-700 px-4 text-[9px] font-black text-white transition-colors hover:bg-emerald-800">ดูรายละเอียด <ArrowRight size={14}/></button>}
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -449,7 +449,7 @@ const AdminDashboard: React.FC<{
                   </span>
                 )}
                 {complianceStats.expiring > 0 && (
-                  <span className="text-[10px] font-black text-amber-600 bg-amber-100 px-2 py-1 rounded-lg flex items-center gap-1">
+                  <span className="text-[10px] font-black text-amber-800 bg-amber-100 px-2 py-1 rounded-lg flex items-center gap-1">
                     <Clock size={11}/> ใกล้หมดอายุ: {complianceStats.expiring} คน
                   </span>
                 )}
@@ -459,7 +459,7 @@ const AdminDashboard: React.FC<{
           {onNavigateToUsers && (
             <button
               onClick={onNavigateToUsers}
-              className="flex min-h-11 items-center gap-2 bg-rose-500 hover:bg-rose-600 text-white px-5 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-rose-200 whitespace-nowrap shrink-0"
+              className="flex min-h-11 items-center gap-2 bg-rose-700 hover:bg-rose-800 text-white px-5 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-rose-200 whitespace-nowrap shrink-0"
             >
               จัดการ <ArrowRight size={14}/>
             </button>
@@ -543,7 +543,7 @@ const AdminDashboard: React.FC<{
                   </div>
                   <div className="min-w-0">
                     <h3 className="truncate text-sm font-black text-slate-900">{item.users?.name || '-'}</h3>
-                    <p className="mt-0.5 truncate text-[9px] font-bold text-slate-400">{item.users?.vendors?.name || 'ไม่มีสังกัด'}</p>
+                    <p className="mt-0.5 truncate text-[9px] font-bold text-slate-600">{item.users?.vendors?.name || 'ไม่มีสังกัด'}</p>
                   </div>
                 </div>
                 <span className={`shrink-0 rounded-xl border px-2.5 py-1.5 text-[8px] font-black ${item.status === 'PASSED' ? 'border-emerald-100 bg-emerald-50 text-emerald-700' : 'border-red-100 bg-red-50 text-red-700'}`}>
@@ -551,10 +551,10 @@ const AdminDashboard: React.FC<{
                 </span>
               </div>
               <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-[10px]">
-                <div><dt className="font-black text-slate-400">หลักสูตร</dt><dd className="mt-1 font-bold text-slate-700">{item.exam_type?.replace('_', ' ') || '-'}</dd></div>
-                <div><dt className="font-black text-slate-400">คะแนน</dt><dd className={`mt-1 text-sm font-black ${item.status === 'PASSED' ? 'text-emerald-600' : 'text-red-600'}`}>{item.score ?? '-'} / {item.total_questions ?? '-'}</dd></div>
-                <div><dt className="font-black text-slate-400">สัญชาติ / อายุ</dt><dd className="mt-1 font-bold text-slate-700">{item.users?.nationality || '-'} • {item.users?.age ? `${item.users.age} ปี` : '-'}</dd></div>
-                <div><dt className="font-black text-slate-400">วันที่ทำรายการ</dt><dd className="mt-1 font-bold text-slate-700">{new Date(item.created_at).toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: 'numeric' })}<span className="block text-[9px] text-slate-400">{new Date(item.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</span></dd></div>
+                <div><dt className="font-black text-slate-600">หลักสูตร</dt><dd className="mt-1 font-bold text-slate-700">{item.exam_type?.replace('_', ' ') || '-'}</dd></div>
+                <div><dt className="font-black text-slate-600">คะแนน</dt><dd className={`mt-1 text-sm font-black ${item.status === 'PASSED' ? 'text-emerald-700' : 'text-red-700'}`}>{item.score ?? '-'} / {item.total_questions ?? '-'}</dd></div>
+                <div><dt className="font-black text-slate-600">สัญชาติ / อายุ</dt><dd className="mt-1 font-bold text-slate-700">{item.users?.nationality || '-'} • {item.users?.age ? `${item.users.age} ปี` : '-'}</dd></div>
+                <div><dt className="font-black text-slate-600">วันที่ทำรายการ</dt><dd className="mt-1 font-bold text-slate-700">{new Date(item.created_at).toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: 'numeric' })}<span className="block text-[9px] text-slate-600">{new Date(item.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</span></dd></div>
               </dl>
             </article>
           )) : <AsyncState compact variant="empty" title="ไม่พบประวัติการสอบ" description="ลองเปลี่ยนคำค้นหา วันที่ สถานะ หรือหลักสูตรที่เลือก" />}
@@ -564,12 +564,12 @@ const AdminDashboard: React.FC<{
           <table className="w-full text-left min-w-[800px]">
             <thead>
               <tr className="bg-slate-50/50 border-b border-slate-100">
-                <th className="px-6 sm:px-8 py-4 sm:py-5 text-[8px] sm:text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] whitespace-nowrap">ข้อมูลพนักงาน<br/><span className="text-[7px] sm:text-[8px] text-slate-400">Personnel Info</span></th>
-                <th className="px-6 sm:px-8 py-4 sm:py-5 text-[8px] sm:text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] whitespace-nowrap">ข้อมูลส่วนตัว<br/><span className="text-[7px] sm:text-[8px] text-slate-400">Profile</span></th>
-                <th className="px-6 sm:px-8 py-4 sm:py-5 text-[8px] sm:text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] whitespace-nowrap">หลักสูตร<br/><span className="text-[7px] sm:text-[8px] text-slate-400">Module</span></th>
-                <th className="px-6 sm:px-8 py-4 sm:py-5 text-[8px] sm:text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] text-center whitespace-nowrap">คะแนน<br/><span className="text-[7px] sm:text-[8px] text-slate-400">Score</span></th>
-                <th className="px-6 sm:px-8 py-4 sm:py-5 text-[8px] sm:text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] whitespace-nowrap">วันที่ทำรายการ<br/><span className="text-[7px] sm:text-[8px] text-slate-400">Timestamp</span></th>
-                <th className="px-6 sm:px-8 py-4 sm:py-5 text-[8px] sm:text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] text-right whitespace-nowrap">ผลประเมิน<br/><span className="text-[7px] sm:text-[8px] text-slate-400">Result</span></th>
+                <th className="px-6 sm:px-8 py-4 sm:py-5 text-[8px] sm:text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] whitespace-nowrap">ข้อมูลพนักงาน<br/><span className="text-[7px] sm:text-[8px] text-slate-600">Personnel Info</span></th>
+                <th className="px-6 sm:px-8 py-4 sm:py-5 text-[8px] sm:text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] whitespace-nowrap">ข้อมูลส่วนตัว<br/><span className="text-[7px] sm:text-[8px] text-slate-600">Profile</span></th>
+                <th className="px-6 sm:px-8 py-4 sm:py-5 text-[8px] sm:text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] whitespace-nowrap">หลักสูตร<br/><span className="text-[7px] sm:text-[8px] text-slate-600">Module</span></th>
+                <th className="px-6 sm:px-8 py-4 sm:py-5 text-[8px] sm:text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] text-center whitespace-nowrap">คะแนน<br/><span className="text-[7px] sm:text-[8px] text-slate-600">Score</span></th>
+                <th className="px-6 sm:px-8 py-4 sm:py-5 text-[8px] sm:text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] whitespace-nowrap">วันที่ทำรายการ<br/><span className="text-[7px] sm:text-[8px] text-slate-600">Timestamp</span></th>
+                <th className="px-6 sm:px-8 py-4 sm:py-5 text-[8px] sm:text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] text-right whitespace-nowrap">ผลประเมิน<br/><span className="text-[7px] sm:text-[8px] text-slate-600">Result</span></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -582,14 +582,14 @@ const AdminDashboard: React.FC<{
                       </div>
                       <div className="flex flex-col min-w-0">
                         <span className="font-black text-slate-800 text-xs sm:text-sm uppercase truncate">{item.users?.name}</span>
-                        <span className="text-[8px] sm:text-[9px] text-slate-400 font-bold uppercase tracking-wider truncate">{item.users?.vendors?.name || 'EXTERNAL (ไม่มีสังกัด)'}</span>
+                        <span className="text-[8px] sm:text-[9px] text-slate-600 font-bold uppercase tracking-wider truncate">{item.users?.vendors?.name || 'EXTERNAL (ไม่มีสังกัด)'}</span>
                       </div>
                     </div>
                   </td>
                   <td className="px-6 sm:px-8 py-4 sm:py-6">
                     <div className="flex flex-col">
                       <span className="text-[10px] sm:text-xs font-black text-slate-700 uppercase whitespace-nowrap">{item.users?.nationality || 'N/A'}</span>
-                      <span className="text-[8px] sm:text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-0.5 whitespace-nowrap">อายุ (Age): {item.users?.age ? `${item.users.age} ปี` : '-'}</span>
+                      <span className="text-[8px] sm:text-[9px] text-slate-600 font-bold uppercase tracking-wider mt-0.5 whitespace-nowrap">อายุ (Age): {item.users?.age ? `${item.users.age} ปี` : '-'}</span>
                     </div>
                   </td>
                   <td className="px-6 sm:px-8 py-4 sm:py-6">
@@ -599,8 +599,8 @@ const AdminDashboard: React.FC<{
                   </td>
                   <td className="px-6 sm:px-8 py-4 sm:py-6 text-center">
                     <div className="inline-flex flex-col items-center">
-                      <span className={`font-black text-xs sm:text-sm leading-none ${item.status === 'PASSED' ? 'text-emerald-600' : 'text-red-600'}`}>{item.score}</span>
-                      <span className="text-[7px] sm:text-[8px] text-slate-300 font-bold uppercase mt-1 whitespace-nowrap">/ {item.total_questions}</span>
+                      <span className={`font-black text-xs sm:text-sm leading-none ${item.status === 'PASSED' ? 'text-emerald-700' : 'text-red-700'}`}>{item.score}</span>
+                      <span className="text-[7px] sm:text-[8px] text-slate-600 font-bold uppercase mt-1 whitespace-nowrap">/ {item.total_questions}</span>
                     </div>
                   </td>
                   <td className="px-6 sm:px-8 py-4 sm:py-6">
@@ -608,13 +608,13 @@ const AdminDashboard: React.FC<{
                       <span className="text-[9px] sm:text-[11px] text-slate-600 font-bold whitespace-nowrap">
                         {new Date(item.created_at).toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: 'numeric' })}
                       </span>
-                      <span className="text-[8px] sm:text-[9px] text-slate-400 mt-1 uppercase whitespace-nowrap">
+                      <span className="text-[8px] sm:text-[9px] text-slate-600 mt-1 uppercase whitespace-nowrap">
                         {new Date(item.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
                   </td>
                   <td className="px-6 sm:px-8 py-4 sm:py-6 text-right">
-                    <div className={`inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[8px] sm:text-[9px] font-black uppercase border shadow-sm whitespace-nowrap ${item.status === 'PASSED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100 glow-emerald' : 'bg-red-50 text-red-600 border-red-100 glow-red'}`}>
+                    <div className={`inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[8px] sm:text-[9px] font-black uppercase border shadow-sm whitespace-nowrap ${item.status === 'PASSED' ? 'bg-emerald-50 text-emerald-800 border-emerald-100 glow-emerald' : 'bg-red-50 text-red-700 border-red-100 glow-red'}`}>
                         <div className={`w-1.5 h-1.5 rounded-full ${item.status === 'PASSED' ? 'bg-emerald-500' : 'bg-red-500'}`} />
                         {item.status}
                     </div>
@@ -668,9 +668,9 @@ const StatCard = ({ icon, label, value, color, trend, description, glow }: {
 }) => {
   const styles: any = {
     blue: { box: 'bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white', badge: 'bg-blue-50 text-blue-600 border-blue-100' },
-    emerald: { box: 'bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white', badge: 'bg-emerald-50 text-emerald-600 border-emerald-100' },
-    amber: { box: 'bg-amber-50 text-amber-600 group-hover:bg-amber-600 group-hover:text-white', badge: 'bg-amber-50 text-amber-600 border-amber-100' },
-    red: { box: 'bg-red-50 text-red-600 group-hover:bg-red-600 group-hover:text-white', badge: 'bg-red-50 text-red-600 border-red-100' },
+    emerald: { box: 'bg-emerald-50 text-emerald-700 group-hover:bg-emerald-700 group-hover:text-white', badge: 'bg-emerald-50 text-emerald-800 border-emerald-100' },
+    amber: { box: 'bg-amber-50 text-amber-700 group-hover:bg-amber-700 group-hover:text-white', badge: 'bg-amber-50 text-amber-800 border-amber-100' },
+    red: { box: 'bg-red-50 text-red-700 group-hover:bg-red-700 group-hover:text-white', badge: 'bg-red-50 text-red-700 border-red-100' },
   };
 
   const c = styles[color] || styles.blue;
@@ -691,9 +691,9 @@ const StatCard = ({ icon, label, value, color, trend, description, glow }: {
       </div>
 
       <div className="space-y-1 relative z-10">
-        <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest truncate">{label}</p>
+        <p className="text-[9px] sm:text-[10px] font-black text-slate-600 uppercase tracking-widest truncate">{label}</p>
         <h4 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tighter tabular-nums">{value}</h4>
-        <p className="text-[8px] sm:text-[9px] text-slate-400 font-bold uppercase tracking-tight opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-500 truncate">{description}</p>
+        <p className="text-[8px] sm:text-[9px] text-slate-600 font-bold uppercase tracking-tight opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-500 truncate">{description}</p>
       </div>
     </div>
   );

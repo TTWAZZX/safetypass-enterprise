@@ -555,13 +555,14 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                 <option value={-1}>ทั้งหมด (All)</option>
             </select>
             <span>รายการ</span>
-            <span className="ml-2 hidden sm:inline text-slate-400 font-medium">| จากทั้งหมด {totalItems} รายการ</span>
+            <span className="ml-2 hidden sm:inline text-slate-600 font-medium">| จากทั้งหมด {totalItems} รายการ</span>
          </div>
 
          <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
             <button 
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
+                aria-label="หน้าก่อนหน้า"
                 className="flex min-h-11 min-w-11 items-center justify-center gap-1 p-2 md:px-3 md:py-1.5 rounded-xl border border-slate-200 bg-white text-slate-600 disabled:opacity-50 disabled:bg-slate-50 hover:bg-slate-100 hover:text-blue-600 transition-all shadow-sm font-bold text-xs"
             >
                 <ChevronLeft size={16} /> <span className="hidden md:inline">ก่อนหน้า</span>
@@ -572,12 +573,13 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
             <button 
                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages || totalPages === 0}
+                aria-label="หน้าถัดไป"
                 className="flex min-h-11 min-w-11 items-center justify-center gap-1 p-2 md:px-3 md:py-1.5 rounded-xl border border-slate-200 bg-white text-slate-600 disabled:opacity-50 disabled:bg-slate-50 hover:bg-slate-100 hover:text-blue-600 transition-all shadow-sm font-bold text-xs"
             >
                 <span className="hidden md:inline">ถัดไป</span> <ChevronRight size={16} />
             </button>
          </div>
-         <span className="sm:hidden text-slate-400 font-bold text-[9px] uppercase mt-1">รวมทั้งหมด {totalItems} รายการ</span>
+         <span className="sm:hidden text-slate-600 font-bold text-[9px] uppercase mt-1">รวมทั้งหมด {totalItems} รายการ</span>
       </div>
     );
   };
@@ -589,7 +591,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 lg:gap-6 border-b border-slate-200 pb-4 lg:pb-6">
         <div>
           <h2 className="text-2xl md:text-3xl font-black text-slate-900 uppercase">Directory Control</h2>
-          <div className="text-slate-400 font-bold text-[10px] uppercase tracking-[0.2em] mt-2 flex items-center gap-2">
+          <div className="text-slate-600 font-bold text-[10px] uppercase tracking-[0.2em] mt-2 flex items-center gap-2">
             <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" /> Security Compliance Node
           </div>
         </div>
@@ -676,7 +678,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                 <button 
                   onClick={() => (activeTab === 'USERS' ? userFileInputRef : vendorFileInputRef).current?.click()} 
                   disabled={activeTab === 'USERS' ? importingUsers : importingVendors}
-                  className="min-h-11 flex-1 md:flex-none bg-emerald-50 text-emerald-600 border border-emerald-100 px-4 py-3 rounded-xl font-black text-[10px] uppercase hover:bg-emerald-100 transition-all flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="min-h-11 flex-1 md:flex-none bg-emerald-50 text-emerald-800 border border-emerald-100 px-4 py-3 rounded-xl font-black text-[10px] uppercase hover:bg-emerald-100 transition-all flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {(activeTab === 'USERS' ? importingUsers : importingVendors) ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14}/>} 
                   {(activeTab === 'USERS' ? importingUsers : importingVendors) ? 'นำเข้า...' : 'Import'}
@@ -725,12 +727,13 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
               {/* 🖥️ DESKTOP VIEW (TABLE) */}
               <div className="hidden xl:block overflow-x-auto w-full flex-1">
                 <table className="w-full text-left min-w-[900px]">
-                  <thead className="bg-slate-50/50 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100 sticky top-0 z-10">
+                  <thead className="bg-slate-50/50 text-[9px] font-black text-slate-600 uppercase tracking-[0.2em] border-b border-slate-100 sticky top-0 z-10">
                     <tr>
                       {activeTab === 'USERS' && (
                         <th className="pl-6 pr-2 py-5 w-10">
                           <input
                             type="checkbox"
+                            aria-label="เลือกผู้ใช้ทั้งหมดในหน้านี้"
                             className="w-4 h-4 rounded border-slate-300 cursor-pointer accent-blue-600"
                             checked={paginatedData.length > 0 && paginatedData.every((i: any) => selectedIds.has(i.id))}
                             onChange={() => setSelectedIds(prev =>
@@ -769,6 +772,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                             <td className="pl-6 pr-2 py-5 w-10">
                               <input
                                 type="checkbox"
+                                aria-label={`เลือก ${item.name}`}
                                 className="w-4 h-4 rounded border-slate-300 cursor-pointer accent-blue-600"
                                 checked={selectedIds.has(item.id)}
                                 onChange={() => toggleSelect(item.id)}
@@ -787,13 +791,13 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                                  </div>
                                  {activeTab === 'USERS' && (
                                     <div className="flex items-center gap-2">
-                                        <p className="text-[10px] text-slate-400 font-mono tracking-tighter">ID: {maskNationalID(item.national_id)}</p>
+                                        <p className="text-[10px] text-slate-600 font-mono tracking-tighter">ID: {maskNationalID(item.national_id)}</p>
                                         {item.last_login ? (
-                                            <span className="text-[8px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded flex items-center gap-1 border border-emerald-100">
+                                            <span className="text-[8px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded flex items-center gap-1 border border-emerald-100">
                                                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> Active
                                             </span>
                                         ) : (
-                                            <span className="text-[8px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded flex items-center gap-1 border border-slate-200">
+                                            <span className="text-[8px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded flex items-center gap-1 border border-slate-200">
                                                 <div className="w-1.5 h-1.5 rounded-full bg-slate-300"></div> Pending
                                             </span>
                                         )}
@@ -804,7 +808,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                           </td>
                           <td className="px-8 py-5">
                             {activeTab === 'VENDORS' ? (
-                              <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[9px] font-black border uppercase shadow-sm whitespace-nowrap ${item.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : item.status === 'REJECTED' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>
+                              <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[9px] font-black border uppercase shadow-sm whitespace-nowrap ${item.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-800 border-emerald-100' : item.status === 'REJECTED' ? 'bg-red-50 text-red-700 border-red-100' : 'bg-amber-50 text-amber-800 border-amber-100'}`}>
                                 {item.status || 'PENDING'}
                               </div>
                             ) : (
@@ -813,7 +817,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                                 {item.is_active === false ? (
                                     <span className="text-[9px] font-black text-red-500 flex items-center gap-1 ml-1 whitespace-nowrap"><Ban size={10}/> Account Suspended</span>
                                 ) : itemCs === 'valid' ? (
-                                    <span title={getCertDaysLabel(item)} className="text-[9px] font-black text-emerald-600 flex items-center gap-1 ml-1 whitespace-nowrap cursor-help">
+                                    <span title={getCertDaysLabel(item)} className="text-[9px] font-black text-emerald-700 flex items-center gap-1 ml-1 whitespace-nowrap cursor-help">
                                         <ShieldCheck size={10}/> Exp: {new Date(item.induction_expiry).toLocaleDateString('th-TH')}
                                     </span>
                                 ) : itemCs === 'expiring' ? (
@@ -835,12 +839,12 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                           <td className="px-8 py-5 text-center">
                             <div className="flex justify-center gap-2 flex-wrap">
                               {activeTab === 'VENDORS' && item.status !== 'APPROVED' && (
-                                <button onClick={() => handleUpdateVendorStatus(item.id, item.name, 'APPROVED')} className="p-2.5 rounded-xl bg-emerald-500 text-white hover:bg-emerald-600 shadow-lg active:scale-90 transition-all"><CheckCircle size={16} /></button>
+                                <button onClick={() => handleUpdateVendorStatus(item.id, item.name, 'APPROVED')} aria-label={`อนุมัติบริษัท ${item.name}`} className="p-2.5 rounded-xl bg-emerald-700 text-white hover:bg-emerald-800 shadow-lg active:scale-90 transition-all"><CheckCircle size={16} /></button>
                               )}
                               {activeTab === 'VENDORS' && item.status === 'PENDING' && (
                                 <button onClick={() => handleUpdateVendorStatus(item.id, item.name, 'REJECTED')} title="Reject" className="p-2.5 rounded-xl border text-red-500 hover:bg-red-50 active:scale-90 transition-all"><Ban size={16} /></button>
                               )}
-                              <button onClick={() => activeTab === 'VENDORS' ? handleEditVendor(item.id, item.name) : handleEditUser(item)} className="p-2.5 rounded-xl border border-slate-100 text-slate-400 hover:text-blue-600 hover:bg-blue-50 active:scale-90 transition-all shadow-sm"><Edit3 size={16} /></button>
+                              <button onClick={() => activeTab === 'VENDORS' ? handleEditVendor(item.id, item.name) : handleEditUser(item)} aria-label={`แก้ไข ${item.name}`} className="p-2.5 rounded-xl border border-slate-100 text-slate-600 hover:text-blue-700 hover:bg-blue-50 active:scale-90 transition-all shadow-sm"><Edit3 size={16} /></button>
                               {activeTab === 'USERS' && (
                                 <>
                                   <button onClick={() => handleResetTraining(item.id, item.name)} title="Reset Compliance" className="p-2.5 rounded-xl border border-amber-100 text-amber-500 hover:bg-amber-50 transition-all active:scale-90 shadow-sm"><RotateCcw size={16} /></button>
@@ -853,7 +857,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                                   </button>
                                 </>
                               )}
-                              <button onClick={() => activeTab === 'VENDORS' ? handleDeleteVendor(item.id, item.name) : handleDeleteUser(item.id, item.name)} className="p-2.5 rounded-xl border border-slate-100 text-slate-300 hover:text-red-600 hover:bg-red-50 active:scale-90 transition-all shadow-sm"><Trash2 size={16} /></button>
+                              <button onClick={() => activeTab === 'VENDORS' ? handleDeleteVendor(item.id, item.name) : handleDeleteUser(item.id, item.name)} aria-label={`ลบ ${item.name}`} className="p-2.5 rounded-xl border border-slate-100 text-slate-600 hover:text-red-700 hover:bg-red-50 active:scale-90 transition-all shadow-sm"><Trash2 size={16} /></button>
                             </div>
                           </td>
                         </tr>
@@ -918,11 +922,12 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                                       )}
                                    </div>
                                )}
-                               {activeTab === 'VENDORS' && <p className="text-[10px] text-slate-400 font-mono mt-0.5 truncate">Reg: {new Date(item.created_at).toLocaleDateString()}</p>}
+                               {activeTab === 'VENDORS' && <p className="text-[10px] text-slate-600 font-mono mt-0.5 truncate">Reg: {new Date(item.created_at).toLocaleDateString()}</p>}
                             </div>
                             {activeTab === 'USERS' && (
                               <input
                                 type="checkbox"
+                                aria-label={`เลือก ${item.name}`}
                                 className="w-4 h-4 rounded border-slate-300 cursor-pointer accent-blue-600 shrink-0"
                                 checked={selectedIds.has(item.id)}
                                 onChange={() => toggleSelect(item.id)}
@@ -935,15 +940,15 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                            {activeTab === 'USERS' ? (
                              <>
                                <div className="flex justify-between items-center">
-                                 <span className="text-[9px] font-black text-slate-400 uppercase">Vendor</span>
+                                 <span className="text-[9px] font-black text-slate-600 uppercase">Vendor</span>
                                  <span className="text-[10px] font-black text-slate-700 truncate max-w-[60%] text-right">{item.vendors?.name || 'EXTERNAL'}</span>
                                </div>
                                <div className="flex justify-between items-center">
-                                 <span className="text-[9px] font-black text-slate-400 uppercase">Cert</span>
+                                 <span className="text-[9px] font-black text-slate-600 uppercase">Cert</span>
                                  {item.is_active === false ? (
                                     <span className="text-[9px] font-black text-red-500 flex items-center gap-1"><Ban size={10}/> Suspended</span>
                                  ) : cardCs === 'valid' ? (
-                                    <span title={getCertDaysLabel(item)} className="text-[9px] font-black text-emerald-600 flex items-center gap-1 cursor-help"><ShieldCheck size={10}/> Certified</span>
+                                    <span title={getCertDaysLabel(item)} className="text-[9px] font-black text-emerald-700 flex items-center gap-1 cursor-help"><ShieldCheck size={10}/> Certified</span>
                                  ) : cardCs === 'expiring' ? (
                                     <span title={getCertDaysLabel(item)} className="text-[9px] font-black text-amber-500 flex items-center gap-1 cursor-help"><Clock size={10}/> Expiring Soon</span>
                                  ) : cardCs === 'expired' ? (
@@ -955,8 +960,8 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                              </>
                            ) : (
                              <div className="flex justify-between items-center">
-                               <span className="text-[9px] font-black text-slate-400 uppercase">Status</span>
-                               <div className={`px-2 py-1 rounded-md text-[9px] font-black border uppercase ${item.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : item.status === 'REJECTED' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>
+                               <span className="text-[9px] font-black text-slate-600 uppercase">Status</span>
+                               <div className={`px-2 py-1 rounded-md text-[9px] font-black border uppercase ${item.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-800 border-emerald-100' : item.status === 'REJECTED' ? 'bg-red-50 text-red-700 border-red-100' : 'bg-amber-50 text-amber-800 border-amber-100'}`}>
                                   {item.status || 'PENDING'}
                                </div>
                              </div>

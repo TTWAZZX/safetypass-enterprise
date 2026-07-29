@@ -577,12 +577,12 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
       {/* Tracker */}
       <div className="sticky top-0 bg-slate-50 pt-2 pb-6 mb-8 z-20 border-b border-slate-200 will-change-transform">
         <div className="flex justify-between items-end mb-4">
-          <div><h2 className="text-[11px] font-black text-slate-900 uppercase tracking-tight">Exam Module: {type}</h2><p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">{answeredCount === totalQuestions ? 'Ready for submission' : `Progress: ${answeredCount}/${totalQuestions} Completed`}</p></div>
+          <div><h2 className="text-[11px] font-black text-slate-900 uppercase tracking-tight">Exam Module: {type}</h2><p className="text-[9px] text-slate-600 font-bold uppercase tracking-widest mt-0.5">{answeredCount === totalQuestions ? 'Ready for submission' : `Progress: ${answeredCount}/${totalQuestions} Completed`}</p></div>
           <div className="flex items-center gap-2"><Clock size={12} className="text-slate-300" /><span className="text-[10px] font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-full border border-blue-100">{progressPercent}%</span></div>
         </div>
         <div className="flex flex-wrap gap-1 mb-4">
            {questions.map((q, qIdx) => (
-             <button key={q.id} aria-label={`ไปข้อ ${qIdx + 1}${isQuestionAnswered(q.id) ? ' ตอบแล้ว' : ' ยังไม่ได้ตอบ'}`} onClick={() => setCurrentPage(Math.floor(qIdx / questionsPerPage))} className={`min-h-11 min-w-11 rounded-xl flex items-center justify-center text-[10px] font-black transition-all border-2 ${isQuestionAnswered(q.id) ? 'bg-emerald-500 border-emerald-500 text-white shadow-sm' : 'bg-white border-slate-100 text-slate-400'} ${qIdx >= startIndex && qIdx < startIndex + questionsPerPage ? 'ring-2 ring-blue-500 ring-offset-1 scale-105 z-10' : ''}`}>{qIdx + 1}</button>
+             <button key={q.id} aria-label={`ไปข้อ ${qIdx + 1}${isQuestionAnswered(q.id) ? ' ตอบแล้ว' : ' ยังไม่ได้ตอบ'}`} onClick={() => setCurrentPage(Math.floor(qIdx / questionsPerPage))} className={`min-h-11 min-w-11 rounded-xl flex items-center justify-center text-[10px] font-black transition-all border-2 ${isQuestionAnswered(q.id) ? 'bg-emerald-700 border-emerald-700 text-white shadow-sm' : 'bg-white border-slate-300 text-slate-600'} ${qIdx >= startIndex && qIdx < startIndex + questionsPerPage ? 'ring-2 ring-blue-500 ring-offset-1 scale-105 z-10' : ''}`}>{qIdx + 1}</button>
            ))}
         </div>
         <div className="w-full h-1 bg-slate-200 rounded-full overflow-hidden shadow-inner"><div className={`h-full transition-all duration-700 ease-out ${progressPercent === 100 ? 'bg-emerald-500' : 'bg-blue-600'}`} style={{ width: `${progressPercent}%` }} /></div>
@@ -611,7 +611,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
             <div className="mb-4">
               <div className="flex items-center justify-between mb-2">
                  <span className="px-2.5 py-0.5 bg-slate-900 text-white text-[9px] font-black rounded-md uppercase tracking-widest">Q {startIndex + idx + 1}</span>
-                 <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest">{q.pattern?.replace('_', ' ') || 'Choice'}</span>
+                 <span className="text-[8px] font-black text-slate-600 uppercase tracking-widest">{q.pattern?.replace('_', ' ') || 'Choice'}</span>
               </div>
               {q.image_url && <div className="mb-3 rounded-xl overflow-hidden border border-slate-200 bg-white p-1 shadow-sm max-w-sm"><img src={q.image_url} alt="Reference" className="w-full max-h-48 object-contain" /></div>}
               <p className="font-bold text-slate-800 text-[15px] leading-relaxed">{language === 'th' ? q.content_th : q.content_en}</p>
