@@ -665,7 +665,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
                         <button onClick={() => setIsEditing(false)} className="w-full md:w-auto px-4 py-2.5 bg-slate-100 text-slate-500 rounded-xl text-[10px] font-black uppercase hover:bg-slate-200">Cancel</button>
                     </div>
                   ) : (
-                    <button onClick={() => setIsEditing(true)} className="p-3 bg-slate-50 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all active:scale-90 border border-transparent hover:border-blue-100"><Edit3 size={18} /></button>
+                    <button onClick={() => setIsEditing(true)} aria-label="แก้ไขข้อมูลส่วนตัว" className="p-3 bg-slate-50 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all active:scale-90 border border-transparent hover:border-blue-100"><Edit3 size={18} /></button>
                   )}
               </div>
           </div>
@@ -850,7 +850,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
               
               {/* 🔥 แก้ไข URL เข้ารหัส permit_no สำหรับ QR เล็กในหน้าแรก */}
               <button type="button" aria-label="ขยาย QR Code ใบอนุญาต" className="bg-white p-2.5 rounded-2xl shadow-lg active:scale-95 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-400" onClick={() => setShowQRFullScreen(true)}>
-                <QRCodeSVG value={`${window.location.origin}/verify?id=${encodeURIComponent(user.national_id)}&permit=${encodeURIComponent(activePermit.permit_no)}`} size={112} />
+                <QRCodeSVG title="QR Code สำหรับตรวจสอบใบอนุญาต" value={`${window.location.origin}/verify?id=${encodeURIComponent(user.national_id)}&permit=${encodeURIComponent(activePermit.permit_no)}`} size={112} />
               </button>
 
               <div className="text-left">
@@ -914,7 +914,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
             <div className="bg-white p-10 rounded-[3rem] shadow-[0_0_80px_rgba(59,130,246,0.4)] animate-in zoom-in duration-500">
               
               {/* 🔥 แก้ไข URL เข้ารหัส permit_no สำหรับ QR แบบ Fullscreen */}
-              <QRCodeSVG value={`${window.location.origin}/verify?id=${encodeURIComponent(user.national_id)}&permit=${encodeURIComponent(activePermit.permit_no)}`} size={300} />
+              <QRCodeSVG title="QR Code สำหรับตรวจสอบใบอนุญาตแบบเต็มจอ" value={`${window.location.origin}/verify?id=${encodeURIComponent(user.national_id)}&permit=${encodeURIComponent(activePermit.permit_no)}`} size={300} />
               
             </div>
             <div className="mt-10 text-3xl font-black tracking-[0.3em] uppercase border-b-2 border-blue-500 pb-4">{activePermit.permit_no}</div>

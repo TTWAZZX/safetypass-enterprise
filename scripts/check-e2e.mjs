@@ -221,7 +221,10 @@ async function assertA11y(page, label) {
     .analyze();
   if (results.violations.length > 0) {
     const summary = results.violations.map((violation) => `${violation.id}(${violation.nodes.length})`).join(', ');
-    throw new Error(`${label} accessibility failed: ${summary}`);
+    const details = results.violations.flatMap((violation) => violation.nodes.slice(0, 20).map((node) =>
+      `${violation.id} ${node.target.join(' ')}: ${(node.failureSummary || '').replace(/\s+/g, ' ').trim()}`
+    )).join('\n');
+    throw new Error(`${label} accessibility failed: ${summary}\n${details}`);
   }
 }
 
