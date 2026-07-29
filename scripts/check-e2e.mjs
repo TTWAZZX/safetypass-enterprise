@@ -60,6 +60,8 @@ function examQuestions(type) {
     choices_json: [
       { text_th: 'คำตอบ ก', text_en: 'Choice A', is_correct: true },
       { text_th: 'คำตอบ ข', text_en: 'Choice B', is_correct: false },
+      { text_th: 'คำตอบ ค', text_en: 'Choice C', is_correct: false },
+      { text_th: 'คำตอบ ง', text_en: 'Choice D', is_correct: false },
     ],
     correct_choice_index: 0,
     image_url: null,
@@ -70,6 +72,12 @@ function examQuestions(type) {
 async function installMocks(page) {
   let currentRole = 'USER';
   let managedQuestions = examQuestions('INDUCTION');
+  managedQuestions[7] = { ...managedQuestions[7], choices_json: managedQuestions[7].choices_json.slice(0, 3) };
+  managedQuestions[9] = {
+    ...managedQuestions[9],
+    content_th: managedQuestions[8].content_th,
+    content_en: managedQuestions[8].content_en,
+  };
   await page.route('**/auth/v1/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -312,6 +320,19 @@ try {
   await adminPage.getByText('Assessment Manager', { exact: false }).waitFor();
   await adminPage.getByText('Master Repository', { exact: true }).waitFor();
   await adminPage.getByText('เฉลย: ตัวเลือก 1 — คำตอบ ก', { exact: true }).first().waitFor();
+  await adminPage.getByRole('button', { name: /ข้อมูลไม่ครบ\s*1/ }).click();
+  await adminPage.getByText('แสดง 1 จาก 10 คำถาม', { exact: true }).waitFor();
+  await adminPage.getByText('ดูจุดที่ต้องแก้ 1 จุด', { exact: true }).click();
+  await adminPage.getByText('มีตัวเลือก 3/4', { exact: true }).waitFor();
+  await adminPage.getByRole('button', { name: /ตัวกรอง/ }).click();
+  await adminPage.getByLabel('รูปแบบคำถาม').selectOption('MULTIPLE_CHOICE');
+  await adminPage.getByLabel('สถานะใช้งาน').selectOption('ACTIVE');
+  await adminPage.getByRole('button', { name: 'ล้างตัวกรองทั้งหมด' }).click();
+  await adminPage.getByText('แสดง 10 จาก 10 คำถาม', { exact: true }).waitFor();
+  await adminPage.getByRole('button', { name: /อาจซ้ำ\s*2/ }).click();
+  await adminPage.getByText('แสดง 2 จาก 10 คำถาม', { exact: true }).waitFor();
+  await adminPage.getByText('อาจซ้ำ 2 รายการ', { exact: true }).first().waitFor();
+  await adminPage.locator('[aria-label="สรุปคุณภาพคำถาม"] button').first().click();
   await adminPage.getByRole('button', { name: 'ดูตัวเลือกและเฉลย' }).first().click();
   await adminPage.getByText('ตัวเลือกและเฉลย', { exact: true }).first().waitFor();
   await assertA11y(adminPage, 'desktop question manager');

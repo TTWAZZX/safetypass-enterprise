@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { api } from '../services/supabaseApi';
 import { supabase } from '../services/supabaseClient';
 import { ExamType, Question, QuestionPattern } from '../types'; 
@@ -7,7 +7,7 @@ import {
   Plus, Save, Trash2, BookOpen, Ticket, Loader2, 
   Edit3, Upload, Download, X, Search, Image as ImageIcon,
   ChevronLeft, ChevronRight, RefreshCw, AlertCircle, CheckCircle2,
-  ListFilter, Hash, HelpCircle, ArrowRightLeft, ChevronDown, Copy
+  ListFilter, Hash, HelpCircle, ArrowRightLeft, ChevronDown, Copy, SlidersHorizontal
 } from 'lucide-react';
 import AsyncState from './AsyncState';
 import { useDialogFocus } from '../hooks/useDialogFocus';
@@ -44,12 +44,91 @@ const getAnswerSummary = (question: any) => {
   return correctText ? `ตัวเลือก ${correctIndex + 1} — ${correctText}` : 'ยังไม่ได้ระบุเฉลย';
 };
 
+const getQuestionQualityIssues = (question: any) => {
+  const issues: string[] = [];
+  const pattern = question.pattern || QuestionPattern.MULTIPLE_CHOICE;
+  const choices = getQuestionChoices(question);
+
+  if (!String(question.content_th || '').trim()) issues.push('ไม่มีคำถามภาษาไทย');
+  if (!String(question.content_en || '').trim()) issues.push('ไม่มีคำถามภาษาอังกฤษ');
+
+  if (pattern === QuestionPattern.SHORT_ANSWER) {
+    if (!String(choices[0]?.correct_answer || '').trim()) issues.push('ยังไม่ได้ระบุเฉลย');
+    return issues;
+  }
+
+  if (pattern === QuestionPattern.MATCHING) {
+    if (choices.length === 0) issues.push('ยังไม่มีคู่จับคู่');
+    choices.forEach((pair: any, index: number) => {
+      const fields = [
+        pair?.left_th || pair?.left_text_th,
+        pair?.left_en || pair?.left_text_en,
+        pair?.right_th || pair?.right_text_th,
+        pair?.right_en || pair?.right_text_en,
+      ];
+      if (fields.some((value) => !String(value || '').trim())) issues.push(`คู่จับคู่ ${index + 1} มีข้อมูลไม่ครบ`);
+    });
+    return issues;
+  }
+
+  const expectedChoices = pattern === QuestionPattern.TRUE_FALSE ? 2 : 4;
+  if (choices.length < expectedChoices) issues.push(`มีตัวเลือก ${choices.length}/${expectedChoices}`);
+  choices.slice(0, expectedChoices).forEach((choice: any, index: number) => {
+    if (!String(choice?.text_th || '').trim()) issues.push(`ตัวเลือก ${index + 1} ไม่มีภาษาไทย`);
+    if (!String(choice?.text_en || '').trim()) issues.push(`ตัวเลือก ${index + 1} ไม่มีภาษาอังกฤษ`);
+  });
+  const correctIndex = getCorrectChoiceIndex(question);
+  if (correctIndex < 0 || correctIndex >= choices.length) issues.push('ยังไม่ได้กำหนดคำตอบที่ถูกต้อง');
+  return issues;
+};
+
+const normalizeQuestionText = (value: unknown) => String(value || '')
+  .normalize('NFKC')
+  .toLocaleLowerCase()
+  .replace(/\s*\((สำเนา|copy)\)\s*$/i, '')
+  .replace(/[?？!！.。,，:;:'"“”‘’()[\]{}]/g, '')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const getDuplicateQuestionMap = (questions: any[]) => {
+  const idsByText = new Map<string, Set<string>>();
+  questions.forEach((question) => {
+    const normalizedTexts = new Set([
+      normalizeQuestionText(question.content_th),
+      normalizeQuestionText(question.content_en),
+    ]);
+    normalizedTexts.forEach((text) => {
+      if (text.length < 12) return;
+      if (!idsByText.has(text)) idsByText.set(text, new Set());
+      idsByText.get(text)?.add(question.id);
+    });
+  });
+
+  const duplicates = new Map<string, Set<string>>();
+  idsByText.forEach((ids) => {
+    if (ids.size < 2) return;
+    ids.forEach((id) => {
+      if (!duplicates.has(id)) duplicates.set(id, new Set());
+      ids.forEach((relatedId) => { if (relatedId !== id) duplicates.get(id)?.add(relatedId); });
+    });
+  });
+  return new Map(Array.from(duplicates.entries(), ([id, relatedIds]) => [id, Array.from(relatedIds)]));
+};
+
+type PatternFilter = 'ALL' | QuestionPattern;
+type StatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
+type QualityFilter = 'ALL' | 'COMPLETE' | 'INCOMPLETE' | 'DUPLICATE';
+
 const QuestionManager: React.FC = () => {
   const { showToast } = useToastContext();
   const [questions, setQuestions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [patternFilter, setPatternFilter] = useState<PatternFilter>('ALL');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
+  const [qualityFilter, setQualityFilter] = useState<QualityFilter>('ALL');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
 
@@ -79,6 +158,11 @@ const QuestionManager: React.FC = () => {
   const [lastSavedQuestion, setLastSavedQuestion] = useState<{ id: string; savedAt: Date } | null>(null);
   const [highlightedQuestionId, setHighlightedQuestionId] = useState<string | null>(null);
   const [expandedAnswerIds, setExpandedAnswerIds] = useState<Set<string>>(() => new Set());
+
+  const questionQualityMap = useMemo(() => new Map(
+    questions.map((question) => [question.id, getQuestionQualityIssues(question)]),
+  ), [questions]);
+  const duplicateQuestionMap = useMemo(() => getDuplicateQuestionMap(questions), [questions]);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -142,6 +226,10 @@ const QuestionManager: React.FC = () => {
   useEffect(() => {
     fetchQuestions();
   }, [examType]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, patternFilter, statusFilter, qualityFilter]);
 
   // ================= [ HANDLERS ] =================
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -227,9 +315,28 @@ const QuestionManager: React.FC = () => {
 
   const getNavigableQuestions = () => {
     const keyword = searchTerm.trim().toLowerCase();
-    return questions.filter((question) => !keyword
-      || String(question.content_th || '').toLowerCase().includes(keyword)
-      || String(question.content_en || '').toLowerCase().includes(keyword));
+    return questions.filter((question) => {
+      const matchesKeyword = !keyword
+        || String(question.content_th || '').toLowerCase().includes(keyword)
+        || String(question.content_en || '').toLowerCase().includes(keyword)
+        || getQuestionCode(question.id).toLowerCase().includes(keyword);
+      const matchesPattern = patternFilter === 'ALL' || question.pattern === patternFilter;
+      const matchesStatus = statusFilter === 'ALL'
+        || (statusFilter === 'ACTIVE' ? question.is_active !== false : question.is_active === false);
+      const issues = questionQualityMap.get(question.id) || [];
+      const matchesQuality = qualityFilter === 'ALL'
+        || (qualityFilter === 'COMPLETE' && issues.length === 0)
+        || (qualityFilter === 'INCOMPLETE' && issues.length > 0)
+        || (qualityFilter === 'DUPLICATE' && duplicateQuestionMap.has(question.id));
+      return matchesKeyword && matchesPattern && matchesStatus && matchesQuality;
+    });
+  };
+
+  const resetQuestionFilters = () => {
+    setSearchTerm('');
+    setPatternFilter('ALL');
+    setStatusFilter('ALL');
+    setQualityFilter('ALL');
   };
 
   const getAdjacentQuestion = (direction: -1 | 1) => {
@@ -422,6 +529,11 @@ const QuestionManager: React.FC = () => {
   const hasPreviousQuestion = editingQuestionIndex > 0;
   const hasNextQuestion = editingQuestionIndex >= 0 && editingQuestionIndex < filteredQuestions.length - 1;
   const editingQuestionCode = editingId ? getQuestionCode(editingId) : '';
+  const incompleteQuestionCount = questions.filter((question) => (questionQualityMap.get(question.id) || []).length > 0).length;
+  const completeQuestionCount = questions.length - incompleteQuestionCount;
+  const duplicateQuestionCount = duplicateQuestionMap.size;
+  const activeAdvancedFilterCount = [patternFilter, statusFilter, qualityFilter].filter((value) => value !== 'ALL').length;
+  const hasQuestionFilters = Boolean(searchTerm.trim()) || activeAdvancedFilterCount > 0;
 
   return (
     <div className="space-y-8 pb-10 text-left">
@@ -556,20 +668,69 @@ const QuestionManager: React.FC = () => {
 
       {/* 🔵 Master Repository List */}
       <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-slate-100 shadow-sm min-h-[500px]">
-        <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+        <div className="flex flex-col md:flex-row justify-between items-center mb-5 gap-4">
             <div className="text-left">
               <h3 className="text-xl font-black text-slate-900 uppercase">Master Repository</h3>
               <div className="text-[10px] text-slate-600 font-black uppercase tracking-widest flex items-center gap-2 mt-1">
-                <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" /> Element Count: {filteredQuestions.length}
+                <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" /> แสดง {filteredQuestions.length} จาก {questions.length} คำถาม
               </div>
             </div>
             <div className="flex flex-wrap gap-2 w-full md:w-auto">
-                <div className="relative flex-1"><Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input placeholder="Search keywords..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none w-full" /></div>
+                <div className="relative min-w-[220px] flex-1"><Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input aria-label="ค้นหาคำถามหรือรหัสคำถาม" placeholder="ค้นหาคำถามหรือรหัส Q-..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="min-h-11 w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-4 text-xs font-bold outline-none focus:border-blue-500" /></div>
+                <button
+                  type="button"
+                  aria-expanded={showAdvancedFilters}
+                  aria-controls="question-advanced-filters"
+                  onClick={() => setShowAdvancedFilters((value) => !value)}
+                  className={`relative flex min-h-11 items-center gap-2 rounded-xl border px-3 py-2.5 text-[9px] font-black ${showAdvancedFilters || activeAdvancedFilterCount > 0 ? 'border-blue-200 bg-blue-50 text-blue-800' : 'border-slate-200 bg-white text-slate-700'}`}
+                >
+                  <SlidersHorizontal size={16}/> ตัวกรอง
+                  {activeAdvancedFilterCount > 0 && <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-700 px-1 text-[8px] text-white">{activeAdvancedFilterCount}</span>}
+                </button>
                 <input ref={fileInputRef} type="file" accept=".xlsx" className="hidden" onChange={handleQuestionImport} />
                 <button onClick={() => fileInputRef.current?.click()} className="flex min-h-11 items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5 text-[9px] font-black uppercase tracking-widest text-emerald-700"><Upload size={16}/> Import</button>
                 <button onClick={() => fetchQuestions()} aria-label="รีเฟรชคลังข้อสอบ" className="min-h-11 min-w-11 p-2.5 bg-slate-50 text-slate-400 rounded-xl hover:text-blue-600 transition-all border border-slate-100 shadow-sm"><RefreshCw size={18}/></button>
             </div>
         </div>
+
+        <div className="mb-5 grid grid-cols-2 gap-2 lg:grid-cols-4" aria-label="สรุปคุณภาพคำถาม">
+          <button type="button" aria-pressed={!hasQuestionFilters} onClick={resetQuestionFilters} className={`rounded-2xl border p-3 text-left ${!hasQuestionFilters ? 'border-blue-300 bg-blue-50' : 'border-slate-200 bg-white'}`}>
+            <span className="text-[9px] font-black text-slate-600">ทั้งหมด</span><strong className="mt-1 block text-xl text-slate-900">{questions.length}</strong>
+          </button>
+          <button type="button" aria-pressed={qualityFilter === 'COMPLETE'} onClick={() => setQualityFilter('COMPLETE')} className={`rounded-2xl border p-3 text-left ${qualityFilter === 'COMPLETE' ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 bg-white'}`}>
+            <span className="text-[9px] font-black text-emerald-800">ข้อมูลครบ</span><strong className="mt-1 block text-xl text-emerald-800">{completeQuestionCount}</strong>
+          </button>
+          <button type="button" aria-pressed={qualityFilter === 'INCOMPLETE'} onClick={() => setQualityFilter('INCOMPLETE')} className={`rounded-2xl border p-3 text-left ${qualityFilter === 'INCOMPLETE' ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-white'}`}>
+            <span className="text-[9px] font-black text-amber-900">ข้อมูลไม่ครบ</span><strong className="mt-1 block text-xl text-amber-900">{incompleteQuestionCount}</strong>
+          </button>
+          <button type="button" aria-pressed={qualityFilter === 'DUPLICATE'} onClick={() => setQualityFilter('DUPLICATE')} className={`rounded-2xl border p-3 text-left ${qualityFilter === 'DUPLICATE' ? 'border-red-300 bg-red-50' : 'border-slate-200 bg-white'}`}>
+            <span className="text-[9px] font-black text-red-800">อาจซ้ำ</span><strong className="mt-1 block text-xl text-red-800">{duplicateQuestionCount}</strong>
+          </button>
+        </div>
+
+        {showAdvancedFilters && (
+          <div id="question-advanced-filters" className="mb-5 grid grid-cols-1 gap-3 rounded-2xl border border-blue-100 bg-blue-50/50 p-4 md:grid-cols-4">
+            <div>
+              <label htmlFor="question-pattern-filter" className="mb-1 block text-[9px] font-black text-slate-700">รูปแบบคำถาม</label>
+              <select id="question-pattern-filter" value={patternFilter} onChange={(event) => setPatternFilter(event.target.value as PatternFilter)} className="min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-800">
+                <option value="ALL">ทุกรูปแบบ</option><option value={QuestionPattern.MULTIPLE_CHOICE}>ปรนัย</option><option value={QuestionPattern.TRUE_FALSE}>ถูก/ผิด</option><option value={QuestionPattern.MATCHING}>จับคู่</option><option value={QuestionPattern.SHORT_ANSWER}>เขียนตอบ</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="question-status-filter" className="mb-1 block text-[9px] font-black text-slate-700">สถานะใช้งาน</label>
+              <select id="question-status-filter" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as StatusFilter)} className="min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-800">
+                <option value="ALL">ทุกสถานะ</option><option value="ACTIVE">เปิดใช้งาน</option><option value="INACTIVE">ปิดใช้งาน</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="question-quality-filter" className="mb-1 block text-[9px] font-black text-slate-700">คุณภาพข้อมูล</label>
+              <select id="question-quality-filter" value={qualityFilter} onChange={(event) => setQualityFilter(event.target.value as QualityFilter)} className="min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-800">
+                <option value="ALL">ทั้งหมด</option><option value="COMPLETE">ข้อมูลครบ</option><option value="INCOMPLETE">ข้อมูลไม่ครบ</option><option value="DUPLICATE">อาจซ้ำ</option>
+              </select>
+            </div>
+            <button type="button" onClick={resetQuestionFilters} disabled={!hasQuestionFilters} className="min-h-11 self-end rounded-xl border border-slate-200 bg-white px-4 text-[10px] font-black text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">ล้างตัวกรองทั้งหมด</button>
+          </div>
+        )}
         
         {loading ? <AsyncState compact variant="loading" title="กำลังโหลดคลังข้อสอบ" /> : loadError ? <AsyncState compact variant="error" title="โหลดคลังข้อสอบไม่สำเร็จ" description={loadError} onRetry={() => fetchQuestions()} /> : (
             <div className="grid grid-cols-1 gap-4">
@@ -581,6 +742,8 @@ const QuestionManager: React.FC = () => {
                   const choices = getQuestionChoices(q);
                   const answerSummary = getAnswerSummary(q);
                   const hasAnswer = !answerSummary.startsWith('ยังไม่ได้ระบุ');
+                  const qualityIssues = questionQualityMap.get(q.id) || [];
+                  const relatedDuplicateIds = duplicateQuestionMap.get(q.id) || [];
 
                   return (
                     <div
@@ -607,6 +770,10 @@ const QuestionManager: React.FC = () => {
                                 <div className="flex flex-wrap items-center gap-2">
                                   <span className="px-2.5 py-1 rounded-md text-[9px] font-black text-slate-700 border border-slate-200 bg-slate-50" title={`รหัสคำถาม ${q.id}`}>{questionCode}</span>
                                   <span className={`px-2 py-1 rounded-md text-[8px] font-black border ${q.type === 'INDUCTION' ? 'text-blue-700 border-blue-100 bg-blue-50' : q.type === 'WORK_PERMIT' ? 'text-purple-700 border-purple-100 bg-purple-50' : 'text-emerald-800 border-emerald-100 bg-emerald-50'}`}>{q.type}</span>
+                                  <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[9px] font-black ${qualityIssues.length === 0 ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
+                                    {qualityIssues.length === 0 ? <CheckCircle2 size={12}/> : <AlertCircle size={12}/>} {qualityIssues.length === 0 ? 'ข้อมูลครบ' : `ข้อมูลไม่ครบ ${qualityIssues.length} จุด`}
+                                  </span>
+                                  {relatedDuplicateIds.length > 0 && <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[9px] font-black text-red-800"><Copy size={12}/> อาจซ้ำ {relatedDuplicateIds.length + 1} รายการ</span>}
                                   {isLastSaved && (
                                     <span
                                       role="status"
@@ -634,6 +801,25 @@ const QuestionManager: React.FC = () => {
                             </div>
                             <h4 className="font-black text-slate-800 text-sm leading-relaxed">{q.content_th}</h4>
                             <p className="text-[10px] text-slate-600 italic leading-relaxed mb-4">{q.content_en}</p>
+                            {(qualityIssues.length > 0 || relatedDuplicateIds.length > 0) && (
+                              <div className="mb-3 grid grid-cols-1 gap-2 lg:grid-cols-2">
+                                {qualityIssues.length > 0 && (
+                                  <details className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-amber-950">
+                                    <summary className="cursor-pointer text-[10px] font-black">ดูจุดที่ต้องแก้ {qualityIssues.length} จุด</summary>
+                                    <ul className="mt-2 list-disc space-y-1 pl-4 text-[10px] font-bold">
+                                      {qualityIssues.map((issue) => <li key={`${q.id}-${issue}`}>{issue}</li>)}
+                                    </ul>
+                                  </details>
+                                )}
+                                {relatedDuplicateIds.length > 0 && (
+                                  <details className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-red-950">
+                                    <summary className="cursor-pointer text-[10px] font-black">ดูคำถามที่อาจซ้ำ</summary>
+                                    <p className="mt-2 text-[10px] font-bold">พบข้อความใกล้เคียงกับ {relatedDuplicateIds.map(getQuestionCode).join(', ')}</p>
+                                    <p className="mt-1 text-[9px] text-red-800">ระบบแจ้งเตือนเท่านั้น กรุณาตรวจสอบก่อนลบหรือแก้ไข</p>
+                                  </details>
+                                )}
+                              </div>
+                            )}
                             <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-100">
                                 <span className="text-[9px] font-black text-slate-700 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-200">
                                   {q.pattern === QuestionPattern.MATCHING ? `${choices.length} คู่จับคู่` : q.pattern === QuestionPattern.SHORT_ANSWER ? 'คำตอบแบบเขียน' : `${choices.length} ตัวเลือก`}
@@ -662,7 +848,7 @@ const QuestionManager: React.FC = () => {
                     </div>
                   );
                 })}
-                {filteredQuestions.length === 0 && <AsyncState compact variant="empty" title="ไม่พบข้อสอบ" description={searchTerm ? 'ลองเปลี่ยนคำค้นหา หรือเลือกหลักสูตรอื่น' : 'กดสร้างข้อสอบหรือนำเข้าไฟล์ Excel เพื่อเริ่มต้น'} />}
+                {filteredQuestions.length === 0 && <AsyncState compact variant="empty" title="ไม่พบข้อสอบ" description={hasQuestionFilters ? 'ไม่พบคำถามที่ตรงกับคำค้นหาและตัวกรองปัจจุบัน ลองล้างตัวกรองบางรายการ' : 'กดสร้างข้อสอบหรือนำเข้าไฟล์ Excel เพื่อเริ่มต้น'} />}
                 {totalPages > 1 && (
                     <div className="flex justify-center items-center gap-4 mt-8 pt-6 border-t border-slate-50">
                         <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} aria-label="หน้าก่อนหน้า" className="min-h-11 min-w-11 p-2 bg-slate-50 rounded-xl hover:bg-slate-100 disabled:opacity-20 transition-all"><ChevronLeft size={20}/></button>
