@@ -170,6 +170,7 @@ async function installMocks(page) {
     }
 
     const table = url.pathname.split('/').pop();
+    const expectsObject = (request.headers().accept || '').includes('application/vnd.pgrst.object+json');
     if (request.method() === 'HEAD') {
       return route.fulfill({
         status: 200,
@@ -181,12 +182,18 @@ async function installMocks(page) {
         body: '',
       });
     }
-    if (table === 'users') return json(route, request.method() === 'GET' ? [profile(currentRole)] : []);
+    if (table === 'users') {
+      if (request.method() !== 'GET') return json(route, []);
+      return json(route, expectsObject ? profile(currentRole) : [profile(currentRole)]);
+    }
     if (table === 'vendors') return json(route, request.method() === 'GET' ? [{ id: vendorId, name: 'บริษัททดสอบ', status: 'APPROVED' }] : []);
-    if (table === 'work_permits') return json(route, [{
+    if (table === 'work_permits') {
+      const permit = {
       id: '50000000-0000-4000-8000-000000000001', user_id: userId, permit_no: '2026070024',
       expire_date: future, status: 'ACTIVE', created_at: '2026-07-29T00:00:00.000Z',
-    }]);
+      };
+      return json(route, expectsObject ? permit : [permit]);
+    }
     if (table === 'exam_history') return json(route, [
       { status: 'PASSED', exam_type: 'INDUCTION' },
       { status: 'PASSED', exam_type: 'SUPPLIER_OUTSOURCE' },
