@@ -14,6 +14,7 @@
     "test:watch": "vitest",
     "test:a11y": "node scripts/check-accessibility.mjs",
     "test:e2e": "node scripts/check-e2e.mjs",
+    "smoke:vendor:rpc": "node scripts/smoke-vendor-rpc.mjs",
     "validate:line": "node scripts/validate-line-flex.mjs",
     "validate:line:offline": "node scripts/validate-line-offline.mjs",
     "test:line:live": "node scripts/send-line-smoke.mjs"
