@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from '../services/supabaseApi';
 import { supabase } from '../services/supabaseClient';
 import { ExamType, Question, QuestionPattern, QuestionRevision } from '../types';
@@ -127,6 +128,11 @@ const revisionActionLabels: Record<QuestionRevision['change_type'], string> = {
   PUBLISH: 'เผยแพร่',
   UNPUBLISH: 'เปลี่ยนเป็นฉบับร่าง',
   RESTORE: 'กู้คืนข้อมูล',
+};
+
+const PortalWhen: React.FC<{ active: boolean; children: React.ReactNode }> = ({ active, children }) => {
+  if (active && typeof document !== 'undefined') return createPortal(children, document.body);
+  return <>{children}</>;
 };
 
 const QuestionManager: React.FC = () => {
@@ -613,8 +619,9 @@ const QuestionManager: React.FC = () => {
     <div className="space-y-8 pb-10 text-left">
       
       {/* 🟢 Form Section — edit mode reuses the same form inside an accessible modal. */}
+      <PortalWhen active={Boolean(editingId)}>
       <div
-        className={editingId ? 'fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto bg-slate-950/70 p-4 backdrop-blur-sm' : ''}
+        className={editingId ? 'fixed inset-0 z-[9998] flex items-stretch justify-center overflow-hidden bg-slate-950/70 p-2 backdrop-blur-sm sm:items-center sm:p-4' : ''}
         onMouseDown={(event) => { if (editingId && event.target === event.currentTarget) requestCloseEditor(); }}
       >
       <section
@@ -624,11 +631,11 @@ const QuestionManager: React.FC = () => {
         aria-modal={editingId ? true : undefined}
         aria-labelledby={editingId ? 'question-editor-title' : undefined}
         tabIndex={editingId ? -1 : undefined}
-        className={`p-6 md:p-8 rounded-[2rem] border-2 transition-all focus:outline-none ${editingId ? 'w-full max-w-6xl max-h-[calc(100vh-2rem)] overflow-y-auto bg-white border-amber-200 shadow-2xl' : 'bg-white border-slate-100 shadow-sm'}`}
+        className={`rounded-[2rem] border-2 p-6 transition-all focus:outline-none md:p-8 ${editingId ? 'h-[calc(100dvh-1rem)] w-full max-w-6xl overflow-y-auto overscroll-contain border-amber-200 bg-white shadow-2xl sm:h-auto sm:max-h-[calc(100dvh-2rem)]' : 'border-slate-100 bg-white shadow-sm'}`}
         onMouseDown={(event) => event.stopPropagation()}
         onChangeCapture={() => { if (editingId) setIsEditorDirty(true); }}
       >
-        <div className="flex justify-between items-center mb-6">
+        <div className={`${editingId ? 'sticky top-0 z-30 -mx-3 -mt-3 mb-5 border-b border-slate-100 bg-white/95 px-3 py-3 backdrop-blur md:-mx-4 md:-mt-4 md:px-4 md:py-4' : 'mb-6'} flex items-center justify-between`}>
           <div className="flex items-center gap-3">
             <div className={`p-2.5 rounded-xl ${editingId ? 'bg-amber-100 text-amber-800' : 'bg-blue-600 text-white'}`}>{editingId ? <Edit3 size={20} /> : <Plus size={20} />}</div>
             <div>
@@ -747,10 +754,12 @@ const QuestionManager: React.FC = () => {
         </div>
       </section>
       </div>
+      </PortalWhen>
 
       {revisionQuestion && (
+        <PortalWhen active>
         <div
-          className="fixed inset-0 z-[210] flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm sm:p-6"
+          className="fixed inset-0 z-[9998] flex items-stretch justify-center bg-slate-950/60 p-2 backdrop-blur-sm sm:items-center sm:p-4"
           onMouseDown={(event) => { if (event.target === event.currentTarget) closeRevisionHistory(); }}
         >
           <section
@@ -759,7 +768,7 @@ const QuestionManager: React.FC = () => {
             aria-modal="true"
             aria-labelledby="question-history-title"
             tabIndex={-1}
-            className="flex max-h-[calc(100vh-1.5rem)] w-full max-w-4xl flex-col overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-2xl focus:outline-none sm:max-h-[calc(100vh-3rem)]"
+            className="flex h-[calc(100dvh-1rem)] w-full max-w-4xl flex-col overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white shadow-2xl focus:outline-none sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:rounded-[2rem]"
             onMouseDown={(event) => event.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-5 sm:px-7">
@@ -846,6 +855,7 @@ const QuestionManager: React.FC = () => {
             </div>
           </section>
         </div>
+        </PortalWhen>
       )}
 
       {/* 🔵 Master Repository List */}

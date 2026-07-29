@@ -338,6 +338,28 @@ async function assertA11y(page, label, scope) {
   }
 }
 
+async function assertDialogFitsViewport(page, selector, label) {
+  const result = await page.locator(selector).evaluate((dialog) => {
+    const rect = dialog.getBoundingClientRect();
+    const testX = rect.left + Math.min(rect.width / 2, 80);
+    const testY = rect.top + Math.min(6, rect.height / 2);
+    const topElement = document.elementFromPoint(testX, testY);
+    return {
+      top: rect.top,
+      right: rect.right,
+      bottom: rect.bottom,
+      left: rect.left,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      isTopmost: Boolean(topElement && dialog.contains(topElement)),
+    };
+  });
+  const outsideViewport = result.top < 0 || result.left < 0
+    || result.right > result.viewportWidth || result.bottom > result.viewportHeight;
+  if (outsideViewport) throw new Error(`${label} is outside the viewport: ${JSON.stringify(result)}`);
+  if (!result.isTopmost) throw new Error(`${label} is covered by another page element`);
+}
+
 const server = await preview({ preview: { host: '127.0.0.1', port, strictPort: true }, logLevel: 'error' });
 let browser;
 try {
@@ -422,6 +444,7 @@ try {
   await adminPage.getByText('รุ่นที่ 2', { exact: true }).waitFor();
   await adminPage.getByText('รุ่นที่ 1', { exact: true }).waitFor();
   await adminPage.getByText('ข้อมูลตั้งต้น', { exact: true }).waitFor();
+  await assertDialogFitsViewport(adminPage, '[aria-labelledby="question-history-title"]', 'Question history modal');
   await assertA11y(adminPage, 'question revision history');
   await adminPage.getByRole('button', { name: 'กู้คืนรุ่นนี้' }).click();
   await adminPage.getByText(/กู้คืน Q-000001 เป็นรุ่นที่ 1 สำเร็จ/).waitFor();
@@ -433,6 +456,7 @@ try {
   await adminPage.getByRole('button', { name: /แก้ไขคำถาม Q-/ }).first().click();
   await adminPage.getByRole('dialog', { name: 'Edit Question' }).waitFor();
   await adminPage.getByText('ข้อ 1 จาก 10', { exact: true }).waitFor();
+  await assertDialogFitsViewport(adminPage, '#question-edit-dialog', 'Question edit modal');
   await assertA11y(adminPage, 'question edit modal', '#question-edit-dialog');
   await adminPage.getByRole('button', { name: /ข้อถัดไป/ }).first().click();
   await adminPage.locator('#question-content-th').waitFor();
@@ -449,6 +473,9 @@ try {
   if (!(await adminPage.locator('#question-content-th').inputValue()).endsWith('(สำเนา)')) throw new Error('Duplicated question is missing the copy suffix');
   await adminPage.getByText(/คำถามนี้ปิดใช้งานอยู่/).waitFor();
   await assertA11y(adminPage, 'duplicated question edit modal', '#question-edit-dialog');
+  await adminPage.setViewportSize({ width: 390, height: 844 });
+  await assertDialogFitsViewport(adminPage, '#question-edit-dialog', 'Mobile question edit modal');
+  await adminPage.setViewportSize({ width: 1365, height: 900 });
   await adminPage.getByRole('button', { name: 'ปิดหน้าต่างแก้ไขคำถาม' }).click();
   await adminPage.getByRole('button', { name: 'Supplier & Outsource', exact: true }).click();
   await adminPage.getByText('Program Control & Reporting', { exact: true }).waitFor();
