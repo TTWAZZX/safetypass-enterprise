@@ -8,11 +8,15 @@
     "prebuild": "npm run check:text",
     "dev": "vite",
     "build": "vite build",
+    "check:bundle": "node scripts/check-bundle-budget.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:a11y": "node scripts/check-accessibility.mjs",
-    "validate:line": "node scripts/validate-line-flex.mjs"
+    "test:e2e": "node scripts/check-e2e.mjs",
+    "validate:line": "node scripts/validate-line-flex.mjs",
+    "validate:line:offline": "node scripts/validate-line-offline.mjs",
+    "test:line:live": "node scripts/send-line-smoke.mjs"
   },
   "dependencies": {
     "@line/liff": "^2.27.3",

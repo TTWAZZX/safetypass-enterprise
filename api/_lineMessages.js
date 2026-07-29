@@ -213,6 +213,125 @@ export function createSupplierOutsourceAccessNoticeMessage({
   };
 }
 
+export function createWorkPermitPassMessage({ permitNo, name, vendor, score, totalQuestions }) {
+  const digitalPassUrl = `${APP_URL}/verify?permit=${encodeURIComponent(permitNo)}`;
+  return {
+    type: 'flex',
+    altText: `สอบผ่าน Work Permit: ${name}`,
+    contents: {
+      type: 'bubble',
+      size: 'mega',
+      header: {
+        type: 'box',
+        layout: 'vertical',
+        backgroundColor: '#0F172A',
+        paddingAll: '20px',
+        paddingTop: '22px',
+        paddingBottom: '22px',
+        contents: [
+          { type: 'text', text: 'SECURITY COMPLIANCE NODE', color: '#EAB308', size: 'xxs', weight: 'bold' },
+          { type: 'text', text: 'PERMIT APPROVED', color: '#10B981', weight: 'bold', size: 'lg', wrap: true, margin: 'sm' },
+        ],
+      },
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        paddingAll: '20px',
+        contents: [
+          {
+            type: 'text',
+            text: 'สรุปผลการทดสอบความปลอดภัยก่อนเข้างาน (Safety Induction & Work Permit)',
+            size: 'xs',
+            color: '#64748B',
+            wrap: true,
+          },
+          { type: 'separator', margin: 'lg', color: '#E2E8F0' },
+          {
+            type: 'box', layout: 'vertical', margin: 'lg', spacing: 'md',
+            contents: [
+              createDetailRow('ใบอนุญาต', permitNo),
+              createDetailRow('ชื่อ', name),
+              createDetailRow('บริษัท', vendor || 'ไม่มีสังกัด'),
+              createDetailRow('คะแนน', `${score} / ${totalQuestions}`, '#10B981'),
+              createDetailRow('สถานะ', 'ผ่านเกณฑ์ (บัตร 5 วัน)', '#10B981'),
+            ],
+          },
+        ],
+      },
+      footer: {
+        type: 'box',
+        layout: 'vertical',
+        spacing: 'sm',
+        paddingAll: '20px',
+        paddingTop: '0px',
+        contents: [
+          {
+            type: 'button', style: 'primary', height: 'sm', color: '#3B82F6',
+            action: { type: 'uri', label: 'ดูใบเซอร์ / Digital Pass', uri: digitalPassUrl, altUri: { desktop: digitalPassUrl } },
+          },
+          {
+            type: 'button', style: 'secondary', height: 'sm',
+            action: { type: 'uri', label: 'ระงับสิทธิ์สอบ (Admin)', uri: `${APP_URL}/admin?search=${encodeURIComponent(permitNo)}` },
+          },
+          createLoginButton(),
+        ],
+      },
+    },
+  };
+}
+
+export function createNewVendorRequestMessage({ vendorName, timestamp }) {
+  return {
+    type: 'flex',
+    altText: `มีบริษัทใหม่ลงทะเบียน: ${vendorName}`,
+    contents: {
+      type: 'bubble',
+      size: 'mega',
+      header: {
+        type: 'box', layout: 'vertical', backgroundColor: '#0F172A',
+        paddingAll: '20px', paddingTop: '22px', paddingBottom: '22px',
+        contents: [
+          { type: 'text', text: 'SECURITY COMPLIANCE NODE', color: '#EAB308', size: 'xxs', weight: 'bold' },
+          { type: 'text', text: 'NEW VENDOR REQUEST', color: '#FFFFFF', size: 'xl', weight: 'bold', margin: 'sm' },
+        ],
+      },
+      body: {
+        type: 'box', layout: 'vertical', paddingAll: '20px',
+        contents: [
+          { type: 'text', text: 'มีการขอเพิ่มรายชื่อบริษัทใหม่เข้าสู่ระบบ กรุณาตรวจสอบและดำเนินการอนุมัติ', size: 'xs', color: '#64748B', wrap: true },
+          { type: 'separator', margin: 'lg', color: '#E2E8F0' },
+          {
+            type: 'box', layout: 'vertical', margin: 'lg', spacing: 'md',
+            contents: [
+              createDetailRow('บริษัท', vendorName),
+              createDetailRow('ผู้ติดต่อ', 'Newly registered user'),
+              createDetailRow('เวลา', timestamp),
+            ],
+          },
+        ],
+      },
+      footer: {
+        type: 'box', layout: 'vertical', spacing: 'sm', paddingAll: '20px', paddingTop: '0px',
+        contents: [
+          {
+            type: 'box', layout: 'vertical', backgroundColor: '#ECFDF5', paddingAll: '10px', cornerRadius: '8px',
+            contents: [{ type: 'text', text: 'CTR GATEPASS', size: 'xs', color: '#10B981', weight: 'bold', align: 'center' }],
+          },
+          createLoginButton(),
+        ],
+      },
+    },
+  };
+}
+
+export function markMessageAsTest(message) {
+  const copy = structuredClone(message);
+  copy.altText = `[TEST] ${copy.altText}`;
+  const headerTexts = copy.contents?.header?.contents?.filter((item) => item.type === 'text') || [];
+  if (headerTexts.length > 0) headerTexts[headerTexts.length - 1].text = `[TEST] ${headerTexts[headerTexts.length - 1].text}`;
+  return copy;
+}
+
 function createDetailRow(label, value, valueColor = '#0F172A') {
   return {
     type: 'box',
