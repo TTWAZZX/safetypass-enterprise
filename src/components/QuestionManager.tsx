@@ -7,12 +7,45 @@ import {
   Plus, Save, Trash2, BookOpen, Ticket, Loader2, 
   Edit3, Upload, Download, X, Search, Image as ImageIcon,
   ChevronLeft, ChevronRight, RefreshCw, AlertCircle, CheckCircle2,
-  ListFilter, Hash, HelpCircle, ArrowRightLeft
+  ListFilter, Hash, HelpCircle, ArrowRightLeft, ChevronDown
 } from 'lucide-react';
 import AsyncState from './AsyncState';
 import { useDialogFocus } from '../hooks/useDialogFocus';
+import { useToastContext } from './ToastProvider';
+
+const getQuestionCode = (id: string) => {
+  const compactId = String(id || '').replace(/[^a-zA-Z0-9]/g, '');
+  return `Q-${(compactId.slice(-6) || '000000').toUpperCase()}`;
+};
+
+const getQuestionChoices = (question: any) => Array.isArray(question?.choices_json) ? question.choices_json : [];
+
+const getCorrectChoiceIndex = (question: any) => {
+  const choices = getQuestionChoices(question);
+  if (Number.isInteger(question?.correct_choice_index) && question.correct_choice_index >= 0) {
+    return question.correct_choice_index;
+  }
+  return choices.findIndex((choice: any) => choice?.is_correct);
+};
+
+const getChoiceText = (choice: any) => choice?.text_th || choice?.text_en || 'ไม่มีข้อความตัวเลือก';
+
+const getAnswerSummary = (question: any) => {
+  const choices = getQuestionChoices(question);
+  if (question.pattern === QuestionPattern.SHORT_ANSWER) {
+    return choices[0]?.correct_answer || 'ยังไม่ได้ระบุเฉลย';
+  }
+  if (question.pattern === QuestionPattern.MATCHING) {
+    return choices.length > 0 ? `${choices.length} คู่คำตอบ` : 'ยังไม่ได้ระบุคู่คำตอบ';
+  }
+  const correctIndex = getCorrectChoiceIndex(question);
+  const correctChoice = choices[correctIndex];
+  const correctText = correctChoice?.text_th || correctChoice?.text_en;
+  return correctText ? `ตัวเลือก ${correctIndex + 1} — ${correctText}` : 'ยังไม่ได้ระบุเฉลย';
+};
 
 const QuestionManager: React.FC = () => {
+  const { showToast } = useToastContext();
   const [questions, setQuestions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -39,10 +72,32 @@ const QuestionManager: React.FC = () => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [lastSavedQuestion, setLastSavedQuestion] = useState<{ id: string; savedAt: Date } | null>(null);
+  const [highlightedQuestionId, setHighlightedQuestionId] = useState<string | null>(null);
+  const [expandedAnswerIds, setExpandedAnswerIds] = useState<Set<string>>(() => new Set());
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const editDialogRef = useRef<HTMLElement>(null);
+  const questionCardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+  }, []);
+
+  useEffect(() => {
+    if (!highlightedQuestionId) return;
+    const frame = window.requestAnimationFrame(() => {
+      const card = questionCardRefs.current.get(highlightedQuestionId);
+      if (!card) return;
+      const rect = card.getBoundingClientRect();
+      if (rect.top < 0 || rect.bottom > window.innerHeight) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [highlightedQuestionId, currentPage, questions]);
 
   useEffect(() => {
     if (!editingId) return;
@@ -51,8 +106,9 @@ const QuestionManager: React.FC = () => {
     return () => { document.body.style.overflow = previousOverflow; };
   }, [editingId]);
 
-  const fetchQuestions = async () => {
-    setLoading(true);
+  const fetchQuestions = async (options: { showLoading?: boolean; resetPage?: boolean } = {}) => {
+    const { showLoading = true, resetPage = true } = options;
+    if (showLoading) setLoading(true);
     setLoadError('');
     try {
       const { data, error } = await supabase
@@ -70,12 +126,12 @@ const QuestionManager: React.FC = () => {
       }));
 
       setQuestions(sanitized);
-      setCurrentPage(1);
+      if (resetPage) setCurrentPage(1);
     } catch (err: any) {
       console.error("Fetch Error:", err);
       setLoadError(err?.message || 'ไม่สามารถโหลดคลังข้อสอบได้');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
@@ -193,12 +249,21 @@ const QuestionManager: React.FC = () => {
     };
 
     try {
-      if (editingId) await api.updateQuestion(editingId, payload);
-      else await api.createQuestion(payload);
-      alert("บันทึกสำเร็จ!");
+      const wasEditing = Boolean(editingId);
+      const savedId = editingId
+        ? await api.updateQuestion(editingId, payload)
+        : await api.createQuestion(payload);
       handleCancelEdit();
-      fetchQuestions();
-    } catch (err: any) { alert("Error: " + err.message); }
+      if (!wasEditing) setCurrentPage(1);
+      await fetchQuestions({ showLoading: false, resetPage: !wasEditing });
+      setLastSavedQuestion({ id: savedId, savedAt: new Date() });
+      setHighlightedQuestionId(savedId);
+      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+      highlightTimerRef.current = setTimeout(() => setHighlightedQuestionId(null), 5000);
+      showToast(`บันทึกคำถาม ${getQuestionCode(savedId)} สำเร็จ`, 'success');
+    } catch (err: any) {
+      showToast(`บันทึกคำถามไม่สำเร็จ: ${err.message}`, 'error');
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -356,39 +421,92 @@ const QuestionManager: React.FC = () => {
                 <div className="relative flex-1"><Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input placeholder="Search keywords..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none w-full" /></div>
                 <input ref={fileInputRef} type="file" accept=".xlsx" className="hidden" onChange={handleQuestionImport} />
                 <button onClick={() => fileInputRef.current?.click()} className="flex min-h-11 items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5 text-[9px] font-black uppercase tracking-widest text-emerald-700"><Upload size={16}/> Import</button>
-                <button onClick={fetchQuestions} aria-label="รีเฟรชคลังข้อสอบ" className="min-h-11 min-w-11 p-2.5 bg-slate-50 text-slate-400 rounded-xl hover:text-blue-600 transition-all border border-slate-100 shadow-sm"><RefreshCw size={18}/></button>
+                <button onClick={() => fetchQuestions()} aria-label="รีเฟรชคลังข้อสอบ" className="min-h-11 min-w-11 p-2.5 bg-slate-50 text-slate-400 rounded-xl hover:text-blue-600 transition-all border border-slate-100 shadow-sm"><RefreshCw size={18}/></button>
             </div>
         </div>
         
-        {loading ? <AsyncState compact variant="loading" title="กำลังโหลดคลังข้อสอบ" /> : loadError ? <AsyncState compact variant="error" title="โหลดคลังข้อสอบไม่สำเร็จ" description={loadError} onRetry={fetchQuestions} /> : (
+        {loading ? <AsyncState compact variant="loading" title="กำลังโหลดคลังข้อสอบ" /> : loadError ? <AsyncState compact variant="error" title="โหลดคลังข้อสอบไม่สำเร็จ" description={loadError} onRetry={() => fetchQuestions()} /> : (
             <div className="grid grid-cols-1 gap-4">
-                {currentQuestions.map((q) => (
-                    <div key={q.id} className={`p-4 md:p-5 border-2 rounded-3xl flex flex-col md:flex-row gap-5 items-start group transition-all ${editingId === q.id ? 'border-amber-400 bg-amber-50/10' : 'border-slate-50 hover:border-blue-100 hover:shadow-lg'}`}>
+                {currentQuestions.map((q) => {
+                  const questionCode = getQuestionCode(q.id);
+                  const isLastSaved = lastSavedQuestion?.id === q.id;
+                  const isHighlighted = highlightedQuestionId === q.id;
+                  const isAnswerExpanded = expandedAnswerIds.has(q.id);
+                  const choices = getQuestionChoices(q);
+                  const answerSummary = getAnswerSummary(q);
+                  const hasAnswer = !answerSummary.startsWith('ยังไม่ได้ระบุ');
+
+                  return (
+                    <div
+                      key={q.id}
+                      id={`question-card-${q.id}`}
+                      ref={(element) => {
+                        if (element) questionCardRefs.current.set(q.id, element);
+                        else questionCardRefs.current.delete(q.id);
+                      }}
+                      className={`p-4 md:p-5 border-2 rounded-3xl flex flex-col md:flex-row gap-5 items-start group transition-all duration-500 ${
+                        isHighlighted
+                          ? 'border-emerald-500 bg-emerald-50 shadow-lg shadow-emerald-100 ring-4 ring-emerald-100'
+                          : editingId === q.id
+                            ? 'border-amber-400 bg-amber-50/10'
+                            : 'border-slate-100 hover:border-blue-100 hover:shadow-lg'
+                      }`}
+                    >
                         <div className="w-full md:w-28 h-28 flex-shrink-0 relative">
-                            {q.image_url ? <img src={q.image_url} className="w-full h-full object-cover rounded-2xl bg-slate-50 border border-slate-100 shadow-inner" /> : <div className="w-full h-full bg-slate-50 rounded-2xl flex items-center justify-center text-slate-200 border border-slate-100 shadow-sm"><ImageIcon size={24}/></div>}
+                            {q.image_url ? <img src={q.image_url} alt={`รูปประกอบคำถาม ${questionCode}`} className="w-full h-full object-cover rounded-2xl bg-slate-50 border border-slate-100 shadow-inner" /> : <div className="w-full h-full bg-slate-50 rounded-2xl flex items-center justify-center text-slate-300 border border-slate-100 shadow-sm"><ImageIcon size={24}/></div>}
                             <div className="absolute top-1.5 left-1.5 px-2 py-0.5 bg-slate-900/80 text-white text-[6px] font-black rounded uppercase tracking-tighter shadow-md border border-white/20">{q.pattern?.replace('_', ' ')}</div>
                         </div>
                         <div className="flex-1 min-w-0 text-left">
-                            <div className="flex justify-between items-center mb-1">
-                                <span className={`px-2 py-0.5 rounded-md text-[8px] font-black border ${q.type === 'INDUCTION' ? 'text-blue-600 border-blue-100 bg-blue-50' : q.type === 'WORK_PERMIT' ? 'text-purple-600 border-purple-100 bg-purple-50' : 'text-emerald-700 border-emerald-100 bg-emerald-50'}`}>{q.type}</span>
-                                <div className="flex gap-1 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="flex flex-wrap justify-between items-start gap-2 mb-2">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="px-2.5 py-1 rounded-md text-[9px] font-black text-slate-700 border border-slate-200 bg-slate-50" title={`รหัสคำถาม ${q.id}`}>{questionCode}</span>
+                                  <span className={`px-2 py-1 rounded-md text-[8px] font-black border ${q.type === 'INDUCTION' ? 'text-blue-700 border-blue-100 bg-blue-50' : q.type === 'WORK_PERMIT' ? 'text-purple-700 border-purple-100 bg-purple-50' : 'text-emerald-800 border-emerald-100 bg-emerald-50'}`}>{q.type}</span>
+                                  {isLastSaved && (
+                                    <span
+                                      role="status"
+                                      className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-100 px-2.5 py-1 text-[9px] font-black text-emerald-800"
+                                      title={`บันทึกเมื่อ ${lastSavedQuestion.savedAt.toLocaleTimeString('th-TH')}`}
+                                    >
+                                      <CheckCircle2 size={12} /> บันทึกแล้ว • เมื่อสักครู่
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex gap-1">
                                     <button onClick={() => handleToggleActive(q)} aria-label={`${q.is_active ? 'ปิด' : 'เปิด'}การใช้งานข้อสอบ`} className={`min-h-11 min-w-11 rounded-lg px-2 text-[8px] font-black ${q.is_active ? 'bg-emerald-50 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>{q.is_active ? 'ON' : 'OFF'}</button>
-                                    <button onClick={() => handleEdit(q)} aria-label="แก้ไขข้อสอบ" className="min-h-11 min-w-11 p-3 text-slate-600 hover:text-blue-700 transition-colors active:scale-90"><Edit3 size={16}/></button>
-                                    <button onClick={() => handleDelete(q.id)} aria-label="ลบข้อสอบ" className="min-h-11 min-w-11 p-3 text-slate-600 hover:text-red-700 transition-colors active:scale-90"><Trash2 size={16}/></button>
+                                    <button onClick={() => handleEdit(q)} aria-label={`แก้ไขคำถาม ${questionCode}`} className="min-h-11 min-w-11 p-3 text-slate-600 hover:text-blue-700 transition-colors active:scale-90"><Edit3 size={16}/></button>
+                                    <button onClick={() => handleDelete(q.id)} aria-label={`ลบคำถาม ${questionCode}`} className="min-h-11 min-w-11 p-3 text-slate-600 hover:text-red-700 transition-colors active:scale-90"><Trash2 size={16}/></button>
                                 </div>
                             </div>
-                            <h4 className="font-black text-slate-800 text-sm truncate">{q.content_th}</h4>
-                            <p className="text-[10px] text-slate-600 italic truncate mb-4">{q.content_en}</p>
-                            <div className="flex flex-wrap gap-2 pt-3 border-t border-slate-50">
-                                {q.pattern === QuestionPattern.SHORT_ANSWER ? (
-                                    <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-full border border-blue-100 shadow-sm uppercase tracking-tighter">Ans: {q.choices_json?.[0]?.correct_answer}</span>
-                                ) : (
-                                    <span className="text-[9px] font-black text-emerald-800 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100 shadow-sm uppercase tracking-tighter">{q.choices_json?.length} Configuration Elements</span>
-                                )}
+                            <h4 className="font-black text-slate-800 text-sm leading-relaxed">{q.content_th}</h4>
+                            <p className="text-[10px] text-slate-600 italic leading-relaxed mb-4">{q.content_en}</p>
+                            <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-100">
+                                <span className="text-[9px] font-black text-slate-700 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-200">
+                                  {q.pattern === QuestionPattern.MATCHING ? `${choices.length} คู่จับคู่` : q.pattern === QuestionPattern.SHORT_ANSWER ? 'คำตอบแบบเขียน' : `${choices.length} ตัวเลือก`}
+                                </span>
+                                <span className={`max-w-full truncate text-[9px] font-black px-3 py-1.5 rounded-full border ${hasAnswer ? 'text-emerald-800 bg-emerald-50 border-emerald-200' : 'text-amber-800 bg-amber-50 border-amber-200'}`} title={answerSummary}>
+                                  เฉลย: {answerSummary}
+                                </span>
+                                <button
+                                  type="button"
+                                  aria-expanded={isAnswerExpanded}
+                                  aria-controls={`question-answer-${q.id}`}
+                                  onClick={() => setExpandedAnswerIds((previous) => {
+                                    const next = new Set(previous);
+                                    if (next.has(q.id)) next.delete(q.id);
+                                    else next.add(q.id);
+                                    return next;
+                                  })}
+                                  className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-[9px] font-black text-blue-700 hover:bg-blue-100"
+                                >
+                                  {isAnswerExpanded ? 'ซ่อนตัวเลือกและเฉลย' : 'ดูตัวเลือกและเฉลย'}
+                                  <ChevronDown size={14} className={`transition-transform ${isAnswerExpanded ? 'rotate-180' : ''}`} />
+                                </button>
                             </div>
+                            {isAnswerExpanded && <QuestionAnswerDetails question={q} />}
                         </div>
                     </div>
-                ))}
+                  );
+                })}
                 {filteredQuestions.length === 0 && <AsyncState compact variant="empty" title="ไม่พบข้อสอบ" description={searchTerm ? 'ลองเปลี่ยนคำค้นหา หรือเลือกหลักสูตรอื่น' : 'กดสร้างข้อสอบหรือนำเข้าไฟล์ Excel เพื่อเริ่มต้น'} />}
                 {totalPages > 1 && (
                     <div className="flex justify-center items-center gap-4 mt-8 pt-6 border-t border-slate-50">
@@ -400,6 +518,72 @@ const QuestionManager: React.FC = () => {
             </div>
         )}
       </div>
+    </div>
+  );
+};
+
+const QuestionAnswerDetails = ({ question }: { question: any }) => {
+  const choices = getQuestionChoices(question);
+
+  if (question.pattern === QuestionPattern.SHORT_ANSWER) {
+    return (
+      <div id={`question-answer-${question.id}`} className="mt-4 rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+        <p className="mb-1 text-[9px] font-black uppercase tracking-widest text-blue-700">คำตอบที่ถูกต้อง</p>
+        <p className="text-sm font-bold text-slate-800">{choices[0]?.correct_answer || 'ยังไม่ได้ระบุเฉลย'}</p>
+      </div>
+    );
+  }
+
+  if (question.pattern === QuestionPattern.MATCHING) {
+    return (
+      <div id={`question-answer-${question.id}`} className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <p className="mb-3 text-[9px] font-black uppercase tracking-widest text-slate-600">คู่คำตอบที่ถูกต้อง</p>
+        {choices.length > 0 ? (
+          <ol className="space-y-2">
+            {choices.map((pair: any, index: number) => {
+              const leftTh = pair?.left_th || pair?.left_text_th || '-';
+              const rightTh = pair?.right_th || pair?.right_text_th || '-';
+              const leftEn = pair?.left_en || pair?.left_text_en || '';
+              const rightEn = pair?.right_en || pair?.right_text_en || '';
+              return (
+                <li key={`${question.id}-pair-${index}`} className="rounded-xl border border-slate-200 bg-white p-3">
+                  <div className="flex items-center gap-2 text-xs font-black text-slate-800">
+                    <span className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-blue-100 text-[9px] text-blue-700">{index + 1}</span>
+                    <span>{leftTh}</span><ArrowRightLeft size={13} className="flex-none text-emerald-700"/><span>{rightTh}</span>
+                  </div>
+                  {(leftEn || rightEn) && <p className="mt-1 pl-8 text-[10px] italic text-slate-600">{leftEn || '-'} ↔ {rightEn || '-'}</p>}
+                </li>
+              );
+            })}
+          </ol>
+        ) : <p className="text-xs font-bold text-amber-800">ยังไม่ได้ระบุคู่คำตอบ</p>}
+      </div>
+    );
+  }
+
+  const correctIndex = getCorrectChoiceIndex(question);
+  return (
+    <div id={`question-answer-${question.id}`} className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      <p className="mb-3 text-[9px] font-black uppercase tracking-widest text-slate-600">ตัวเลือกและเฉลย</p>
+      {choices.length > 0 ? (
+        <ol className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+          {choices.map((choice: any, index: number) => {
+            const isCorrect = index === correctIndex;
+            return (
+              <li key={`${question.id}-choice-${index}`} className={`rounded-xl border p-3 ${isCorrect ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 bg-white'}`}>
+                <div className="flex items-start gap-2">
+                  <span className={`flex h-6 w-6 flex-none items-center justify-center rounded-full text-[9px] font-black ${isCorrect ? 'bg-emerald-700 text-white' : 'bg-slate-100 text-slate-700'}`}>{index + 1}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold text-slate-800">{choice?.text_th || 'ไม่มีข้อความภาษาไทย'}</p>
+                    {choice?.text_en && <p className="mt-0.5 text-[10px] italic text-slate-600">{choice.text_en}</p>}
+                  </div>
+                  {isCorrect && <span className="inline-flex flex-none items-center gap-1 text-[9px] font-black text-emerald-800"><CheckCircle2 size={14}/> เฉลย</span>}
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      ) : <p className="text-xs font-bold text-amber-800">ยังไม่มีตัวเลือกและเฉลย</p>}
     </div>
   );
 };

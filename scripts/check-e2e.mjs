@@ -58,9 +58,10 @@ function examQuestions(type) {
     content_th: `คำถามทดสอบ ${index + 1}`,
     content_en: `Test question ${index + 1}`,
     choices_json: [
-      { text_th: 'คำตอบ ก', text_en: 'Choice A' },
-      { text_th: 'คำตอบ ข', text_en: 'Choice B' },
+      { text_th: 'คำตอบ ก', text_en: 'Choice A', is_correct: true },
+      { text_th: 'คำตอบ ข', text_en: 'Choice B', is_correct: false },
     ],
+    correct_choice_index: 0,
     image_url: null,
     is_active: true,
   }));
@@ -165,6 +166,7 @@ async function installMocks(page) {
         },
       };
       if (rpc === 'get_exam_questions') return json(route, examQuestions(payload.exam_type_param || 'INDUCTION'));
+      if (rpc === 'admin_save_question') return json(route, payload.question_id_param || examQuestions(payload.exam_type_param || 'INDUCTION')[0].id);
       if (Object.hasOwn(rpcResponses, rpc)) return json(route, rpcResponses[rpc]);
       return json(route, request.method() === 'POST' ? null : []);
     }
@@ -289,12 +291,16 @@ try {
   await adminPage.getByRole('button', { name: /^Questions$/i }).click();
   await adminPage.getByText('Assessment Manager', { exact: false }).waitFor();
   await adminPage.getByText('Master Repository', { exact: true }).waitFor();
+  await adminPage.getByText('เฉลย: ตัวเลือก 1 — คำตอบ ก', { exact: true }).first().waitFor();
+  await adminPage.getByRole('button', { name: 'ดูตัวเลือกและเฉลย' }).first().click();
+  await adminPage.getByText('ตัวเลือกและเฉลย', { exact: true }).first().waitFor();
   await assertA11y(adminPage, 'desktop question manager');
-  await adminPage.getByRole('button', { name: 'แก้ไขข้อสอบ' }).first().click();
+  await adminPage.getByRole('button', { name: /แก้ไขคำถาม Q-/ }).first().click();
   await adminPage.getByRole('dialog', { name: 'Edit Question' }).waitFor();
   await assertA11y(adminPage, 'question edit modal', '#question-edit-dialog');
-  await adminPage.keyboard.press('Escape');
-  await adminPage.getByRole('dialog', { name: 'Edit Question' }).waitFor({ state: 'detached' });
+  await adminPage.getByRole('button', { name: 'Update Question' }).click();
+  await adminPage.getByText(/บันทึกคำถาม Q-\d{6} สำเร็จ/).waitFor();
+  await adminPage.getByText('บันทึกแล้ว • เมื่อสักครู่', { exact: true }).waitFor();
   await adminPage.getByRole('button', { name: 'Supplier & Outsource', exact: true }).click();
   await adminPage.getByText('Program Control & Reporting', { exact: true }).waitFor();
   await assertA11y(adminPage, 'desktop supplier manager');

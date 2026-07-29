@@ -316,7 +316,7 @@ export const api = {
   },
 
   createQuestion: async (question: Partial<Question>) => {
-    const { error } = await supabase.rpc('admin_save_question', {
+    const { data, error } = await supabase.rpc('admin_save_question', {
       question_id_param: null,
       exam_type_param: question.type,
       pattern_param: question.pattern,
@@ -328,10 +328,11 @@ export const api = {
       is_active_param: question.is_active ?? true,
     })
     if (error) throw error
+    return data as string
   },
 
   updateQuestion: async (id: string, updates: Partial<Question>) => {
-    const { error } = await supabase.rpc('admin_save_question', {
+    const { data, error } = await supabase.rpc('admin_save_question', {
       question_id_param: id,
       exam_type_param: updates.type,
       pattern_param: updates.pattern,
@@ -343,6 +344,7 @@ export const api = {
       is_active_param: updates.is_active ?? true,
     })
     if (error) throw error
+    return data as string
   },
 
   deleteQuestion: async (id: string) => {
