@@ -7,7 +7,7 @@ import {
   Plus, Save, Trash2, BookOpen, Ticket, Loader2, 
   Edit3, Upload, Download, X, Search, Image as ImageIcon,
   ChevronLeft, ChevronRight, RefreshCw, AlertCircle, CheckCircle2,
-  ListFilter, Hash, HelpCircle, ArrowRightLeft, ChevronDown
+  ListFilter, Hash, HelpCircle, ArrowRightLeft, ChevronDown, Copy
 } from 'lucide-react';
 import AsyncState from './AsyncState';
 import { useDialogFocus } from '../hooks/useDialogFocus';
@@ -71,7 +71,11 @@ const QuestionManager: React.FC = () => {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingIsActive, setEditingIsActive] = useState(true);
+  const [isEditorDirty, setIsEditorDirty] = useState(false);
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
   const [lastSavedQuestion, setLastSavedQuestion] = useState<{ id: string; savedAt: Date } | null>(null);
   const [highlightedQuestionId, setHighlightedQuestionId] = useState<string | null>(null);
   const [expandedAnswerIds, setExpandedAnswerIds] = useState<Set<string>>(() => new Set());
@@ -145,13 +149,15 @@ const QuestionManager: React.FC = () => {
       const file = e.target.files[0];
       setImageFile(file);
       setPreviewUrl(URL.createObjectURL(file));
+      if (editingId) setIsEditorDirty(true);
     }
   };
 
-  const clearImage = () => {
+  const clearImage = (markDirty = true) => {
     setImageFile(null);
     setPreviewUrl(null);
     if (imageInputRef.current) imageInputRef.current.value = '';
+    if (markDirty && editingId) setIsEditorDirty(true);
   };
 
   const uploadImageToSupabase = async (): Promise<string | null> => {
@@ -168,12 +174,15 @@ const QuestionManager: React.FC = () => {
 
   const handleEdit = (q: any) => {
     setEditingId(q.id);
+    setEditingIsActive(q.is_active ?? true);
     setExamType(q.type as ExamType);
     const qPattern = q.pattern || QuestionPattern.MULTIPLE_CHOICE;
     setPattern(qPattern as QuestionPattern);
     setTh(q.content_th);
     setEn(q.content_en);
     setPreviewUrl(q.image_url);
+    setImageFile(null);
+    if (imageInputRef.current) imageInputRef.current.value = '';
 
     setShortAnswer('');
     setMatchingPairs([{ left_th: '', left_en: '', right_th: '', right_en: '' }]);
@@ -197,20 +206,64 @@ const QuestionManager: React.FC = () => {
         }));
         setChoices(fullChoices);
     }
+    setIsEditorDirty(false);
   };
 
   const handleCancelEdit = () => {
     setEditingId(null);
+    setEditingIsActive(true);
     setPattern(QuestionPattern.MULTIPLE_CHOICE);
     setTh(''); setEn(''); setShortAnswer('');
     setMatchingPairs([{ left_th: '', left_en: '', right_th: '', right_en: '' }]);
     setChoices([{ text_th: '', text_en: '', is_correct: true }, { text_th: '', text_en: '', is_correct: false }, { text_th: '', text_en: '', is_correct: false }, { text_th: '', text_en: '', is_correct: false }]);
-    clearImage();
+    clearImage(false);
+    setIsEditorDirty(false);
   };
 
-  useDialogFocus(Boolean(editingId), editDialogRef, handleCancelEdit);
+  const requestCloseEditor = () => {
+    if (isEditorDirty && !window.confirm('มีข้อมูลที่แก้ไขแต่ยังไม่ได้บันทึก ต้องการปิดหน้าต่างนี้หรือไม่?')) return;
+    handleCancelEdit();
+  };
 
-  const handleSave = async () => {
+  const getNavigableQuestions = () => {
+    const keyword = searchTerm.trim().toLowerCase();
+    return questions.filter((question) => !keyword
+      || String(question.content_th || '').toLowerCase().includes(keyword)
+      || String(question.content_en || '').toLowerCase().includes(keyword));
+  };
+
+  const getAdjacentQuestion = (direction: -1 | 1) => {
+    const navigable = getNavigableQuestions();
+    const currentIndex = navigable.findIndex((question) => question.id === editingId);
+    if (currentIndex < 0) return null;
+    return navigable[currentIndex + direction] || null;
+  };
+
+  const openQuestionInEditor = (question: any) => {
+    const navigable = getNavigableQuestions();
+    const targetIndex = navigable.findIndex((item) => item.id === question.id);
+    if (targetIndex >= 0) setCurrentPage(Math.floor(targetIndex / itemsPerPage) + 1);
+    handleEdit(question);
+    window.requestAnimationFrame(() => editDialogRef.current?.scrollTo({ top: 0, behavior: 'auto' }));
+  };
+
+  const handleNavigateQuestion = (direction: -1 | 1) => {
+    const target = getAdjacentQuestion(direction);
+    if (!target) return;
+    if (isEditorDirty && !window.confirm('มีข้อมูลที่แก้ไขแต่ยังไม่ได้บันทึก ต้องการไปยังคำถามอื่นหรือไม่?')) return;
+    openQuestionInEditor(target);
+  };
+
+  const markQuestionSaved = (id: string) => {
+    setLastSavedQuestion({ id, savedAt: new Date() });
+    setHighlightedQuestionId(id);
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    highlightTimerRef.current = setTimeout(() => setHighlightedQuestionId(null), 5000);
+  };
+
+  useDialogFocus(Boolean(editingId), editDialogRef, requestCloseEditor);
+
+  const handleSave = async (mode: 'close' | 'next' = 'close') => {
     if(!th || !en) return alert("กรุณากรอกโจทย์");
     let finalChoices: any[] = choices;
     let correctIndex = choices.findIndex(c => c.is_correct);
@@ -236,33 +289,69 @@ const QuestionManager: React.FC = () => {
         finalChoices = finalChoices.map((c, idx) => ({ ...c, is_correct: idx === correctIndex }));
     }
 
-    const imageUrl = await uploadImageToSupabase();
-    const payload: Partial<Question> = { 
-        type: examType, 
-        pattern: pattern, 
-        content_th: th, 
-        content_en: en, 
-        choices_json: finalChoices, 
-        correct_choice_index: correctIndex, 
-        image_url: imageUrl, 
-        is_active: true 
-    };
-
+    const nextQuestion = mode === 'next' && editingId ? getAdjacentQuestion(1) : null;
+    setIsSaving(true);
     try {
+      const imageUrl = await uploadImageToSupabase();
+      const payload: Partial<Question> = {
+          type: examType,
+          pattern: pattern,
+          content_th: th,
+          content_en: en,
+          choices_json: finalChoices,
+          correct_choice_index: correctIndex,
+          image_url: imageUrl,
+          is_active: editingId ? editingIsActive : true
+      };
       const wasEditing = Boolean(editingId);
       const savedId = editingId
         ? await api.updateQuestion(editingId, payload)
         : await api.createQuestion(payload);
-      handleCancelEdit();
       if (!wasEditing) setCurrentPage(1);
       await fetchQuestions({ showLoading: false, resetPage: !wasEditing });
-      setLastSavedQuestion({ id: savedId, savedAt: new Date() });
-      setHighlightedQuestionId(savedId);
-      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
-      highlightTimerRef.current = setTimeout(() => setHighlightedQuestionId(null), 5000);
-      showToast(`บันทึกคำถาม ${getQuestionCode(savedId)} สำเร็จ`, 'success');
+      markQuestionSaved(savedId);
+      if (nextQuestion) {
+        openQuestionInEditor(nextQuestion);
+        showToast(`บันทึก ${getQuestionCode(savedId)} แล้ว กำลังเปิด ${getQuestionCode(nextQuestion.id)}`, 'success');
+      } else {
+        handleCancelEdit();
+        showToast(`บันทึกคำถาม ${getQuestionCode(savedId)} สำเร็จ`, 'success');
+      }
     } catch (err: any) {
       showToast(`บันทึกคำถามไม่สำเร็จ: ${err.message}`, 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDuplicate = async (question: any) => {
+    const sourceCode = getQuestionCode(question.id);
+    if (!window.confirm(`สร้างสำเนาคำถาม ${sourceCode} หรือไม่?\nสำเนาจะถูกปิดใช้งานไว้จนกว่าจะตรวจสอบเรียบร้อย`)) return;
+
+    const duplicatePayload: Partial<Question> = {
+      type: question.type,
+      pattern: question.pattern || QuestionPattern.MULTIPLE_CHOICE,
+      content_th: `${question.content_th} (สำเนา)`,
+      content_en: `${question.content_en} (Copy)`,
+      choices_json: JSON.parse(JSON.stringify(getQuestionChoices(question))),
+      correct_choice_index: Math.max(0, getCorrectChoiceIndex(question)),
+      image_url: question.image_url || null,
+      is_active: false,
+    };
+
+    setDuplicatingId(question.id);
+    try {
+      const duplicateId = await api.createQuestion(duplicatePayload);
+      const duplicateQuestion = { ...question, ...duplicatePayload, id: duplicateId, is_active: false };
+      await fetchQuestions({ showLoading: false, resetPage: true });
+      setCurrentPage(1);
+      markQuestionSaved(duplicateId);
+      handleEdit(duplicateQuestion);
+      showToast(`สร้างสำเนา ${getQuestionCode(duplicateId)} แล้ว และปิดใช้งานไว้เพื่อรอตรวจสอบ`, 'success');
+    } catch (error: any) {
+      showToast(`สร้างสำเนาไม่สำเร็จ: ${error.message}`, 'error');
+    } finally {
+      setDuplicatingId(null);
     }
   };
 
@@ -326,9 +415,13 @@ const QuestionManager: React.FC = () => {
   };
 
   // ================= [ RENDER ] =================
-  const filteredQuestions = questions.filter(q => q.content_th.toLowerCase().includes(searchTerm.toLowerCase()) || q.content_en.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredQuestions = getNavigableQuestions();
   const totalPages = Math.ceil(filteredQuestions.length / itemsPerPage);
   const currentQuestions = filteredQuestions.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const editingQuestionIndex = filteredQuestions.findIndex((question) => question.id === editingId);
+  const hasPreviousQuestion = editingQuestionIndex > 0;
+  const hasNextQuestion = editingQuestionIndex >= 0 && editingQuestionIndex < filteredQuestions.length - 1;
+  const editingQuestionCode = editingId ? getQuestionCode(editingId) : '';
 
   return (
     <div className="space-y-8 pb-10 text-left">
@@ -336,7 +429,7 @@ const QuestionManager: React.FC = () => {
       {/* 🟢 Form Section — edit mode reuses the same form inside an accessible modal. */}
       <div
         className={editingId ? 'fixed inset-0 z-[200] flex items-center justify-center overflow-y-auto bg-slate-950/70 p-4 backdrop-blur-sm' : ''}
-        onMouseDown={(event) => { if (editingId && event.target === event.currentTarget) handleCancelEdit(); }}
+        onMouseDown={(event) => { if (editingId && event.target === event.currentTarget) requestCloseEditor(); }}
       >
       <section
         id={editingId ? 'question-edit-dialog' : undefined}
@@ -347,20 +440,55 @@ const QuestionManager: React.FC = () => {
         tabIndex={editingId ? -1 : undefined}
         className={`p-6 md:p-8 rounded-[2rem] border-2 transition-all focus:outline-none ${editingId ? 'w-full max-w-6xl max-h-[calc(100vh-2rem)] overflow-y-auto bg-white border-amber-200 shadow-2xl' : 'bg-white border-slate-100 shadow-sm'}`}
         onMouseDown={(event) => event.stopPropagation()}
+        onChangeCapture={() => { if (editingId) setIsEditorDirty(true); }}
       >
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center gap-3">
             <div className={`p-2.5 rounded-xl ${editingId ? 'bg-amber-100 text-amber-800' : 'bg-blue-600 text-white'}`}>{editingId ? <Edit3 size={20} /> : <Plus size={20} />}</div>
-            <div><h3 id="question-editor-title" className="text-lg font-black text-slate-900 uppercase leading-none">{editingId ? 'Edit Question' : 'Create Question'}</h3></div>
+            <div>
+              <h3 id="question-editor-title" className="text-lg font-black text-slate-900 uppercase leading-none">{editingId ? 'Edit Question' : 'Create Question'}</h3>
+              {editingId && <p className="mt-1 text-[9px] font-black text-slate-600">{editingQuestionCode}{isEditorDirty ? ' • มีการแก้ไขที่ยังไม่บันทึก' : ''}</p>}
+            </div>
           </div>
-          {editingId && <button onClick={handleCancelEdit} aria-label="ยกเลิกการแก้ไขข้อสอบ" className="min-h-11 min-w-11 p-2 bg-white text-slate-600 hover:text-red-700 rounded-full border border-slate-200"><X size={18}/></button>}
+          {editingId && <button onClick={requestCloseEditor} aria-label="ปิดหน้าต่างแก้ไขคำถาม" className="min-h-11 min-w-11 p-2 bg-white text-slate-600 hover:text-red-700 rounded-full border border-slate-200"><X size={18}/></button>}
         </div>
 
+        {editingId && (
+          <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+            <button
+              type="button"
+              onClick={() => handleNavigateQuestion(-1)}
+              disabled={!hasPreviousQuestion || isSaving}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-[10px] font-black text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ChevronLeft size={16}/> ข้อก่อนหน้า
+            </button>
+            <div className="text-center">
+              <p className="text-[10px] font-black text-slate-800">{editingQuestionIndex >= 0 ? `ข้อ ${editingQuestionIndex + 1} จาก ${filteredQuestions.length}` : editingQuestionCode}</p>
+              <p className="mt-0.5 text-[9px] text-slate-600">เลื่อนตามรายการและคำค้นหาปัจจุบัน</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleNavigateQuestion(1)}
+              disabled={!hasNextQuestion || isSaving}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-[10px] font-black text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              ข้อถัดไป <ChevronRight size={16}/>
+            </button>
+          </div>
+        )}
+
+        {editingId && !editingIsActive && (
+          <div role="status" className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-900">
+            คำถามนี้ปิดใช้งานอยู่ สามารถแก้ไขและตรวจสอบได้โดยยังไม่ถูกนำไปสุ่มในข้อสอบ
+          </div>
+        )}
+
         <div className="flex flex-wrap bg-slate-100 p-1.5 rounded-2xl mb-8 gap-1">
-            <PatternTab active={pattern === QuestionPattern.MULTIPLE_CHOICE} onClick={() => setPattern(QuestionPattern.MULTIPLE_CHOICE)} icon={<ListFilter size={14}/>} label="Choice" />
-            <PatternTab active={pattern === QuestionPattern.TRUE_FALSE} onClick={() => setPattern(QuestionPattern.TRUE_FALSE)} icon={<HelpCircle size={14}/>} label="T/F" />
-            <PatternTab active={pattern === QuestionPattern.MATCHING} onClick={() => setPattern(QuestionPattern.MATCHING)} icon={<ArrowRightLeft size={14}/>} label="Matching" />
-            <PatternTab active={pattern === QuestionPattern.SHORT_ANSWER} onClick={() => setPattern(QuestionPattern.SHORT_ANSWER)} icon={<Hash size={14}/>} label="Writing" />
+            <PatternTab active={pattern === QuestionPattern.MULTIPLE_CHOICE} onClick={() => { setPattern(QuestionPattern.MULTIPLE_CHOICE); if (editingId) setIsEditorDirty(true); }} icon={<ListFilter size={14}/>} label="Choice" />
+            <PatternTab active={pattern === QuestionPattern.TRUE_FALSE} onClick={() => { setPattern(QuestionPattern.TRUE_FALSE); if (editingId) setIsEditorDirty(true); }} icon={<HelpCircle size={14}/>} label="T/F" />
+            <PatternTab active={pattern === QuestionPattern.MATCHING} onClick={() => { setPattern(QuestionPattern.MATCHING); if (editingId) setIsEditorDirty(true); }} icon={<ArrowRightLeft size={14}/>} label="Matching" />
+            <PatternTab active={pattern === QuestionPattern.SHORT_ANSWER} onClick={() => { setPattern(QuestionPattern.SHORT_ANSWER); if (editingId) setIsEditorDirty(true); }} icon={<Hash size={14}/>} label="Writing" />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -378,9 +506,9 @@ const QuestionManager: React.FC = () => {
                     <input id="question-content-en" placeholder="Question in English" value={en} onChange={e=>setEn(e.target.value)} className="w-full p-4 border border-slate-200 rounded-2xl text-base md:text-sm font-bold bg-white outline-none focus:border-blue-500" />
                 </div>
                 <div className="flex bg-slate-100 p-1.5 rounded-2xl">
-                    <button onClick={() => setExamType(ExamType.INDUCTION)} className={`min-h-11 flex-1 py-3 rounded-xl font-black text-[10px] transition-all ${examType === ExamType.INDUCTION ? 'bg-blue-700 text-white shadow-md' : 'text-slate-600 hover:text-slate-800'}`}>INDUCTION</button>
-                    <button onClick={() => setExamType(ExamType.WORK_PERMIT)} className={`min-h-11 flex-1 py-3 rounded-xl font-black text-[10px] transition-all ${examType === ExamType.WORK_PERMIT ? 'bg-purple-700 text-white shadow-md' : 'text-slate-600 hover:text-slate-800'}`}>WORK PERMIT</button>
-                    <button onClick={() => setExamType(ExamType.SUPPLIER_OUTSOURCE)} className={`min-h-11 flex-1 py-3 rounded-xl font-black text-[9px] transition-all ${examType === ExamType.SUPPLIER_OUTSOURCE ? 'bg-emerald-700 text-white shadow-md' : 'text-slate-600 hover:text-slate-800'}`}>SUPPLIER & OUTSOURCE</button>
+                    <button onClick={() => { setExamType(ExamType.INDUCTION); if (editingId) setIsEditorDirty(true); }} className={`min-h-11 flex-1 py-3 rounded-xl font-black text-[10px] transition-all ${examType === ExamType.INDUCTION ? 'bg-blue-700 text-white shadow-md' : 'text-slate-600 hover:text-slate-800'}`}>INDUCTION</button>
+                    <button onClick={() => { setExamType(ExamType.WORK_PERMIT); if (editingId) setIsEditorDirty(true); }} className={`min-h-11 flex-1 py-3 rounded-xl font-black text-[10px] transition-all ${examType === ExamType.WORK_PERMIT ? 'bg-purple-700 text-white shadow-md' : 'text-slate-600 hover:text-slate-800'}`}>WORK PERMIT</button>
+                    <button onClick={() => { setExamType(ExamType.SUPPLIER_OUTSOURCE); if (editingId) setIsEditorDirty(true); }} className={`min-h-11 flex-1 py-3 rounded-xl font-black text-[9px] transition-all ${examType === ExamType.SUPPLIER_OUTSOURCE ? 'bg-emerald-700 text-white shadow-md' : 'text-slate-600 hover:text-slate-800'}`}>SUPPLIER & OUTSOURCE</button>
                 </div>
             </div>
             <div className="space-y-4">
@@ -399,12 +527,30 @@ const QuestionManager: React.FC = () => {
                     </div>
                 )}
                 {pattern === QuestionPattern.SHORT_ANSWER && <div className="p-6 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200 text-center"><label htmlFor="question-short-answer" className="text-[9px] font-black text-slate-600 uppercase mb-2 block tracking-widest">Correct Answer</label><input id="question-short-answer" value={shortAnswer} onChange={e => setShortAnswer(e.target.value)} placeholder="เฉลย..." className="w-full p-4 border border-slate-200 rounded-2xl text-sm font-black text-blue-700 shadow-inner outline-none text-center" /></div>}
-                {pattern === QuestionPattern.MATCHING && <div className="space-y-3 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">{matchingPairs.map((pair, idx) => (<div key={idx} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 relative"><div className="grid grid-cols-2 gap-3"><div className="space-y-1"><span className="text-[8px] font-black text-slate-600 uppercase tracking-widest">Left</span><input aria-label={`คู่จับคู่ ${idx + 1} ฝั่งซ้ายภาษาไทย`} value={pair.left_th} onChange={e => { const n = [...matchingPairs]; n[idx].left_th = e.target.value; setMatchingPairs(n); }} className="w-full p-2 border border-slate-200 rounded-lg text-[10px]" /><input aria-label={`คู่จับคู่ ${idx + 1} ฝั่งซ้ายภาษาอังกฤษ`} value={pair.left_en} onChange={e => { const n = [...matchingPairs]; n[idx].left_en = e.target.value; setMatchingPairs(n); }} className="w-full p-2 border border-slate-200 rounded-lg text-[10px]" /></div><div className="space-y-1"><span className="text-[8px] font-black text-slate-600 uppercase tracking-widest">Right</span><input aria-label={`คู่จับคู่ ${idx + 1} ฝั่งขวาภาษาไทย`} value={pair.right_th} onChange={e => { const n = [...matchingPairs]; n[idx].right_th = e.target.value; setMatchingPairs(n); }} className="w-full p-2 border border-slate-200 rounded-lg text-[10px]" /><input aria-label={`คู่จับคู่ ${idx + 1} ฝั่งขวาภาษาอังกฤษ`} value={pair.right_en} onChange={e => { const n = [...matchingPairs]; n[idx].right_en = e.target.value; setMatchingPairs(n); }} className="w-full p-2 border border-slate-200 rounded-lg text-[10px]" /></div></div>{matchingPairs.length > 1 && <button onClick={() => setMatchingPairs(matchingPairs.filter((_, i) => i !== idx))} aria-label={`ลบคู่จับคู่ลำดับ ${idx + 1}`} className="absolute -top-1 -right-1 min-h-11 min-w-11 bg-red-100 text-red-700 p-1 rounded-full"><X size={10}/></button>}</div>))}<button onClick={() => setMatchingPairs([...matchingPairs, { left_th: '', left_en: '', right_th: '', right_en: '' }])} className="min-h-11 w-full py-2 border-2 border-dashed border-slate-300 text-slate-600 text-[10px] font-black rounded-xl hover:bg-slate-50 uppercase tracking-widest">Add +</button></div>}
+                {pattern === QuestionPattern.MATCHING && <div className="space-y-3 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">{matchingPairs.map((pair, idx) => (<div key={idx} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 relative"><div className="grid grid-cols-2 gap-3"><div className="space-y-1"><span className="text-[8px] font-black text-slate-600 uppercase tracking-widest">Left</span><input aria-label={`คู่จับคู่ ${idx + 1} ฝั่งซ้ายภาษาไทย`} value={pair.left_th} onChange={e => { const n = [...matchingPairs]; n[idx].left_th = e.target.value; setMatchingPairs(n); }} className="w-full p-2 border border-slate-200 rounded-lg text-[10px]" /><input aria-label={`คู่จับคู่ ${idx + 1} ฝั่งซ้ายภาษาอังกฤษ`} value={pair.left_en} onChange={e => { const n = [...matchingPairs]; n[idx].left_en = e.target.value; setMatchingPairs(n); }} className="w-full p-2 border border-slate-200 rounded-lg text-[10px]" /></div><div className="space-y-1"><span className="text-[8px] font-black text-slate-600 uppercase tracking-widest">Right</span><input aria-label={`คู่จับคู่ ${idx + 1} ฝั่งขวาภาษาไทย`} value={pair.right_th} onChange={e => { const n = [...matchingPairs]; n[idx].right_th = e.target.value; setMatchingPairs(n); }} className="w-full p-2 border border-slate-200 rounded-lg text-[10px]" /><input aria-label={`คู่จับคู่ ${idx + 1} ฝั่งขวาภาษาอังกฤษ`} value={pair.right_en} onChange={e => { const n = [...matchingPairs]; n[idx].right_en = e.target.value; setMatchingPairs(n); }} className="w-full p-2 border border-slate-200 rounded-lg text-[10px]" /></div></div>{matchingPairs.length > 1 && <button onClick={() => { setMatchingPairs(matchingPairs.filter((_, i) => i !== idx)); if (editingId) setIsEditorDirty(true); }} aria-label={`ลบคู่จับคู่ลำดับ ${idx + 1}`} className="absolute -top-1 -right-1 min-h-11 min-w-11 bg-red-100 text-red-700 p-1 rounded-full"><X size={10}/></button>}</div>))}<button onClick={() => { setMatchingPairs([...matchingPairs, { left_th: '', left_en: '', right_th: '', right_en: '' }]); if (editingId) setIsEditorDirty(true); }} className="min-h-11 w-full py-2 border-2 border-dashed border-slate-300 text-slate-600 text-[10px] font-black rounded-xl hover:bg-slate-50 uppercase tracking-widest">Add +</button></div>}
             </div>
         </div>
-        <button onClick={handleSave} disabled={uploadingImage} className={`${editingId ? 'sticky bottom-0 z-20 mt-8 w-full' : 'mt-8 w-full md:w-auto'} bg-slate-900 text-white px-12 py-4 rounded-2xl font-black uppercase text-xs shadow-xl active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 hover:bg-slate-800`}>
-            {uploadingImage ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>} {uploadingImage ? 'Uploading Assets...' : editingId ? 'Update Question' : 'Deploy Question'}
-        </button>
+        <div className={`${editingId ? 'sticky bottom-0 z-20 -mx-3 mt-8 flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-xl backdrop-blur sm:flex-row' : 'mt-8'}`}>
+          {editingId && (
+            <button
+              type="button"
+              onClick={() => handleSave('next')}
+              disabled={isSaving || uploadingImage || !hasNextQuestion}
+              title={!hasNextQuestion ? 'คำถามนี้เป็นข้อสุดท้ายในรายการปัจจุบัน' : undefined}
+              className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-5 text-xs font-black text-blue-800 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {isSaving ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>} บันทึกและไปข้อถัดไป <ChevronRight size={16}/>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => handleSave('close')}
+            disabled={isSaving || uploadingImage}
+            className={`${editingId ? 'flex-1' : 'w-full md:w-auto'} inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-slate-900 px-8 text-xs font-black text-white shadow-xl hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50`}
+          >
+            {isSaving || uploadingImage ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>} {editingId ? 'บันทึกและปิด' : 'บันทึกคำถาม'}
+          </button>
+        </div>
       </section>
       </div>
 
@@ -473,6 +619,15 @@ const QuestionManager: React.FC = () => {
                                 </div>
                                 <div className="flex gap-1">
                                     <button onClick={() => handleToggleActive(q)} aria-label={`${q.is_active ? 'ปิด' : 'เปิด'}การใช้งานข้อสอบ`} className={`min-h-11 min-w-11 rounded-lg px-2 text-[8px] font-black ${q.is_active ? 'bg-emerald-50 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>{q.is_active ? 'ON' : 'OFF'}</button>
+                                    <button
+                                      onClick={() => handleDuplicate(q)}
+                                      disabled={duplicatingId === q.id}
+                                      aria-label={`ทำสำเนาคำถาม ${questionCode}`}
+                                      title="ทำสำเนาและปิดใช้งานไว้ก่อน"
+                                      className="min-h-11 min-w-11 p-3 text-slate-600 hover:text-emerald-700 transition-colors active:scale-90 disabled:opacity-50"
+                                    >
+                                      {duplicatingId === q.id ? <Loader2 size={16} className="animate-spin"/> : <Copy size={16}/>}
+                                    </button>
                                     <button onClick={() => handleEdit(q)} aria-label={`แก้ไขคำถาม ${questionCode}`} className="min-h-11 min-w-11 p-3 text-slate-600 hover:text-blue-700 transition-colors active:scale-90"><Edit3 size={16}/></button>
                                     <button onClick={() => handleDelete(q.id)} aria-label={`ลบคำถาม ${questionCode}`} className="min-h-11 min-w-11 p-3 text-slate-600 hover:text-red-700 transition-colors active:scale-90"><Trash2 size={16}/></button>
                                 </div>

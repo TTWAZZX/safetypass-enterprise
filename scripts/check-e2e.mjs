@@ -69,6 +69,7 @@ function examQuestions(type) {
 
 async function installMocks(page) {
   let currentRole = 'USER';
+  let managedQuestions = examQuestions('INDUCTION');
   await page.route('**/auth/v1/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -166,7 +167,25 @@ async function installMocks(page) {
         },
       };
       if (rpc === 'get_exam_questions') return json(route, examQuestions(payload.exam_type_param || 'INDUCTION'));
-      if (rpc === 'admin_save_question') return json(route, payload.question_id_param || examQuestions(payload.exam_type_param || 'INDUCTION')[0].id);
+      if (rpc === 'admin_save_question') {
+        const questionId = payload.question_id_param || '30000000-0000-4000-8000-000000999999';
+        const savedQuestion = {
+          id: questionId,
+          type: payload.exam_type_param,
+          pattern: payload.pattern_param,
+          content_th: payload.content_th_param,
+          content_en: payload.content_en_param,
+          choices_json: payload.choices_json_param,
+          correct_choice_index: payload.correct_choice_index_param,
+          image_url: payload.image_url_param,
+          is_active: payload.is_active_param,
+          created_at: '2026-07-29T00:00:00.000Z',
+        };
+        const existingIndex = managedQuestions.findIndex((question) => question.id === questionId);
+        if (existingIndex >= 0) managedQuestions = managedQuestions.map((question) => question.id === questionId ? { ...question, ...savedQuestion } : question);
+        else managedQuestions = [savedQuestion, ...managedQuestions];
+        return json(route, questionId);
+      }
       if (Object.hasOwn(rpcResponses, rpc)) return json(route, rpcResponses[rpc]);
       return json(route, request.method() === 'POST' ? null : []);
     }
@@ -201,7 +220,7 @@ async function installMocks(page) {
       { status: 'PASSED', exam_type: 'SUPPLIER_OUTSOURCE' },
       { status: 'FAILED', exam_type: 'SUPPLIER_OUTSOURCE' },
     ]);
-    if (table === 'questions') return json(route, request.method() === 'GET' ? examQuestions('INDUCTION') : []);
+    if (table === 'questions') return json(route, request.method() === 'GET' ? managedQuestions : []);
     if (table === 'audit_logs') return json(route, []);
     return json(route, []);
   });
@@ -262,6 +281,7 @@ try {
   const adminContext = await browser.newContext({ viewport: { width: 1365, height: 900 }, acceptDownloads: true, reducedMotion: 'reduce' });
   const adminPage = await adminContext.newPage();
   await installMocks(adminPage);
+  adminPage.on('dialog', (dialog) => dialog.accept());
   await login(adminPage, adminNationalId);
   await adminPage.getByText('Dashboard Analytics', { exact: false }).waitFor();
   await assertA11y(adminPage, 'desktop admin dashboard');
@@ -297,10 +317,24 @@ try {
   await assertA11y(adminPage, 'desktop question manager');
   await adminPage.getByRole('button', { name: /แก้ไขคำถาม Q-/ }).first().click();
   await adminPage.getByRole('dialog', { name: 'Edit Question' }).waitFor();
+  await adminPage.getByText('ข้อ 1 จาก 10', { exact: true }).waitFor();
   await assertA11y(adminPage, 'question edit modal', '#question-edit-dialog');
-  await adminPage.getByRole('button', { name: 'Update Question' }).click();
-  await adminPage.getByText(/บันทึกคำถาม Q-\d{6} สำเร็จ/).waitFor();
+  await adminPage.getByRole('button', { name: /ข้อถัดไป/ }).first().click();
+  await adminPage.locator('#question-content-th').waitFor();
+  if (await adminPage.locator('#question-content-th').inputValue() !== 'คำถามทดสอบ 2') throw new Error('Question next navigation did not open question 2');
+  await adminPage.getByRole('button', { name: /ข้อก่อนหน้า/ }).click();
+  if (await adminPage.locator('#question-content-th').inputValue() !== 'คำถามทดสอบ 1') throw new Error('Question previous navigation did not return to question 1');
+  await adminPage.getByRole('button', { name: /บันทึกและไปข้อถัดไป/ }).click();
+  await adminPage.getByText(/บันทึก Q-\d{6} แล้ว กำลังเปิด Q-\d{6}/).waitFor();
+  if (await adminPage.locator('#question-content-th').inputValue() !== 'คำถามทดสอบ 2') throw new Error('Save and continue did not open the next question');
+  await adminPage.getByRole('button', { name: 'ปิดหน้าต่างแก้ไขคำถาม' }).click();
   await adminPage.getByText('บันทึกแล้ว • เมื่อสักครู่', { exact: true }).waitFor();
+  await adminPage.getByRole('button', { name: /ทำสำเนาคำถาม Q-/ }).first().click();
+  await adminPage.getByRole('dialog', { name: 'Edit Question' }).waitFor();
+  if (!(await adminPage.locator('#question-content-th').inputValue()).endsWith('(สำเนา)')) throw new Error('Duplicated question is missing the copy suffix');
+  await adminPage.getByText(/คำถามนี้ปิดใช้งานอยู่/).waitFor();
+  await assertA11y(adminPage, 'duplicated question edit modal', '#question-edit-dialog');
+  await adminPage.getByRole('button', { name: 'ปิดหน้าต่างแก้ไขคำถาม' }).click();
   await adminPage.getByRole('button', { name: 'Supplier & Outsource', exact: true }).click();
   await adminPage.getByText('Program Control & Reporting', { exact: true }).waitFor();
   await assertA11y(adminPage, 'desktop supplier manager');
