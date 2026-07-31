@@ -73,6 +73,7 @@ function examQuestions(type) {
 
 async function installMocks(page) {
   let currentRole = 'USER';
+  const authDiagnostics = { stagedSignupRequests: 0, stagedTokenRequests: 0 };
   let managedQuestions = examQuestions('INDUCTION');
   managedQuestions[7] = { ...managedQuestions[7], choices_json: managedQuestions[7].choices_json.slice(0, 3) };
   managedQuestions[9] = {
@@ -115,8 +116,36 @@ async function installMocks(page) {
   await page.route('**/auth/v1/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
+    if (url.pathname.endsWith('/signup')) {
+      const credentials = request.postDataJSON?.() || {};
+      if (String(credentials.email || '').startsWith(stagedNationalId)) {
+        authDiagnostics.stagedSignupRequests += 1;
+      }
+      const currentProfile = profile('USER');
+      const accessToken = createAccessToken(currentProfile.id, 'USER');
+      currentRole = 'USER';
+      return json(route, {
+        access_token: accessToken,
+        token_type: 'bearer',
+        expires_in: 3600,
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+        refresh_token: 'test-refresh-token',
+        user: {
+          id: currentProfile.id,
+          aud: 'authenticated',
+          role: 'authenticated',
+          email: credentials.email || `${currentProfile.national_id}@safetypass.com`,
+          app_metadata: { role: 'USER' },
+          user_metadata: credentials.data || {},
+          created_at: currentProfile.created_at,
+        },
+      });
+    }
     if (url.pathname.endsWith('/token')) {
       const credentials = request.postDataJSON?.() || {};
+      if (String(credentials.email || '').startsWith(stagedNationalId)) {
+        authDiagnostics.stagedTokenRequests += 1;
+      }
       currentRole = String(credentials.email || '').startsWith(adminNationalId) ? 'ADMIN' : 'USER';
       const currentProfile = profile(currentRole);
       const accessToken = createAccessToken(currentProfile.id, currentRole);
@@ -363,6 +392,7 @@ async function installMocks(page) {
 
   await page.route('**/api/notify-**', (route) => json(route, { success: true }));
   await page.route('https://api.line.me/**', (route) => json(route, {}));
+  return authDiagnostics;
 }
 
 async function login(page, nationalId) {
@@ -415,7 +445,7 @@ try {
 
   const userContext = await browser.newContext({ viewport: { width: 390, height: 844 }, acceptDownloads: true, reducedMotion: 'reduce' });
   const userPage = await userContext.newPage();
-  await installMocks(userPage);
+  const userAuthDiagnostics = await installMocks(userPage);
   userPage.on('dialog', (dialog) => dialog.accept());
   await userPage.goto(appUrl, { waitUntil: 'domcontentloaded' });
   await userPage.getByRole('button', { name: 'ลงทะเบียน', exact: true }).click();
@@ -428,6 +458,8 @@ try {
   if (await registrationNameInput.inputValue() !== 'ผู้ใช้ที่บริษัทเตรียมไว้') throw new Error('Staged registration did not auto-fill the name');
   if (await registrationAgeInput.inputValue() !== '42') throw new Error('Staged registration did not auto-fill the age');
   if (await registrationNameInput.isEditable()) throw new Error('Staged administrator name is editable');
+  if (userAuthDiagnostics.stagedSignupRequests !== 1) throw new Error('Staged registration did not start with exactly one sign-up request');
+  if (userAuthDiagnostics.stagedTokenRequests !== 0) throw new Error('Staged registration still probed password login before auto-fill');
 
   await registrationIdInput.fill('');
   if (await registrationNameInput.inputValue() !== '') throw new Error('Changing a staged identity retained the old name');

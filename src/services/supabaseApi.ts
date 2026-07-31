@@ -25,7 +25,10 @@ const getRegistrationStatus = async (nationalId: string): Promise<RegistrationSt
   return resolveRegistrationStatus(data?.[0]);
 };
 
-const ensureRegistrationIdentity = async (nationalId: string, name = '') => {
+const ensureRegistrationIdentity = async (
+  nationalId: string,
+  name = '',
+) => {
   const email = `${nationalId}@safetypass.com`;
   const pinPassword = createPinPassword(nationalId, nationalId.slice(-4));
   const { data: sessionData } = await supabase.auth.getSession();
@@ -36,38 +39,41 @@ const ensureRegistrationIdentity = async (nationalId: string, name = '') => {
   }
   if (currentSession) await supabase.auth.signOut();
 
-  const currentPasswordLogin = await supabase.auth.signInWithPassword({
-    email,
-    password: pinPassword,
-  });
-  if (!currentPasswordLogin.error && currentPasswordLogin.data.user) {
-    return currentPasswordLogin.data.user;
+  // Staged users commonly have a profile placeholder but no Auth identity yet.
+  // Sign up first so the normal path is a single successful request instead of
+  // two expected 400 password probes. Sign-in attempts remain as compatibility
+  // fallbacks when Supabase reports that the Auth identity already exists.
+  const attempts = ['SIGN_UP', 'SIGN_IN_PIN', 'SIGN_IN_LEGACY'] as const;
+
+  for (const attempt of attempts) {
+    if (attempt === 'SIGN_UP') {
+      const signUp = await supabase.auth.signUp({
+        email,
+        password: pinPassword,
+        options: { data: { name, password_scheme: 'pin-v1' } },
+      });
+      if (!signUp.error && signUp.data.session?.user) return signUp.data.session.user;
+      if (signUp.error && !/already registered|already exists|user exists/i.test(signUp.error.message)) {
+        throw new Error('ไม่สามารถเปิดบัญชีสำหรับข้อมูลเดิมได้ กรุณาติดต่อเจ้าหน้าที่ Safety');
+      }
+      continue;
+    }
+
+    const password = attempt === 'SIGN_IN_LEGACY' ? nationalId : pinPassword;
+    const login = await supabase.auth.signInWithPassword({ email, password });
+    if (login.error || !login.data.user) continue;
+
+    if (attempt === 'SIGN_IN_LEGACY') {
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: pinPassword,
+        data: { password_scheme: 'pin-v1' },
+      });
+      if (updateError) throw updateError;
+    }
+    return login.data.user;
   }
 
-  const legacyLogin = await supabase.auth.signInWithPassword({ email, password: nationalId });
-  if (!legacyLogin.error && legacyLogin.data.user) {
-    const { error: updateError } = await supabase.auth.updateUser({ password: pinPassword });
-    if (updateError) throw updateError;
-    return legacyLogin.data.user;
-  }
-
-  const signUp = await supabase.auth.signUp({
-    email,
-    password: pinPassword,
-    options: { data: { name } },
-  });
-  if (signUp.error) {
-    throw new Error('ไม่สามารถเปิดบัญชีสำหรับข้อมูลเดิมได้ กรุณาติดต่อเจ้าหน้าที่ Safety');
-  }
-  if (signUp.data.session?.user) return signUp.data.session.user;
-
-  // Supabase can intentionally return an obfuscated sign-up response for an
-  // existing identity. A real session is required before profile data is read.
-  const retryLogin = await supabase.auth.signInWithPassword({ email, password: pinPassword });
-  if (retryLogin.error || !retryLogin.data.user) {
-    throw new Error('ไม่สามารถยืนยันบัญชีเดิมได้ กรุณาติดต่อเจ้าหน้าที่ Safety');
-  }
-  return retryLogin.data.user;
+  throw new Error('ไม่สามารถยืนยันบัญชีเดิมได้ กรุณาติดต่อเจ้าหน้าที่ Safety');
 };
 
 export const api = {
