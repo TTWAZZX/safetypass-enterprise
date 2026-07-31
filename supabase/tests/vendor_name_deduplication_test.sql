@@ -69,7 +69,7 @@ do $$
 declare
   registration_result jsonb;
 begin
-  select public.complete_registration_v3(
+  select public.complete_registration_v4(
     '1000000000099',
     'Vendor Registration Test',
     null,

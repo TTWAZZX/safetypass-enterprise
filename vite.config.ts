@@ -7,6 +7,8 @@ export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
     
     return {
+      // รองรับทั้ง convention เดิมของ Vite และชื่อ Supabase แบบ NEXT_PUBLIC_*
+      envPrefix: ['VITE_', 'NEXT_PUBLIC_'],
       // ✅ เพิ่ม base: '/' เพื่อแก้ปัญหาหน้าขาวและ Unexpected token '<'
       // ช่วยให้ Browser ดึงไฟล์ JS จาก Root เสมอ ไม่ว่าจะอยู่ที่ URL ไหน
       base: '/', 

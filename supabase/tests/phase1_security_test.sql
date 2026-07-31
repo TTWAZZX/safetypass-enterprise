@@ -187,12 +187,17 @@ insert into auth.users(
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '33333333-3333-4333-8333-333333333333', true);
 select set_config('request.jwt.claims', '{"sub":"33333333-3333-4333-8333-333333333333","role":"authenticated"}', true);
-select public.complete_registration(
+select public.complete_registration_v4(
   '1000000000003',
   'Phase One Registration',
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   30,
   'ไทย (Thai)',
+  null,
+  array['CONTRACTOR']::text[],
+  null,
+  null,
+  null,
   null
 );
 reset role;

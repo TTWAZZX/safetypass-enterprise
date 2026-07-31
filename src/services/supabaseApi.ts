@@ -4,6 +4,9 @@ import {
   SupplierOutsourceReportRow, SupplierOutsourceType, SupplierOutsourceWorkType,
   TrainingProgram, QuestionRevision, VendorNameMatch, VendorSaveResult, VendorStatus,
 } from '../types'
+import {
+  resolveRegistrationStatus, RegistrationStatus, StagedRegistrationProfile,
+} from './registrationAccountState'
 
 const createPinPassword = (nationalId: string, pin: string) => `SafetyPass-${nationalId}-${pin}`;
 
@@ -12,6 +15,60 @@ const USER_PROFILE_SELECT = [
   'created_at', 'age', 'nationality', 'pdpa_agreed', 'pdpa_agreed_at',
   'is_active', 'date_of_birth', 'avatar_url', 'last_login', 'vendors(*)',
 ].join(',');
+
+const getRegistrationStatus = async (nationalId: string): Promise<RegistrationStatus> => {
+  const { data, error } = await supabase.rpc('check_user_exists', {
+    search_id: nationalId,
+  });
+
+  if (error) throw new Error('ไม่สามารถตรวจสอบสถานะบัญชีได้');
+  return resolveRegistrationStatus(data?.[0]);
+};
+
+const ensureRegistrationIdentity = async (nationalId: string, name = '') => {
+  const email = `${nationalId}@safetypass.com`;
+  const pinPassword = createPinPassword(nationalId, nationalId.slice(-4));
+  const { data: sessionData } = await supabase.auth.getSession();
+  const currentSession = sessionData.session;
+
+  if (currentSession?.user.email?.toLowerCase() === email.toLowerCase()) {
+    return currentSession.user;
+  }
+  if (currentSession) await supabase.auth.signOut();
+
+  const currentPasswordLogin = await supabase.auth.signInWithPassword({
+    email,
+    password: pinPassword,
+  });
+  if (!currentPasswordLogin.error && currentPasswordLogin.data.user) {
+    return currentPasswordLogin.data.user;
+  }
+
+  const legacyLogin = await supabase.auth.signInWithPassword({ email, password: nationalId });
+  if (!legacyLogin.error && legacyLogin.data.user) {
+    const { error: updateError } = await supabase.auth.updateUser({ password: pinPassword });
+    if (updateError) throw updateError;
+    return legacyLogin.data.user;
+  }
+
+  const signUp = await supabase.auth.signUp({
+    email,
+    password: pinPassword,
+    options: { data: { name } },
+  });
+  if (signUp.error) {
+    throw new Error('ไม่สามารถเปิดบัญชีสำหรับข้อมูลเดิมได้ กรุณาติดต่อเจ้าหน้าที่ Safety');
+  }
+  if (signUp.data.session?.user) return signUp.data.session.user;
+
+  // Supabase can intentionally return an obfuscated sign-up response for an
+  // existing identity. A real session is required before profile data is read.
+  const retryLogin = await supabase.auth.signInWithPassword({ email, password: pinPassword });
+  if (retryLogin.error || !retryLogin.data.user) {
+    throw new Error('ไม่สามารถยืนยันบัญชีเดิมได้ กรุณาติดต่อเจ้าหน้าที่ Safety');
+  }
+  return retryLogin.data.user;
+};
 
 export const api = {
 
@@ -23,21 +80,12 @@ export const api = {
 
     // 🔥 1. PRE-CHECK: ด่านตรวจก่อนเข้า Auth
     // วิ่งไปเช็คในตาราง users ก่อนว่า แอดมินสร้างชื่อคนนี้รอไว้หรือยัง?
-    const { data: preCheckUsers, error: preCheckError } = await supabase.rpc('check_user_exists', {
-      search_id: nationalId,
-    });
-    if (preCheckError) throw new Error('ไม่สามารถตรวจสอบสถานะบัญชีได้');
-
-    if (preCheckUsers && preCheckUsers.length > 0) {
-      const preCheckUser = preCheckUsers[0];
-      // โดนแอดมินแบนตั้งแต่ยังไม่เข้า
-      if (preCheckUser.is_active === false) {
-         throw new Error('บัญชีของคุณถูกระงับสิทธิ์ชั่วคราว โปรดติดต่อเจ้าหน้าที่ Safety');
-      }
-      // ✅ ด่านสกัดสำคัญ: แอดมินเพิ่มชื่อให้แล้ว แต่ผู้ใช้ยังไม่เคยกดยอมรับ PDPA
-      if (preCheckUser.requires_registration === true) {
-         throw new Error('REQUIRE_REGISTER'); // เตะกลับไปหน้า Register อัตโนมัติ
-      }
+    const registrationStatus = await getRegistrationStatus(nationalId);
+    if (registrationStatus.state === 'SUSPENDED') {
+      throw new Error('บัญชีของคุณถูกระงับสิทธิ์ชั่วคราว โปรดติดต่อเจ้าหน้าที่ Safety');
+    }
+    if (registrationStatus.state === 'STAGED') {
+      throw new Error('REQUIRE_REGISTER');
     }
 
     // 2. ดำเนินการ Login กับ Supabase Auth ตามปกติ (สำหรับคนที่ PDPA = true แล้ว)
@@ -103,22 +151,19 @@ export const api = {
     } as unknown as User
   },
 
-  checkUser: async (nationalId: string): Promise<any> => {
-    const { data, error } = await supabase.rpc('check_user_exists', {
-      search_id: nationalId,
-    });
-      
+  checkRegistrationStatus: getRegistrationStatus,
+
+  prepareStagedRegistration: async (nationalId: string): Promise<StagedRegistrationProfile> => {
+    await ensureRegistrationIdentity(nationalId);
+    const { data, error } = await supabase.rpc('get_my_staged_registration_profile');
     if (error) {
-        console.error("Check user error:", error);
-        return null;
+      if (error.message.includes('suspended')) {
+        throw new Error('บัญชีของคุณถูกระงับสิทธิ์ชั่วคราว โปรดติดต่อเจ้าหน้าที่ Safety');
+      }
+      throw new Error('ไม่สามารถดึงข้อมูลที่บริษัทเตรียมไว้ได้');
     }
-    
-    const status = data?.[0] as any;
-    if (!status?.user_exists) return null;
-    return {
-      pdpa_agreed: !status.requires_registration,
-      is_active: status.is_active,
-    };
+    if (!data) throw new Error('ไม่พบข้อมูลที่รอเปิดบัญชี กรุณาตรวจสอบเลขบัตรอีกครั้ง');
+    return data as StagedRegistrationProfile;
   },
 
   register: async (
@@ -136,30 +181,7 @@ export const api = {
       accessEndDate?: string;
     }
   ): Promise<User> => {
-    const email = `${nationalId}@safetypass.com`;
-    const password = createPinPassword(nationalId, nationalId.slice(-4));
-
-    let authUser = null;
-
-    // 1. พยายาม SignUp (สร้างบัญชี Auth)
-    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { name } }
-    });
-
-    if (signUpError) {
-      // ดักจับกรณีเคยลงทะเบียน Auth ไว้แล้ว (Error 422)
-      if (signUpError.status === 422 || signUpError.message.includes('already registered') || signUpError.message.includes('User already registered')) {
-        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-        if (signInError) throw new Error('already registered'); 
-        authUser = signInData.user;
-      } else {
-        throw signUpError;
-      }
-    } else {
-      authUser = signUpData.user;
-    }
+    const authUser = await ensureRegistrationIdentity(nationalId, name);
 
     if (!authUser) throw new Error('ไม่สามารถเชื่อมต่อระบบยืนยันตัวตนได้');
 
@@ -171,7 +193,7 @@ export const api = {
       nationality_param: nationality,
       other_vendor_name_param: otherVendorName?.trim() || null,
     };
-    const registrationResponse = await supabase.rpc('complete_registration_v3', {
+    const registrationResponse = await supabase.rpc('complete_registration_v4', {
       ...registrationArgs,
       program_codes_param: trainingSelection?.programs || ['CONTRACTOR'],
       participant_type_param: trainingSelection?.participantType || null,

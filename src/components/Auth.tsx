@@ -14,6 +14,9 @@ import PrivacyPolicyModal from './PrivacyPolicyModal';
 import { addOneYearIsoDate } from '../utils/accessDates';
 import ProgressSteps from './ProgressSteps';
 import { getRegistrationDisabledReason, getRegistrationStepIndex } from '../services/registrationProgress';
+import {
+  RegistrationAccountState, StagedRegistrationProfile,
+} from '../services/registrationAccountState';
 
 interface AuthProps {
   onLogin: (user: User) => void;
@@ -57,6 +60,8 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [dataFoundMsg, setDataFoundMsg] = useState(false); 
   const [dataNotFoundMsg, setDataNotFoundMsg] = useState(false); 
   const [infoMsg, setInfoMsg] = useState(''); 
+  const [registrationAccountState, setRegistrationAccountState] = useState<RegistrationAccountState | null>(null);
+  const [stagedProfile, setStagedProfile] = useState<StagedRegistrationProfile | null>(null);
 
   // Support Links State
   const [manualUrl, setManualUrl] = useState<string>('');
@@ -183,35 +188,48 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     setFetchingUser(true);
     setDataFoundMsg(false);
     setDataNotFoundMsg(false); 
+    setRegistrationAccountState(null);
+    setStagedProfile(null);
+    setError('');
     try {
-      const userData = await api.checkUser(idToCheck);
-      if (userData) {
-        setName(userData.name || '');
-        setAge(userData.age ? String(userData.age) : '');
-        
-        if (userData.vendor_id) {
-           setVendorId(userData.vendor_id);
+      const status = await api.checkRegistrationStatus(idToCheck);
+      setRegistrationAccountState(status.state);
+
+      if (status.state === 'REGISTERED') {
+        setLoginId(idToCheck);
+        setMode('LOGIN');
+        setInfoMsg('เลขบัตรนี้ลงทะเบียนเรียบร้อยแล้ว กรุณาเข้าสู่ระบบ');
+        return;
+      }
+
+      if (status.state === 'SUSPENDED') {
+        setError('บัญชีของคุณถูกระงับสิทธิ์ชั่วคราว โปรดติดต่อเจ้าหน้าที่ Safety');
+        return;
+      }
+
+      if (status.state === 'STAGED') {
+        const profile = await api.prepareStagedRegistration(idToCheck);
+        setStagedProfile(profile);
+        setName(profile.name || '');
+        setAge(profile.age ? String(profile.age) : '');
+        if (profile.vendor_id) {
+          setVendorId(profile.vendor_id);
+          setVendorSearch(profile.vendor?.name || '');
         }
-        
-        if (userData.nationality) {
-           const commonNationalities = ['ไทย (Thai)', 'พม่า (Myanmar)', 'กัมพูชา (Cambodian)', 'ลาว (Lao)'];
-           if (commonNationalities.includes(userData.nationality)) {
-              setNationality(userData.nationality);
-              setIsOtherNationality(false);
-           } else {
-              setIsOtherNationality(true);
-              setNationality(userData.nationality);
-           }
+        if (profile.nationality) {
+          const commonNationalities = ['ไทย (Thai)', 'พม่า (Myanmar)', 'กัมพูชา (Cambodian)', 'ลาว (Lao)'];
+          setNationality(profile.nationality);
+          setIsOtherNationality(!commonNationalities.includes(profile.nationality));
         }
-        
         setDataFoundMsg(true);
         setTimeout(() => setDataFoundMsg(false), 5000);
-      } else {
+      } else if (status.state === 'NOT_FOUND') {
         setDataNotFoundMsg(true);
         setTimeout(() => setDataNotFoundMsg(false), 5000);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error auto-filling user data", err);
+      setError(err?.message || 'ไม่สามารถตรวจสอบข้อมูลได้ กรุณาลองใหม่อีกครั้ง');
     } finally {
       setFetchingUser(false);
     }
@@ -443,10 +461,20 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                             value={regId} 
                             onChange={e => {
                                 const val = e.target.value.replace(/\D/g, '').slice(0, 13);
+                                if (val !== regId && stagedProfile) {
+                                  setStagedProfile(null);
+                                  setRegistrationAccountState(null);
+                                  setName('');
+                                  setAge('');
+                                  setVendorId('');
+                                  setVendorSearch('');
+                                  setNationality('ไทย (Thai)');
+                                  setIsOtherNationality(false);
+                                }
                                 setRegId(val);
                                 if (val.length === 13) handleCheckID(val);
                             }} 
-                            onBlur={() => handleCheckID()} 
+                            disabled={fetchingUser}
                             className="w-full pl-4 pr-24 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs shadow-inner transition-all" 
                             placeholder="เลขบัตรประจำตัวประชาชน 13 หลัก" 
                         />
@@ -466,7 +494,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                           <div className="flex items-center gap-1.5 mt-2 ml-1 text-emerald-600 animate-in fade-in slide-in-from-top-1">
                             <CheckCircle size={12} />
                             <span className="text-[9px] font-bold uppercase tracking-widest">
-                              พบข้อมูลเดิมในระบบ ดึงข้อมูลสำเร็จ!
+                              พบข้อมูลที่บริษัทเตรียมไว้ เติมข้อมูลสำเร็จ
                             </span>
                           </div>
                       ) : dataNotFoundMsg ? (
@@ -494,16 +522,17 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
                 <div className="col-span-2 space-y-1">
                     <label className="block text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">{t('auth.full_name')}</label>
-                    <input required value={name} onChange={e => setName(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs shadow-inner" placeholder="Full Name (EN/TH)" />
+                    <input required readOnly={Boolean(stagedProfile?.name)} value={name} onChange={e => setName(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs shadow-inner read-only:text-slate-500 read-only:cursor-not-allowed" placeholder="Full Name (EN/TH)" />
                 </div>
                 <div className="space-y-1">
                     <label className="block text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">Age / อายุ</label>
-                    <input required type="number" value={age} onChange={e => setAge(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs shadow-inner" placeholder="25" />
+                    <input required readOnly={stagedProfile?.age != null} type="number" value={age} onChange={e => setAge(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs shadow-inner read-only:text-slate-500 read-only:cursor-not-allowed" placeholder="25" />
                 </div>
                 <div className="space-y-1">
                     <label htmlFor="registration-nationality" className="block text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">Nationality / สัญชาติ</label>
                     <select
                       id="registration-nationality"
+                      disabled={Boolean(stagedProfile?.nationality)}
                       value={isOtherNationality ? 'OTHER' : nationality} 
                       onChange={e => handleNationalityChange(e.target.value)} 
                       className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs appearance-none cursor-pointer"
@@ -523,7 +552,8 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                   <Globe2 size={10} /> Please Specify Nationality
                 </label>
                 <input 
-                  required 
+                  required
+                  readOnly={Boolean(stagedProfile?.nationality)}
                   autoFocus
                   value={nationality} 
                   onChange={e => setNationality(e.target.value)} 
@@ -539,6 +569,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                 <input
                   type="search"
+                  disabled={Boolean(stagedProfile?.vendor_id)}
                   value={vendorSearch}
                   onChange={(e) => setVendorSearch(e.target.value)}
                   className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs shadow-inner"
@@ -546,8 +577,11 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                   aria-label="ค้นหาชื่อบริษัท"
                 />
               </div>
-              <select id="registration-vendor" required value={vendorId} onChange={e => setVendorId(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs appearance-none cursor-pointer shadow-inner">
+              <select id="registration-vendor" required disabled={Boolean(stagedProfile?.vendor_id)} value={vendorId} onChange={e => setVendorId(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs appearance-none cursor-pointer shadow-inner disabled:text-slate-500 disabled:cursor-not-allowed">
                 <option value="">{vendorsLoading ? 'กำลังโหลดรายชื่อบริษัท...' : '-- Select Company --'}</option>
+                {stagedProfile?.vendor && !filteredVendors.some((vendor) => vendor.id === stagedProfile.vendor?.id) && (
+                  <option value={stagedProfile.vendor.id}>{stagedProfile.vendor.name}</option>
+                )}
                 {filteredVendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
                 <option value="OTHER">Other (ระบุเพิ่ม)</option>
               </select>

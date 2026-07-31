@@ -113,7 +113,7 @@ insert into auth.users(
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '77777777-7777-4777-8777-777777777777', true);
 select set_config('request.jwt.claims', '{"sub":"77777777-7777-4777-8777-777777777777","role":"authenticated"}', true);
-select public.complete_registration_v2(
+select public.complete_registration_v4(
   '1000000000007', 'Supplier Only Registration',
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 28, 'ไทย (Thai)', null,
   array['SUPPLIER_OUTSOURCE'], 'outsource', 'Trainee', current_date, current_date + 15

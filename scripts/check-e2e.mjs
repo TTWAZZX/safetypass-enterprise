@@ -6,6 +6,8 @@ import ExcelJSModule from 'exceljs';
 const port = 4179;
 const appUrl = `http://127.0.0.1:${port}`;
 const userNationalId = '1339900567890';
+const stagedNationalId = '1339900567891';
+const unknownNationalId = '1339900567892';
 const adminNationalId = '1000000000001';
 const userId = '10000000-0000-4000-8000-000000000001';
 const adminId = '10000000-0000-4000-8000-000000000002';
@@ -128,7 +130,7 @@ async function installMocks(page) {
           id: currentProfile.id,
           aud: 'authenticated',
           role: 'authenticated',
-          email: `${currentProfile.national_id}@safetypass.com`,
+          email: credentials.email || `${currentProfile.national_id}@safetypass.com`,
           app_metadata: { role: currentRole },
           user_metadata: { name: currentProfile.name },
           created_at: currentProfile.created_at,
@@ -147,7 +149,18 @@ async function installMocks(page) {
       const rpc = rpcMatch[1];
       const payload = request.postDataJSON?.() || {};
       const rpcResponses = {
-        check_user_exists: [{ user_exists: true, requires_registration: false, is_active: true }],
+        check_user_exists: payload.search_id === stagedNationalId
+          ? [{ user_exists: true, requires_registration: true, is_active: true }]
+          : payload.search_id === unknownNationalId
+            ? []
+            : [{ user_exists: true, requires_registration: false, is_active: true }],
+        get_my_staged_registration_profile: {
+          name: 'ผู้ใช้ที่บริษัทเตรียมไว้',
+          age: 42,
+          nationality: 'ไทย (Thai)',
+          vendor_id: vendorId,
+          vendor: { id: vendorId, name: 'บริษัททดสอบ', status: 'APPROVED' },
+        },
         get_my_decrypted_id: currentRole === 'ADMIN' ? adminNationalId : userNationalId,
         get_public_registration_vendors: [{ id: vendorId, name: 'บริษัททดสอบ', status: 'APPROVED' }],
         admin_get_vendor_duplicate_groups: [],
@@ -407,6 +420,26 @@ try {
   await userPage.goto(appUrl, { waitUntil: 'domcontentloaded' });
   await userPage.getByRole('button', { name: 'ลงทะเบียน', exact: true }).click();
   await userPage.getByRole('heading', { name: 'Create Account', exact: false }).waitFor();
+  const registrationIdInput = userPage.getByPlaceholder('เลขบัตรประจำตัวประชาชน 13 หลัก');
+  const registrationNameInput = userPage.getByPlaceholder('Full Name (EN/TH)');
+  const registrationAgeInput = userPage.locator('input[type="number"]').first();
+  await registrationIdInput.fill(stagedNationalId);
+  await userPage.getByText('พบข้อมูลที่บริษัทเตรียมไว้ เติมข้อมูลสำเร็จ', { exact: true }).waitFor();
+  if (await registrationNameInput.inputValue() !== 'ผู้ใช้ที่บริษัทเตรียมไว้') throw new Error('Staged registration did not auto-fill the name');
+  if (await registrationAgeInput.inputValue() !== '42') throw new Error('Staged registration did not auto-fill the age');
+  if (await registrationNameInput.isEditable()) throw new Error('Staged administrator name is editable');
+
+  await registrationIdInput.fill('');
+  if (await registrationNameInput.inputValue() !== '') throw new Error('Changing a staged identity retained the old name');
+  await registrationIdInput.fill(unknownNationalId);
+  await userPage.getByText('ไม่พบประวัติ กรุณากรอกข้อมูลเพื่อลงทะเบียนใหม่', { exact: true }).waitFor();
+
+  await registrationIdInput.fill(userNationalId);
+  await userPage.getByRole('heading', { name: 'Welcome Back', exact: false }).waitFor();
+  if (await userPage.getByPlaceholder('13-digit National ID').inputValue() !== userNationalId) throw new Error('Registered identity was not transferred to login');
+  await userPage.getByRole('button', { name: 'ลงทะเบียน', exact: true }).click();
+  await userPage.getByRole('heading', { name: 'Create Account', exact: false }).waitFor();
+  await registrationIdInput.fill('');
   const registrationVendorSelect = userPage.locator('select[required]').filter({ has: userPage.locator('option[value="OTHER"]') });
   await registrationVendorSelect.selectOption('OTHER');
   await userPage.locator('input[autocomplete="organization"]').fill('บริษัททดสอบ');
