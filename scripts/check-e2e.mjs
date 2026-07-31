@@ -73,7 +73,8 @@ function examQuestions(type) {
 
 async function installMocks(page) {
   let currentRole = 'USER';
-  const authDiagnostics = { stagedSignupRequests: 0, stagedTokenRequests: 0 };
+  let currentAuthEmail = `${userNationalId}@safetypass.com`;
+  const authDiagnostics = { stagedPrepareRequests: 0, stagedSignupRequests: 0, stagedTokenRequests: 0 };
   let managedQuestions = examQuestions('INDUCTION');
   managedQuestions[7] = { ...managedQuestions[7], choices_json: managedQuestions[7].choices_json.slice(0, 3) };
   managedQuestions[9] = {
@@ -124,6 +125,7 @@ async function installMocks(page) {
       const currentProfile = profile('USER');
       const accessToken = createAccessToken(currentProfile.id, 'USER');
       currentRole = 'USER';
+      currentAuthEmail = credentials.email || `${currentProfile.national_id}@safetypass.com`;
       return json(route, {
         access_token: accessToken,
         token_type: 'bearer',
@@ -147,6 +149,7 @@ async function installMocks(page) {
         authDiagnostics.stagedTokenRequests += 1;
       }
       currentRole = String(credentials.email || '').startsWith(adminNationalId) ? 'ADMIN' : 'USER';
+      currentAuthEmail = credentials.email || `${profile(currentRole).national_id}@safetypass.com`;
       const currentProfile = profile(currentRole);
       const accessToken = createAccessToken(currentProfile.id, currentRole);
       return json(route, {
@@ -167,6 +170,18 @@ async function installMocks(page) {
       });
     }
     if (url.pathname.endsWith('/logout')) return json(route, {});
+    if (url.pathname.endsWith('/user')) {
+      const currentProfile = profile(currentRole);
+      return json(route, {
+        id: currentProfile.id,
+        aud: 'authenticated',
+        role: 'authenticated',
+        email: currentAuthEmail,
+        app_metadata: { role: currentRole },
+        user_metadata: { name: currentProfile.name },
+        created_at: currentProfile.created_at,
+      });
+    }
     return json(route, { id: currentRole === 'ADMIN' ? adminId : userId });
   });
 
@@ -391,6 +406,16 @@ async function installMocks(page) {
   });
 
   await page.route('**/api/notify-**', (route) => json(route, { success: true }));
+  await page.route('**/api/prepare-staged-auth', (route) => {
+    authDiagnostics.stagedPrepareRequests += 1;
+    currentRole = 'USER';
+    currentAuthEmail = `${stagedNationalId}@safetypass.com`;
+    return json(route, {
+      ok: true,
+      accessToken: createAccessToken(userId, 'USER'),
+      refreshToken: 'test-refresh-token',
+    });
+  });
   await page.route('https://api.line.me/**', (route) => json(route, {}));
   return authDiagnostics;
 }
@@ -458,8 +483,9 @@ try {
   if (await registrationNameInput.inputValue() !== 'ผู้ใช้ที่บริษัทเตรียมไว้') throw new Error('Staged registration did not auto-fill the name');
   if (await registrationAgeInput.inputValue() !== '42') throw new Error('Staged registration did not auto-fill the age');
   if (await registrationNameInput.isEditable()) throw new Error('Staged administrator name is editable');
-  if (userAuthDiagnostics.stagedSignupRequests !== 1) throw new Error('Staged registration did not start with exactly one sign-up request');
-  if (userAuthDiagnostics.stagedTokenRequests !== 0) throw new Error('Staged registration still probed password login before auto-fill');
+  if (userAuthDiagnostics.stagedPrepareRequests !== 1) throw new Error('Staged registration did not prepare its Auth identity exactly once');
+  if (userAuthDiagnostics.stagedSignupRequests !== 0) throw new Error('Staged registration exposed client-side sign-up fallback');
+  if (userAuthDiagnostics.stagedTokenRequests !== 0) throw new Error('Staged registration still exposed a client-side password probe');
 
   await registrationIdInput.fill('');
   if (await registrationNameInput.inputValue() !== '') throw new Error('Changing a staged identity retained the old name');

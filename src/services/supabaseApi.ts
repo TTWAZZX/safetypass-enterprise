@@ -39,10 +39,6 @@ const ensureRegistrationIdentity = async (
   }
   if (currentSession) await supabase.auth.signOut();
 
-  // Staged users commonly have a profile placeholder but no Auth identity yet.
-  // Sign up first so the normal path is a single successful request instead of
-  // two expected 400 password probes. Sign-in attempts remain as compatibility
-  // fallbacks when Supabase reports that the Auth identity already exists.
   const attempts = ['SIGN_UP', 'SIGN_IN_PIN', 'SIGN_IN_LEGACY'] as const;
 
   for (const attempt of attempts) {
@@ -74,6 +70,38 @@ const ensureRegistrationIdentity = async (
   }
 
   throw new Error('ไม่สามารถยืนยันบัญชีเดิมได้ กรุณาติดต่อเจ้าหน้าที่ Safety');
+};
+
+const ensureStagedRegistrationIdentity = async (nationalId: string) => {
+  const email = `${nationalId}@safetypass.com`;
+  const { data: sessionData } = await supabase.auth.getSession();
+  const currentSession = sessionData.session;
+  if (currentSession?.user.email?.toLowerCase() === email.toLowerCase()) {
+    return currentSession.user;
+  }
+  if (currentSession) await supabase.auth.signOut();
+
+  const response = await fetch('/api/prepare-staged-auth', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nationalId }),
+  });
+  const prepared = await response.json().catch(() => null);
+  if (!response.ok || prepared?.ok !== true
+    || typeof prepared.accessToken !== 'string'
+    || typeof prepared.refreshToken !== 'string') {
+    throw new Error('ไม่สามารถเตรียมบัญชีสำหรับข้อมูลเดิมได้ กรุณาลองใหม่อีกครั้ง');
+  }
+
+  const { data: authData, error: authError } = await supabase.auth.setSession({
+    access_token: prepared.accessToken,
+    refresh_token: prepared.refreshToken,
+  });
+  if (authError || !authData.user || authData.user.email?.toLowerCase() !== email.toLowerCase()) {
+    await supabase.auth.signOut();
+    throw new Error('ไม่สามารถยืนยันบัญชีเดิมได้ กรุณาติดต่อเจ้าหน้าที่ Safety');
+  }
+  return authData.user;
 };
 
 export const api = {
@@ -160,7 +188,7 @@ export const api = {
   checkRegistrationStatus: getRegistrationStatus,
 
   prepareStagedRegistration: async (nationalId: string): Promise<StagedRegistrationProfile> => {
-    await ensureRegistrationIdentity(nationalId);
+    await ensureStagedRegistrationIdentity(nationalId);
     const { data, error } = await supabase.rpc('get_my_staged_registration_profile');
     if (error) {
       if (error.message.includes('suspended')) {
