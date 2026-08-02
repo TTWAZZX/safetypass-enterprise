@@ -29,7 +29,9 @@ async function scanDirectory(directory) {
     if (!textExtensions.has(extname(file))) continue;
 
     const text = await readFile(file, 'utf8');
-    const badCharacter = /[\uFFFD\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/u.exec(text);
+    // C1 controls (U+0080–U+009F) are not valid in our UTF-8 source files and
+    // commonly indicate Thai text that was decoded as Windows-1252/Latin-1.
+    const badCharacter = /[\uFFFD\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u0080-\u009F]/u.exec(text);
     if (badCharacter) {
       const line = text.slice(0, badCharacter.index).split('\n').length;
       violations.push(`${file}:${line} contains an invalid or replacement character`);

@@ -17,7 +17,7 @@ const escapeHtml = (value) => String(value ?? '')
   .replaceAll("'", '&#039;');
 
 const emailLayout = ({ eyebrow, title, intro, body, action, footer = EXTERNAL_REGISTRATION_BRAND }) => `<!doctype html>
-<html lang="th"><body style="margin:0;background:#f1f5f9;color:#0f172a;font-family:Arial,'Noto Sans Thai',sans-serif;">
+<html lang="th"><head><meta charset="UTF-8"><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"></head><body style="margin:0;background:#f1f5f9;color:#0f172a;font-family:Arial,'Noto Sans Thai',sans-serif;">
 <div style="padding:32px 16px;"><div style="max-width:640px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:24px;overflow:hidden;box-shadow:0 12px 32px rgba(15,23,42,.08);">
 <div style="background:#0f172a;padding:28px 32px;color:#fff;"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#93c5fd;text-transform:uppercase;">${escapeHtml(eyebrow)}</div><h1 style="margin:10px 0 0;font-size:26px;line-height:1.25;">${escapeHtml(title)}</h1></div>
 <div style="padding:30px 32px;"><p style="font-size:15px;line-height:1.8;margin:0 0 18px;">${escapeHtml(intro)}</p>${body}${action?.url ? `<div style="margin-top:26px;text-align:center;"><a href="${escapeHtml(action.url)}" style="display:inline-block;background:#1d4ed8;color:#fff;text-decoration:none;border-radius:12px;padding:13px 24px;font-size:14px;font-weight:700;">${escapeHtml(action.label || 'เข้าสู่ระบบ')}</a></div>` : ''}</div>
@@ -95,5 +95,6 @@ export async function sendExternalRegistrationEmail({ to, subject, text, html })
     subject,
     text,
     html,
+    headers: { 'Content-Language': 'th-TH' },
   });
 }
