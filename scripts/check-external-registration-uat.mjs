@@ -38,6 +38,7 @@ const messages = [
     types: 'Contractor',
     email: 'tawun666956666956@gmail.com',
     note: 'ผลการตรวจสอบจาก Admin',
+    trackingUrl: 'https://safetypass-enterprise.vercel.app/external-registration/status?request=EXT-2026-UAT-APPROVED&token=uat-token',
   }),
   renderExternalRegistrationApplicantNotice({
     status: 'REJECTED',
@@ -47,6 +48,7 @@ const messages = [
     types: 'Supplier',
     email: 'tawun666956666956@gmail.com',
     note: 'กรุณาแก้ไขข้อมูลบริษัท',
+    trackingUrl: 'https://safetypass-enterprise.vercel.app/external-registration/status?request=EXT-2026-UAT-REJECTED&token=uat-token',
   }),
 ];
 
@@ -58,13 +60,17 @@ for (const [index, message] of messages.entries()) {
 
 const submissionHandler = await source('api/send-external-registration-submission.js');
 const resultHandler = await source('api/send-external-registration-result.js');
+const emailModule = await source('api/_externalRegistrationEmail.js');
 const publicPage = await source('src/components/ExternalRegistrationPage.tsx');
 const adminPage = await source('src/components/ExternalRegistrationAdmin.tsx');
 
 assert(submissionHandler.includes("req.method !== 'POST'") && submissionHandler.includes('isRateLimited'), 'Submission API safety contract', 'ต้องรับเฉพาะ POST และมี rate limit');
 assert(submissionHandler.includes('record_external_registration_email_result'), 'Submission email outbox contract', 'ไม่มีการบันทึกผลส่ง Email');
+assert(submissionHandler.includes('buildExternalRegistrationTrackingUrl') && submissionHandler.includes('trackingUrl'), 'Applicant received tracking-link contract', 'อีเมลรับคำขอไม่มี Tracking Link');
 assert(resultHandler.includes('requireAdminUser') && resultHandler.includes('isRateLimited'), 'Admin result API safety contract', 'ไม่มี admin guard หรือ rate limit');
 assert(resultHandler.includes('admin_record_external_registration_email_result'), 'Admin retry outbox contract', 'ไม่มีการบันทึกผล retry Email');
+assert(resultHandler.includes('payload.trackingToken') && resultHandler.includes('buildExternalRegistrationTrackingUrl'), 'Applicant result tracking-link contract', 'อีเมลผลลัพธ์ไม่มี Tracking Link');
+assert(emailModule.includes('ติดตามสถานะคำขอ') && emailModule.includes('buildExternalRegistrationTrackingUrl'), 'Email tracking button contract', 'ไม่พบปุ่ม Tracking Link ใน template ผู้สมัคร');
 assert(publicPage.includes('get_external_registration_feature_flag') && publicPage.includes('ไม่ใช้ OTP'), 'Applicant no-OTP contract', 'หน้า Applicant ไม่ตรงกับข้อกำหนด no OTP');
 assert(publicPage.includes('Supplier E-Pass') && publicPage.includes('Contractor Online'), 'Target system mapping contract', 'mapping ระบบปลายทางไม่ครบ');
 assert(adminPage.includes('สร้างบริษัทใหม่') && adminPage.includes('ส่ง Email ผลลัพธ์ซ้ำ'), 'Admin UAT contract', 'Admin workflow ไม่ครบ');

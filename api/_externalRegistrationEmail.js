@@ -16,12 +16,25 @@ const escapeHtml = (value) => String(value ?? '')
   .replaceAll('"', '&quot;')
   .replaceAll("'", '&#039;');
 
-const emailLayout = ({ eyebrow, title, intro, body, action, footer = EXTERNAL_REGISTRATION_BRAND }) => `<!doctype html>
+const isHttpUrl = (value) => /^https?:\/\//i.test(String(value ?? ''));
+
+export const buildExternalRegistrationTrackingUrl = (requestNo, trackingToken) => {
+  if (!requestNo || !trackingToken) return '';
+  return `${MAIN_SYSTEM_LOGIN_URL}/external-registration/status?request=${encodeURIComponent(requestNo)}&token=${encodeURIComponent(trackingToken)}`;
+};
+
+const renderActions = (actions = []) => {
+  const safeActions = actions.filter((item) => item?.url && isHttpUrl(item.url));
+  if (safeActions.length === 0) return '';
+  return `<div style="margin-top:26px;text-align:center;">${safeActions.map((item, index) => `<a href="${escapeHtml(item.url)}" style="display:inline-block;${index > 0 ? 'margin-left:8px;background:#fff;color:#1d4ed8;border:1px solid #93c5fd;' : 'background:#1d4ed8;color:#fff;border:1px solid #1d4ed8;'}text-decoration:none;border-radius:12px;padding:13px 20px;font-size:14px;font-weight:700;">${escapeHtml(item.label || 'เปิดลิงก์')}</a>`).join('')}</div>`;
+};
+
+const emailLayout = ({ eyebrow, title, intro, body, actions = [], action, secondaryAction, footer = EXTERNAL_REGISTRATION_BRAND }) => `<!doctype html>
 <html lang="th"><head><meta charset="UTF-8"><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"></head><body style="margin:0;background:#f1f5f9;color:#0f172a;font-family:Arial,'Noto Sans Thai',sans-serif;">
 <div style="padding:32px 16px;"><div style="max-width:640px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:24px;overflow:hidden;box-shadow:0 12px 32px rgba(15,23,42,.08);">
 <div style="background:#0f172a;padding:28px 32px;color:#fff;"><div style="font-size:11px;letter-spacing:2px;font-weight:700;color:#93c5fd;text-transform:uppercase;">${escapeHtml(eyebrow)}</div><h1 style="margin:10px 0 0;font-size:26px;line-height:1.25;">${escapeHtml(title)}</h1></div>
-<div style="padding:30px 32px;"><p style="font-size:15px;line-height:1.8;margin:0 0 18px;">${escapeHtml(intro)}</p>${body}${action?.url ? `<div style="margin-top:26px;text-align:center;"><a href="${escapeHtml(action.url)}" style="display:inline-block;background:#1d4ed8;color:#fff;text-decoration:none;border-radius:12px;padding:13px 24px;font-size:14px;font-weight:700;">${escapeHtml(action.label || 'เข้าสู่ระบบ')}</a></div>` : ''}</div>
-<div style="border-top:1px solid #e2e8f0;padding:18px 32px;color:#64748b;font-size:12px;line-height:1.7;">${escapeHtml(footer)}<br/>อีเมลนี้ถูกส่งจากระบบอัตโนมัติ กรุณาไม่ตอบกลับอีเมลนี้</div>
+<div style="padding:30px 32px;"><p style="font-size:15px;line-height:1.8;margin:0 0 18px;">${escapeHtml(intro)}</p>${body}${renderActions(actions.length > 0 ? actions : [action, secondaryAction])}</div>
+<div style="border-top:1px solid #e2e8f0;padding:18px 32px;color:#64748b;font-size:12px;line-height:1.7;">${escapeHtml(footer)}<br/>อีเมลนี้ถูกส่งจากระบบอัตโนมัติ กรุณาอย่าตอบกลับอีเมลนี้</div>
 </div></div></body></html>`;
 
 export function renderExternalRegistrationTestEmail(recipientName = '') {
@@ -62,19 +75,28 @@ export function renderExternalRegistrationAdminNotice(application) {
   };
 }
 
-export function renderExternalRegistrationApplicantNotice({ status, requestNo, companyName, applicantName, types, email, note = '' }) {
-  const statusText = status === 'APPROVED' ? 'คำขอของท่านได้รับการอนุมัติแล้ว' : status === 'REJECTED' ? 'คำขอของท่านไม่ได้รับการอนุมัติ' : 'ระบบได้รับคำขอของท่านแล้ว';
+export function renderExternalRegistrationApplicantNotice({ status, requestNo, companyName, applicantName, types, email, note = '', trackingUrl = '' }) {
+  const statusText = status === 'APPROVED'
+    ? 'คำขอของท่านได้รับการอนุมัติแล้ว'
+    : status === 'REJECTED'
+      ? 'คำขอของท่านไม่ได้รับการอนุมัติ'
+      : 'ระบบได้รับคำขอของท่านแล้ว';
   const noteBlock = note ? `<div style="margin-top:18px;background:#fffbeb;border:1px solid #fde68a;border-radius:16px;padding:16px 18px;color:#92400e;font-size:14px;line-height:1.8;"><strong>หมายเหตุ:</strong><br/>${escapeHtml(note)}</div>` : '';
   const approvedBlock = status === 'APPROVED' ? `<div style="margin-top:18px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:16px;padding:16px 18px;color:#1e40af;font-size:14px;line-height:1.8;">คำขอของท่านได้รับการตรวจสอบและอนุมัติโดย ${EXTERNAL_REGISTRATION_BRAND} แล้ว</div>` : '';
+  const safeTrackingUrl = isHttpUrl(trackingUrl) ? trackingUrl : '';
+  const trackingText = safeTrackingUrl ? `\nติดตามสถานะคำขอ: ${safeTrackingUrl}` : '';
   return {
     subject: status === 'APPROVED' ? `อนุมัติคำขอลงทะเบียนแล้ว ${requestNo}` : `อัปเดตคำขอลงทะเบียน ${requestNo}`,
-    text: `${statusText}\nเลขที่คำขอ: ${requestNo}\nบริษัท: ${companyName}\nประเภท: ${types}\nEmail: ${email}${note ? `\nหมายเหตุ: ${note}` : ''}`,
+    text: `${statusText}\nเลขที่คำขอ: ${requestNo}\nบริษัท: ${companyName}\nประเภท: ${types}\nEmail: ${email}${note ? `\nหมายเหตุ: ${note}` : ''}${trackingText}`,
     html: emailLayout({
       eyebrow: EXTERNAL_REGISTRATION_BRAND,
       title: statusText,
       intro: `เรียน ${applicantName || 'ผู้สมัคร'}`,
       body: `<table style="width:100%;border-collapse:collapse;font-size:14px;line-height:1.6;"><tr><td style="padding:9px 0;color:#64748b;width:35%;">เลขที่คำขอ</td><td style="padding:9px 0;font-weight:700;">${escapeHtml(requestNo)}</td></tr><tr><td style="padding:9px 0;color:#64748b;">บริษัท</td><td style="padding:9px 0;font-weight:700;">${escapeHtml(companyName)}</td></tr><tr><td style="padding:9px 0;color:#64748b;">ประเภท</td><td style="padding:9px 0;font-weight:700;">${escapeHtml(types)}</td></tr><tr><td style="padding:9px 0;color:#64748b;">Email ที่แจ้งไว้</td><td style="padding:9px 0;font-weight:700;">${escapeHtml(email)}</td></tr></table>${approvedBlock}${noteBlock}`,
-      action: { url: MAIN_SYSTEM_LOGIN_URL, label: 'เข้าสู่ระบบหลัก TSH CTR GatePass' },
+      actions: [
+        { url: safeTrackingUrl, label: 'ติดตามสถานะคำขอ' },
+        { url: MAIN_SYSTEM_LOGIN_URL, label: 'เข้าสู่ระบบหลัก TSH CTR GatePass' },
+      ],
     }),
   };
 }

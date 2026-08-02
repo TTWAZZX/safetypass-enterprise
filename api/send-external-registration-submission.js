@@ -1,5 +1,6 @@
 import { cleanText, getSupabaseConfig, isRateLimited } from './_auth.js';
 import {
+  buildExternalRegistrationTrackingUrl,
   renderExternalRegistrationAdminNotice,
   renderExternalRegistrationApplicantNotice,
   sendExternalRegistrationEmail,
@@ -16,7 +17,7 @@ async function callRpc(config, name, body) {
   return data;
 }
 
-function renderQueuedMessage(row) {
+function renderQueuedMessage(row, trackingUrl) {
   const payload = row.payload || {};
   if (row.template_key === 'external_registration_admin_notice') {
     return renderExternalRegistrationAdminNotice({
@@ -37,6 +38,7 @@ function renderQueuedMessage(row) {
       applicantName: payload.applicantName,
       types: payload.types,
       email: payload.email,
+      trackingUrl,
     });
   }
   throw new Error(`Unsupported email template: ${row.template_key}`);
@@ -69,9 +71,10 @@ export default async function handler(req, res) {
 
   const failures = [];
   let sent = 0;
+  const trackingUrl = buildExternalRegistrationTrackingUrl(requestNo, trackingToken);
   for (const row of Array.isArray(rows) ? rows : []) {
     try {
-      const message = renderQueuedMessage(row);
+      const message = renderQueuedMessage(row, trackingUrl);
       await sendExternalRegistrationEmail({ to: row.recipient_email, ...message });
       await callRpc(config, 'record_external_registration_email_result', {
         outbox_id_param: row.id,

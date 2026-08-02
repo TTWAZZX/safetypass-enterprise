@@ -28,6 +28,7 @@ describe('External Registration Thai email encoding', () => {
         types: 'Supplier',
         email: 'test@example.com',
         note: 'ตรวจสอบข้อมูลเรียบร้อยแล้ว',
+        trackingUrl: 'https://safetypass-enterprise.vercel.app/external-registration/status?request=EXT-2026-000001&token=test-token',
       }),
     ];
 
@@ -38,5 +39,9 @@ describe('External Registration Thai email encoding', () => {
       expect(message.html).toContain('<meta charset="UTF-8">');
       expect(message.html).toContain('charset=UTF-8');
     }
+
+    expect(messages[2].html).toContain('ติดตามสถานะคำขอ');
+    expect(messages[2].html).toContain('เข้าสู่ระบบหลัก TSH CTR GatePass');
+    expect(messages[2].html).toContain('/external-registration/status');
   });
 });

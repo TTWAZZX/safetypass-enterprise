@@ -70,6 +70,14 @@ begin
 
   if not exists (
     select 1
+    from public.admin_get_external_registration_result_email_batch(application_id_value)
+    where payload ->> 'trackingToken' = submission ->> 'tracking_token'
+  ) then
+    raise exception 'Approval result email batch did not expose the applicant tracking token';
+  end if;
+
+  if not exists (
+    select 1
     from public.get_external_registration_email_batch(
       submission ->> 'request_no', submission ->> 'tracking_token'
     )

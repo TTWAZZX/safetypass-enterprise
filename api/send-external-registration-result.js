@@ -1,5 +1,6 @@
 import { cleanText, isRateLimited, requireAdminUser } from './_auth.js';
 import {
+  buildExternalRegistrationTrackingUrl,
   renderExternalRegistrationApplicantNotice,
   sendExternalRegistrationEmail,
 } from './_externalRegistrationEmail.js';
@@ -63,6 +64,7 @@ export default async function handler(req, res) {
         types: payload.types,
         email: payload.email,
         note: submittedDetails,
+        trackingUrl: buildExternalRegistrationTrackingUrl(payload.requestNo, payload.trackingToken),
       });
       await sendExternalRegistrationEmail({ to: row.recipient_email, ...message });
       await callRpc(auth.config, auth.authorization, 'admin_record_external_registration_email_result', {

@@ -72,6 +72,16 @@ begin
       type_count, contact_count, outbox_count;
   end if;
 
+  if not exists (
+    select 1
+    from public.external_registration_email_outbox
+    where application_id = application_id_value
+      and template_key = 'external_registration_applicant_received'
+      and payload ->> 'trackingToken' = tracking_token_value
+  ) then
+    raise exception 'Applicant email outbox did not retain the tracking token';
+  end if;
+
   tracking_result := public.get_external_access_application_status(
     request_no_value,
     tracking_token_value
