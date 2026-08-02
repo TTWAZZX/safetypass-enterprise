@@ -1,6 +1,10 @@
 import { readFileSync } from 'node:fs';
 import process from 'node:process';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import pg from 'pg';
+
+const execFileAsync = promisify(execFile);
 
 const allowedTests = new Set([
   'supabase/tests/staged_registration_flow_test.sql',
@@ -25,7 +29,13 @@ const env = Object.fromEntries(
 );
 
 if (!env.SUPABASE_DB_PASSWORD || /YOUR-PASSWORD|PLACEHOLDER|\[|\]/i.test(env.SUPABASE_DB_PASSWORD)) {
-  throw new Error('SUPABASE_DB_PASSWORD is missing');
+  const supabaseCommand = process.platform === 'win32' ? 'supabase.exe' : 'supabase';
+  await execFileAsync(supabaseCommand, ['db', 'query', '--linked', '--file', testPath], {
+    cwd: process.cwd(),
+    maxBuffer: 4 * 1024 * 1024,
+  });
+  console.log('Remote registration database regression passed via linked Supabase CLI (transaction rolled back).');
+  process.exit(0);
 }
 
 const poolerUrl = new URL(readFileSync('supabase/.temp/pooler-url', 'utf8').trim());

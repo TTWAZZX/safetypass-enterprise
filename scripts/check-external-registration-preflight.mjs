@@ -6,8 +6,10 @@ const requiredFiles = [
   'supabase/migrations/20260802193000_external_registration_email_admin.sql',
   'supabase/migrations/20260802200000_external_registration_submission.sql',
   'supabase/migrations/20260802210000_external_registration_admin_workflow.sql',
+  'supabase/migrations/20260802220000_external_registration_default_admin.sql',
   'supabase/tests/external_registration_submission_test.sql',
   'supabase/tests/external_registration_admin_workflow_test.sql',
+  'src/__tests__/externalRegistrationEncoding.test.ts',
 ];
 
 const rawEnv = existsSync(envPath) ? readFileSync(envPath, 'utf8') : '';
@@ -27,13 +29,13 @@ const senderSource = readFileSync('api/_externalRegistrationEmail.js', 'utf8');
 const senderConfigured = senderSource.includes("EXTERNAL_REGISTRATION_SENDER = 'safetytsh@gmail.com'");
 const brandConfigured = senderSource.includes("EXTERNAL_REGISTRATION_BRAND = 'TSH CTR GatePass'");
 
-console.log('External Registration Phase 5 preflight');
+console.log('External Registration Phase 6 UAT preflight');
 console.log(`- migration/test files: ${missingFiles.length === 0 ? 'ready' : `missing ${missingFiles.join(', ')}`}`);
 console.log(`- frontend Supabase + Gmail env: ${missingEnv.length === 0 ? 'configured' : `missing ${missingEnv.join(', ')}`}`);
 console.log(`- sender: ${senderConfigured ? 'safetytsh@gmail.com' : 'not verified'}`);
 console.log(`- email display name: ${brandConfigured ? 'TSH CTR GatePass' : 'not verified'}`);
 console.log(`- main system login button URL: ${env.MAIN_SYSTEM_LOGIN_URL || 'not set'}`);
 console.log(`- feature flag: ${featureValue === 'false' ? 'false (safe/closed)' : featureValue || 'not set'}`);
-console.log(`- remote DB password: ${env.SUPABASE_DB_PASSWORD ? 'configured' : 'not configured (DB test cannot run yet)'}`);
+console.log(`- remote DB test route: ${env.SUPABASE_DB_PASSWORD ? 'direct PostgreSQL configured' : 'linked Supabase CLI fallback available'}`);
 
 if (missingFiles.length > 0 || missingEnv.length > 0 || !senderConfigured || !brandConfigured) process.exitCode = 1;

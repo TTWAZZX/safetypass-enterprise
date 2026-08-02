@@ -15,6 +15,7 @@
     "test:a11y": "node scripts/check-accessibility.mjs",
     "test:e2e": "node scripts/check-e2e.mjs",
     "test:e2e:external-registration": "node scripts/check-external-registration-e2e.mjs",
+    "test:uat:external-registration": "node scripts/check-external-registration-uat.mjs",
     "test:email:external-registration:real": "node scripts/send-external-registration-real-smoke.mjs",
     "check:external-registration": "node scripts/check-external-registration-preflight.mjs",
     "test:db:registration": "node scripts/run-remote-db-test.mjs supabase/tests/staged_registration_flow_test.sql",
