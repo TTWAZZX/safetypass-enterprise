@@ -762,7 +762,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         )}
 
         <a href="/external-registration" className="mt-5 flex min-h-11 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-[10px] font-black text-blue-700 transition hover:bg-blue-100">
-          <Globe2 size={14} /> ลงทะเบียนใช้งานระบบภายนอก
+                        <Globe2 size={14} /> ลงทะเบียนใช้งาน Contractor Online / Supplier E-Pass
         </a>
 
         {/* ✅ ส่วน Help & Resources ที่ดึงข้อมูลจากการตั้งค่าแอดมิน */}
