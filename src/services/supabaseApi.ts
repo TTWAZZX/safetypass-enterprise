@@ -3,6 +3,8 @@ import {
   User, Vendor, ExamType, Question, WorkPermitSession, SupplierOutsourceStatus,
   SupplierOutsourceReportRow, SupplierOutsourceType, SupplierOutsourceWorkType,
   TrainingProgram, QuestionRevision, VendorNameMatch, VendorSaveResult, VendorStatus,
+  ExternalRegistrationNotificationRecipient, ExternalRegistrationApplicationRow,
+  ExternalRegistrationApplicationDetail,
 } from '../types'
 import {
   resolveRegistrationStatus, RegistrationStatus, StagedRegistrationProfile,
@@ -361,6 +363,111 @@ export const api = {
       value_param: String(value),
     });
     if (error) throw error;
+  },
+
+  getExternalRegistrationEmailSettings: async () => {
+    const [{ data: recipients, error: recipientsError }, { data: enabled, error: enabledError }] = await Promise.all([
+      supabase.rpc('admin_get_external_registration_notification_recipients'),
+      supabase.rpc('get_external_registration_feature_flag'),
+    ]);
+    if (recipientsError) throw recipientsError;
+    if (enabledError) throw enabledError;
+    return {
+      senderEmail: 'safetytsh@gmail.com',
+      enabled: Boolean(enabled),
+      recipients: (recipients || []) as ExternalRegistrationNotificationRecipient[],
+    };
+  },
+
+  saveExternalRegistrationEmailRecipient: async (payload: {
+    id?: string | null;
+    displayName?: string;
+    email: string;
+    isActive: boolean;
+  }) => {
+    const { data, error } = await supabase.rpc('admin_save_external_registration_notification_recipient', {
+      recipient_id_param: payload.id || null,
+      display_name_param: payload.displayName?.trim() || null,
+      email_param: payload.email.trim(),
+      is_active_param: payload.isActive,
+    });
+    if (error) throw error;
+    return String(data);
+  },
+
+  removeExternalRegistrationEmailRecipient: async (id: string) => {
+    const { error } = await supabase.rpc('admin_remove_external_registration_notification_recipient', {
+      recipient_id_param: id,
+    });
+    if (error) throw error;
+  },
+
+  setExternalRegistrationFeature: async (enabled: boolean) => {
+    const { error } = await supabase.rpc('admin_set_external_registration_feature', {
+      enabled_param: enabled,
+    });
+    if (error) throw error;
+  },
+
+  getExternalRegistrationApplications: async (filters: { status?: string; search?: string } = {}): Promise<ExternalRegistrationApplicationRow[]> => {
+    const { data, error } = await supabase.rpc('admin_get_external_access_applications', {
+      status_param: filters.status || null,
+      search_param: filters.search?.trim() || null,
+      limit_param: 200,
+      offset_param: 0,
+    });
+    if (error) throw error;
+    return (data || []) as ExternalRegistrationApplicationRow[];
+  },
+
+  getExternalRegistrationApplication: async (id: string): Promise<ExternalRegistrationApplicationDetail> => {
+    const { data, error } = await supabase.rpc('admin_get_external_access_application', {
+      application_id_param: id,
+    });
+    if (error) throw error;
+    return data as ExternalRegistrationApplicationDetail;
+  },
+
+  getExternalRegistrationVendors: async (): Promise<Array<{ id: string; name: string; status: VendorStatus }>> => {
+    const { data, error } = await supabase.rpc('admin_get_external_registration_vendors');
+    if (error) throw error;
+    return (data || []) as Array<{ id: string; name: string; status: VendorStatus }>;
+  },
+
+  resolveExternalRegistrationApplication: async (input: {
+    applicationId: string;
+    action: 'APPROVED' | 'REJECTED' | 'NEED_MORE_INFO' | 'UNDER_REVIEW';
+    vendorId?: string | null;
+    newCompanyStatus?: 'PENDING' | 'APPROVED';
+    adminNote?: string;
+    rejectionReason?: string;
+  }) => {
+    const { data, error } = await supabase.rpc('admin_resolve_external_access_application', {
+      application_id_param: input.applicationId,
+      action_param: input.action,
+      vendor_id_param: input.vendorId || null,
+      new_company_status_param: input.newCompanyStatus || 'PENDING',
+      admin_note_param: input.adminNote?.trim() || null,
+      rejection_reason_param: input.rejectionReason?.trim() || null,
+    });
+    if (error) throw error;
+    return data as { saved: boolean; application_id: string; request_no: string; status: string };
+  },
+
+  sendExternalRegistrationResultEmail: async (applicationId: string) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error('ไม่พบ Session ของ Admin');
+    const response = await fetch('/api/send-external-registration-result', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ applicationId }),
+    });
+    const result = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(result?.message || 'ไม่สามารถส่ง Email ผลคำขอได้');
+    return result as { success: boolean; sent: number; failures?: Array<{ recipient: string; message: string }> };
   },
   
   // ✅ ปรับปรุง: ให้เรียกใช้ updateSystemSetting แทน เพื่อความชัวร์

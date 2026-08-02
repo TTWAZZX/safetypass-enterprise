@@ -24,6 +24,7 @@ const UserPanel = lazy(() => import('./components/UserPanel'));
 const AdminPanel = lazy(() => import('./components/AdminPanel'));
 const ExamHistory = lazy(() => import('./components/ExamHistory'));
 const VerifyPage = lazy(() => import('./components/VerifyPage'));
+const ExternalRegistrationPage = lazy(() => import('./components/ExternalRegistrationPage'));
 
 const AppContent: React.FC = () => {
   const { t, language } = useTranslation();
@@ -97,6 +98,10 @@ const AppContent: React.FC = () => {
   // ✅ แก้ให้รองรับ Query Parameter เช่น /verify?id=1234
   if (currentPath.startsWith('/verify')) {
     return <Suspense fallback={<PageSkeleton />}><VerifyPage /></Suspense>;
+  }
+
+  if (currentPath.startsWith('/external-registration')) {
+    return <Suspense fallback={<PageSkeleton />}><ExternalRegistrationPage /></Suspense>;
   }
 
   if (loading) {

@@ -8,6 +8,7 @@ const QuestionManager = lazy(() => import('./QuestionManager'));
 const VendorManager = lazy(() => import('./VendorManager'));
 const SettingsManager = lazy(() => import('./SettingsManager'));
 const SupplierOutsourceManager = lazy(() => import('./SupplierOutsourceManager'));
+const ExternalRegistrationAdmin = lazy(() => import('./ExternalRegistrationAdmin'));
 
 import {
   LayoutGrid,
@@ -20,7 +21,7 @@ import {
 const AdminPanel: React.FC = () => {
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [activePage, setActivePage] = useState<'DASHBOARD' | 'QUESTIONS' | 'VENDORS' | 'SUPPLIER_OUTSOURCE' | 'SETTINGS'>('DASHBOARD');
+  const [activePage, setActivePage] = useState<'DASHBOARD' | 'QUESTIONS' | 'VENDORS' | 'SUPPLIER_OUTSOURCE' | 'EXTERNAL_REGISTRATION' | 'SETTINGS'>('DASHBOARD');
   
   // ✅ สร้าง State เพื่อเก็บคำค้นหาที่อาจส่งมาจาก LINE
   const [searchQuery, setSearchQuery] = useState<string | null>(null);
@@ -79,6 +80,7 @@ const AdminPanel: React.FC = () => {
           <SidebarButton icon={<ClipboardList size={18} />} label="Questions" active={activePage === 'QUESTIONS'} onClick={() => setActivePage('QUESTIONS')} />
           <SidebarButton icon={<Building2 size={18} />} label="Vendors & Users" badge={stats?.pendingVendors} active={activePage === 'VENDORS'} onClick={() => setActivePage('VENDORS')} />
           <SidebarButton icon={<ShieldCheck size={18} />} label="Supplier & Outsource" active={activePage === 'SUPPLIER_OUTSOURCE'} onClick={() => setActivePage('SUPPLIER_OUTSOURCE')} />
+          <SidebarButton icon={<ClipboardList size={18} />} label="External Requests" active={activePage === 'EXTERNAL_REGISTRATION'} onClick={() => setActivePage('EXTERNAL_REGISTRATION')} />
           <SidebarButton icon={<Settings size={18} />} label="Settings" active={activePage === 'SETTINGS'} onClick={() => setActivePage('SETTINGS')} />
         </nav>
       </aside>
@@ -89,6 +91,7 @@ const AdminPanel: React.FC = () => {
         <MobileTab icon={<ClipboardList size={20} />} label="Exam" active={activePage === 'QUESTIONS'} onClick={() => setActivePage('QUESTIONS')} />
         <MobileTab icon={<Building2 size={20} />} label="Users" badge={stats?.pendingVendors} active={activePage === 'VENDORS'} onClick={() => setActivePage('VENDORS')} />
         <MobileTab icon={<ShieldCheck size={20} />} label="S&O" active={activePage === 'SUPPLIER_OUTSOURCE'} onClick={() => setActivePage('SUPPLIER_OUTSOURCE')} />
+        <MobileTab icon={<ClipboardList size={20} />} label="External" active={activePage === 'EXTERNAL_REGISTRATION'} onClick={() => setActivePage('EXTERNAL_REGISTRATION')} />
         <MobileTab icon={<Settings size={20} />} label="Config" active={activePage === 'SETTINGS'} onClick={() => setActivePage('SETTINGS')} />
       </nav>
 
@@ -101,7 +104,8 @@ const AdminPanel: React.FC = () => {
                     <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight uppercase leading-none">
                         {activePage === 'QUESTIONS' ? 'Assessment Manager' : 
                          activePage === 'VENDORS' ? 'User & Vendor Compliance' :
-                         activePage === 'SUPPLIER_OUTSOURCE' ? 'Supplier & Outsource Program' : 'System Configuration'}
+                         activePage === 'SUPPLIER_OUTSOURCE' ? 'Supplier & Outsource Program' :
+                         activePage === 'EXTERNAL_REGISTRATION' ? 'External Registration Requests' : 'System Configuration'}
                     </h1>
                     <p className="text-[10px] md:text-xs text-slate-600 font-bold tracking-widest uppercase mt-1">Management Access • Secure Node</p>
                 </div>
@@ -115,6 +119,7 @@ const AdminPanel: React.FC = () => {
               {activePage === 'QUESTIONS' && <QuestionManager />}
               {activePage === 'VENDORS' && <VendorManager initialSearch={searchQuery} />}
               {activePage === 'SUPPLIER_OUTSOURCE' && <SupplierOutsourceManager />}
+              {activePage === 'EXTERNAL_REGISTRATION' && <ExternalRegistrationAdmin />}
               {activePage === 'SETTINGS' && <SettingsManager />}
           </div>
         </Suspense>

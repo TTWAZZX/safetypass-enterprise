@@ -199,3 +199,72 @@ export interface SupplierOutsourceReportRow extends SupplierOutsourceStatus {
   score: number | null;
   result_status: 'PASSED' | 'FAILED' | null;
 }
+
+export interface ExternalRegistrationNotificationRecipient {
+  id: string;
+  display_name: string | null;
+  email: string;
+  purpose: 'EXTERNAL_REGISTRATION_ADMIN';
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ExternalRegistrationApplicationStatus =
+  | 'SUBMITTED'
+  | 'UNDER_REVIEW'
+  | 'NEED_MORE_INFO'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'CANCELLED';
+
+export type ExternalRegistrationCompanyResolution =
+  | 'UNRESOLVED'
+  | 'MATCHED_EXISTING'
+  | 'LINKED_PENDING'
+  | 'CREATED_NEW'
+  | 'REJECTED';
+
+export interface ExternalRegistrationApplicationRow {
+  id: string;
+  request_no: string;
+  company_name_submitted: string;
+  vendor_id: string | null;
+  vendor_name: string | null;
+  vendor_status: VendorStatus | null;
+  company_resolution: ExternalRegistrationCompanyResolution;
+  first_name_th: string;
+  last_name_th: string;
+  first_name_en: string;
+  last_name_en: string;
+  job_title: string;
+  login_email: string;
+  phone: string;
+  status: ExternalRegistrationApplicationStatus;
+  admin_note: string | null;
+  rejection_reason: string | null;
+  submitted_at: string;
+  reviewed_at: string | null;
+  types: Array<{ type_code: string; target_system: string }>;
+  coordinators: Array<{ name: string; is_primary: boolean; display_order: number }>;
+}
+
+export interface ExternalRegistrationApplicationDetail {
+  application: ExternalRegistrationApplicationRow & {
+    pdpa_agreed: boolean;
+    pdpa_agreed_at: string | null;
+    reviewed_by: string | null;
+    created_at: string;
+    updated_at: string;
+  };
+  vendor: { id: string; name: string; status: VendorStatus } | null;
+  types: Array<{ type_code: string; target_system: string }>;
+  coordinators: Array<{ name: string; is_primary: boolean; display_order: number }>;
+  history: Array<{
+    from_status: string | null;
+    to_status: string;
+    note: string | null;
+    changed_by: string | null;
+    created_at: string;
+  }>;
+}

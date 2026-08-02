@@ -42,6 +42,39 @@ export async function requireAuthenticatedUser(req, res) {
   }
 }
 
+export async function requireAdminUser(req, res) {
+  const auth = await requireAuthenticatedUser(req, res);
+  if (!auth) return null;
+
+  try {
+    const response = await fetch(`${auth.config.url}/rest/v1/rpc/get_my_admin_status`, {
+      method: 'POST',
+      headers: {
+        apikey: auth.config.anonKey,
+        Authorization: auth.authorization,
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
+    });
+    if (!response.ok) {
+      res.status(403).json({ message: 'Admin access required' });
+      return null;
+    }
+    const value = await response.json();
+    const isAdmin = value === true
+      || value?.[0] === true
+      || value?.[0]?.get_my_admin_status === true;
+    if (!isAdmin) {
+      res.status(403).json({ message: 'Admin access required' });
+      return null;
+    }
+    return auth;
+  } catch {
+    res.status(503).json({ message: 'Admin authorization service is unavailable' });
+    return null;
+  }
+}
+
 export function isRateLimited(key, intervalMs) {
   const now = Date.now();
   const previous = requestLimits.get(key);

@@ -16,6 +16,7 @@ import {
   BookOpen
 } from 'lucide-react';
 import AsyncState from './AsyncState';
+import ExternalRegistrationEmailSettings from './ExternalRegistrationEmailSettings';
 
 const SettingsManager: React.FC = () => {
   const { showToast } = useToastContext();
@@ -274,6 +275,8 @@ const SettingsManager: React.FC = () => {
       </div>
 
       {/* 📚 SECTION 2: MANUALS & ASSET MANAGEMENT */}
+      <ExternalRegistrationEmailSettings />
+
       <div className="bg-white p-5 md:p-10 rounded-[2rem] md:rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden">
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 md:gap-4 mb-6 md:mb-10">
           <div className="p-3 md:p-4 bg-slate-100 text-slate-600 rounded-[1rem] md:rounded-3xl shrink-0">
