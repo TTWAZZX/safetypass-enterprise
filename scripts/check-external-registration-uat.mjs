@@ -39,6 +39,7 @@ const messages = [
     email: 'tawun666956666956@gmail.com',
     note: 'ผลการตรวจสอบจาก Admin',
     trackingUrl: 'https://safetypass-enterprise.vercel.app/external-registration/status?request=EXT-2026-UAT-APPROVED&token=uat-token',
+    editUrl: 'https://safetypass-enterprise.vercel.app/external-registration/status?request=EXT-2026-UAT-APPROVED&token=uat-token&mode=edit',
   }),
   renderExternalRegistrationApplicantNotice({
     status: 'REJECTED',
@@ -49,6 +50,7 @@ const messages = [
     email: 'tawun666956666956@gmail.com',
     note: 'กรุณาแก้ไขข้อมูลบริษัท',
     trackingUrl: 'https://safetypass-enterprise.vercel.app/external-registration/status?request=EXT-2026-UAT-REJECTED&token=uat-token',
+    editUrl: 'https://safetypass-enterprise.vercel.app/external-registration/status?request=EXT-2026-UAT-REJECTED&token=uat-token&mode=edit',
   }),
 ];
 
@@ -71,9 +73,14 @@ assert(resultHandler.includes('requireAdminUser') && resultHandler.includes('isR
 assert(resultHandler.includes('admin_record_external_registration_email_result'), 'Admin retry outbox contract', 'ไม่มีการบันทึกผล retry Email');
 assert(resultHandler.includes('payload.trackingToken') && resultHandler.includes('buildExternalRegistrationTrackingUrl'), 'Applicant result tracking-link contract', 'อีเมลผลลัพธ์ไม่มี Tracking Link');
 assert(emailModule.includes('ติดตามสถานะคำขอ') && emailModule.includes('buildExternalRegistrationTrackingUrl'), 'Email tracking button contract', 'ไม่พบปุ่ม Tracking Link ใน template ผู้สมัคร');
-assert(publicPage.includes('get_external_registration_feature_flag') && publicPage.includes('ไม่ใช้ OTP'), 'Applicant no-OTP contract', 'หน้า Applicant ไม่ตรงกับข้อกำหนด no OTP');
+assert(emailModule.includes('buildExternalRegistrationEditUrl') && emailModule.includes('แก้ไขและส่งข้อมูลเพิ่มเติม'), 'Applicant edit-link email contract', 'ไม่พบปุ่มแก้ไขข้อมูลใน Email');
+assert(resultHandler.includes('NEED_MORE_INFO') && resultHandler.includes('editUrl'), 'Follow-up status email contract', 'อีเมลขอข้อมูลเพิ่มเติมยังไม่เชื่อมกับแบบฟอร์มแก้ไข');
+assert(publicPage.includes('get_external_registration_feature_flag') && !publicPage.includes('OTP') && !publicPage.includes('Password'), 'Applicant no-OTP contract', 'หน้า Applicant มีข้อความภายในเรื่อง OTP หรือ Password');
 assert(publicPage.includes('Supplier E-Pass') && publicPage.includes('Contractor Online'), 'Target system mapping contract', 'mapping ระบบปลายทางไม่ครบ');
+assert(publicPage.includes('resubmit_external_access_application') && publicPage.includes('แก้ไขข้อมูลและส่งคำขออีกครั้ง'), 'Applicant resubmission contract', 'ไม่พบ workflow แก้ไขและส่งคำขอเดิม');
+assert(publicPage.includes('ลงทะเบียนใช้งาน Contractor Online / Supplier E-Pass') && !publicPage.includes('ไม่ใช้ OTP และไม่สร้าง Password'), 'Applicant wording contract', 'ข้อความหน้า Applicant ยังไม่ถูกปรับ');
 assert(adminPage.includes('สร้างบริษัทใหม่') && adminPage.includes('ส่ง Email ผลลัพธ์ซ้ำ'), 'Admin UAT contract', 'Admin workflow ไม่ครบ');
+assert(adminPage.includes('ลบคำขอนี้') && adminPage.includes('ยืนยันการลบคำขอ') && adminPage.includes('onRequestDelete'), 'Admin delete contract', 'ไม่พบปุ่มลบและกล่องยืนยัน');
 assert(adminPage.includes('role="dialog"') && adminPage.includes('รายละเอียดคำขอ'), 'Admin drawer UX contract', 'ไม่พบ Drawer รายละเอียดคำขอ');
 assert(adminPage.includes('ConfirmationDialog') && adminPage.includes('ยืนยันอนุมัติและส่ง Email'), 'Admin confirmation UX contract', 'ไม่พบหน้าต่างยืนยันก่อนดำเนินการ');
 assert(adminPage.includes('คลิกเพื่อเปิดรายละเอียดและดำเนินการ') && adminPage.includes('ไม่อนุมัติคำขอ'), 'Admin action clarity contract', 'คำแนะนำหรือปุ่มภาษาไทยไม่ครบ');

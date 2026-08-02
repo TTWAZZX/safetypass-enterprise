@@ -46,7 +46,7 @@ try {
   await page.route('**/api/send-external-registration-submission', (route) => json(route, { success: true, sent: 1 }));
 
   await page.goto(`${appUrl}/external-registration`, { waitUntil: 'networkidle' });
-  await page.getByRole('heading', { name: 'ลงทะเบียนใช้งานระบบภายนอก' }).waitFor();
+  await page.getByRole('heading', { name: 'ลงทะเบียนใช้งาน Contractor Online / Supplier E-Pass' }).waitFor();
 
   const checkboxes = page.locator('input[type="checkbox"]');
   await checkboxes.nth(0).check();
@@ -62,7 +62,7 @@ try {
   await page.getByText(requestNo, { exact: true }).waitFor();
   await page.getByRole('link', { name: /ติดตามสถานะคำขอ/ }).click();
   await page.getByRole('heading', { name: requestNo }).waitFor();
-  await page.getByText('SUBMITTED', { exact: true }).waitFor();
+  await page.getByText('รอตรวจสอบ', { exact: true }).waitFor();
   console.log('External Registration applicant E2E smoke passed (form, submission result and tracking status).');
 } finally {
   await browser.close();

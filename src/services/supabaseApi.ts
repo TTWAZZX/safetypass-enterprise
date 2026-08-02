@@ -469,6 +469,15 @@ export const api = {
     if (!response.ok) throw new Error(result?.message || 'ไม่สามารถส่ง Email ผลคำขอได้');
     return result as { success: boolean; sent: number; failures?: Array<{ recipient: string; message: string }> };
   },
+
+  deleteExternalRegistrationApplication: async (applicationId: string, reason?: string) => {
+    const { data, error } = await supabase.rpc('admin_delete_external_access_application', {
+      application_id_param: applicationId,
+      delete_reason_param: reason?.trim() || null,
+    });
+    if (error) throw error;
+    return data as { deleted: boolean; application_id: string; request_no: string; status: string };
+  },
   
   // ✅ ปรับปรุง: ให้เรียกใช้ updateSystemSetting แทน เพื่อความชัวร์
   updatePassingScore: async (key: string, value: number) => {

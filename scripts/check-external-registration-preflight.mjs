@@ -8,8 +8,10 @@ const requiredFiles = [
   'supabase/migrations/20260802210000_external_registration_admin_workflow.sql',
   'supabase/migrations/20260802220000_external_registration_default_admin.sql',
   'supabase/migrations/20260802223000_external_registration_tracking_email.sql',
+  'supabase/migrations/20260802240000_external_registration_followup_workflow.sql',
   'supabase/tests/external_registration_submission_test.sql',
   'supabase/tests/external_registration_admin_workflow_test.sql',
+  'supabase/tests/external_registration_followup_test.sql',
   'src/__tests__/externalRegistrationEncoding.test.ts',
 ];
 

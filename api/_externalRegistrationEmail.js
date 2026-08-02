@@ -23,6 +23,11 @@ export const buildExternalRegistrationTrackingUrl = (requestNo, trackingToken) =
   return `${MAIN_SYSTEM_LOGIN_URL}/external-registration/status?request=${encodeURIComponent(requestNo)}&token=${encodeURIComponent(trackingToken)}`;
 };
 
+export const buildExternalRegistrationEditUrl = (requestNo, trackingToken) => {
+  const trackingUrl = buildExternalRegistrationTrackingUrl(requestNo, trackingToken);
+  return trackingUrl ? `${trackingUrl}&mode=edit` : '';
+};
+
 const renderActions = (actions = []) => {
   const safeActions = actions.filter((item) => item?.url && isHttpUrl(item.url));
   if (safeActions.length === 0) return '';
@@ -75,25 +80,32 @@ export function renderExternalRegistrationAdminNotice(application) {
   };
 }
 
-export function renderExternalRegistrationApplicantNotice({ status, requestNo, companyName, applicantName, types, email, note = '', trackingUrl = '' }) {
+export function renderExternalRegistrationApplicantNotice({ status, requestNo, companyName, applicantName, types, email, note = '', trackingUrl = '', editUrl = '' }) {
   const statusText = status === 'APPROVED'
     ? 'คำขอของท่านได้รับการอนุมัติแล้ว'
     : status === 'REJECTED'
       ? 'คำขอของท่านไม่ได้รับการอนุมัติ'
+      : status === 'NEED_MORE_INFO'
+        ? 'กรุณาส่งข้อมูลเพิ่มเติมสำหรับคำขอของท่าน'
+        : status === 'UNDER_REVIEW'
+          ? 'คำขอของท่านอยู่ระหว่างการตรวจสอบ'
       : 'ระบบได้รับคำขอของท่านแล้ว';
   const noteBlock = note ? `<div style="margin-top:18px;background:#fffbeb;border:1px solid #fde68a;border-radius:16px;padding:16px 18px;color:#92400e;font-size:14px;line-height:1.8;"><strong>หมายเหตุ:</strong><br/>${escapeHtml(note)}</div>` : '';
   const approvedBlock = status === 'APPROVED' ? `<div style="margin-top:18px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:16px;padding:16px 18px;color:#1e40af;font-size:14px;line-height:1.8;">คำขอของท่านได้รับการตรวจสอบและอนุมัติโดย ${EXTERNAL_REGISTRATION_BRAND} แล้ว</div>` : '';
   const safeTrackingUrl = isHttpUrl(trackingUrl) ? trackingUrl : '';
+  const safeEditUrl = isHttpUrl(editUrl) ? editUrl : '';
+  const editText = safeEditUrl ? `\nแก้ไขข้อมูลและส่งคำขออีกครั้ง: ${safeEditUrl}` : '';
   const trackingText = safeTrackingUrl ? `\nติดตามสถานะคำขอ: ${safeTrackingUrl}` : '';
   return {
     subject: status === 'APPROVED' ? `อนุมัติคำขอลงทะเบียนแล้ว ${requestNo}` : `อัปเดตคำขอลงทะเบียน ${requestNo}`,
-    text: `${statusText}\nเลขที่คำขอ: ${requestNo}\nบริษัท: ${companyName}\nประเภท: ${types}\nEmail: ${email}${note ? `\nหมายเหตุ: ${note}` : ''}${trackingText}`,
+    text: `${statusText}\nเลขที่คำขอ: ${requestNo}\nบริษัท: ${companyName}\nประเภท: ${types}\nEmail: ${email}${note ? `\nหมายเหตุ: ${note}` : ''}${editText}${trackingText}`,
     html: emailLayout({
       eyebrow: EXTERNAL_REGISTRATION_BRAND,
       title: statusText,
       intro: `เรียน ${applicantName || 'ผู้สมัคร'}`,
       body: `<table style="width:100%;border-collapse:collapse;font-size:14px;line-height:1.6;"><tr><td style="padding:9px 0;color:#64748b;width:35%;">เลขที่คำขอ</td><td style="padding:9px 0;font-weight:700;">${escapeHtml(requestNo)}</td></tr><tr><td style="padding:9px 0;color:#64748b;">บริษัท</td><td style="padding:9px 0;font-weight:700;">${escapeHtml(companyName)}</td></tr><tr><td style="padding:9px 0;color:#64748b;">ประเภท</td><td style="padding:9px 0;font-weight:700;">${escapeHtml(types)}</td></tr><tr><td style="padding:9px 0;color:#64748b;">Email ที่แจ้งไว้</td><td style="padding:9px 0;font-weight:700;">${escapeHtml(email)}</td></tr></table>${approvedBlock}${noteBlock}`,
       actions: [
+        { url: ['NEED_MORE_INFO', 'REJECTED'].includes(status) ? safeEditUrl : '', label: status === 'REJECTED' ? 'แก้ไขข้อมูลและส่งคำขอใหม่' : 'แก้ไขและส่งข้อมูลเพิ่มเติม' },
         { url: safeTrackingUrl, label: 'ติดตามสถานะคำขอ' },
         { url: MAIN_SYSTEM_LOGIN_URL, label: 'เข้าสู่ระบบหลัก TSH CTR GatePass' },
       ],

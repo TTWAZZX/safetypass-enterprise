@@ -21,6 +21,7 @@
     "test:db:registration": "node scripts/run-remote-db-test.mjs supabase/tests/staged_registration_flow_test.sql",
     "test:db:external-registration:submission": "node scripts/run-remote-db-test.mjs supabase/tests/external_registration_submission_test.sql",
     "test:db:external-registration:admin": "node scripts/run-remote-db-test.mjs supabase/tests/external_registration_admin_workflow_test.sql",
+    "test:db:external-registration:followup": "node scripts/run-remote-db-test.mjs supabase/tests/external_registration_followup_test.sql",
     "smoke:vendor:rpc": "node scripts/smoke-vendor-rpc.mjs",
     "validate:line": "node scripts/validate-line-flex.mjs",
     "validate:line:offline": "node scripts/validate-line-offline.mjs",

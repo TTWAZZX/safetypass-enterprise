@@ -21,7 +21,7 @@ describe('External Registration Thai email encoding', () => {
         coordinators: 'คุณผู้ประสานงาน TSH',
       }),
       renderExternalRegistrationApplicantNotice({
-        status: 'APPROVED',
+        status: 'REJECTED',
         requestNo: 'EXT-2026-000001',
         companyName: 'บริษัท ทดสอบ จำกัด',
         applicantName: 'ผู้สมัคร ทดสอบ',
@@ -29,6 +29,7 @@ describe('External Registration Thai email encoding', () => {
         email: 'test@example.com',
         note: 'ตรวจสอบข้อมูลเรียบร้อยแล้ว',
         trackingUrl: 'https://safetypass-enterprise.vercel.app/external-registration/status?request=EXT-2026-000001&token=test-token',
+        editUrl: 'https://safetypass-enterprise.vercel.app/external-registration/status?request=EXT-2026-000001&token=test-token&mode=edit',
       }),
     ];
 
@@ -43,5 +44,6 @@ describe('External Registration Thai email encoding', () => {
     expect(messages[2].html).toContain('ติดตามสถานะคำขอ');
     expect(messages[2].html).toContain('เข้าสู่ระบบหลัก TSH CTR GatePass');
     expect(messages[2].html).toContain('/external-registration/status');
+    expect(messages[2].html).toContain('แก้ไขข้อมูลและส่งคำขอใหม่');
   });
 });

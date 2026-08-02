@@ -1,5 +1,6 @@
 import { cleanText, isRateLimited, requireAdminUser } from './_auth.js';
 import {
+  buildExternalRegistrationEditUrl,
   buildExternalRegistrationTrackingUrl,
   renderExternalRegistrationApplicantNotice,
   sendExternalRegistrationEmail,
@@ -65,6 +66,9 @@ export default async function handler(req, res) {
         email: payload.email,
         note: submittedDetails,
         trackingUrl: buildExternalRegistrationTrackingUrl(payload.requestNo, payload.trackingToken),
+        editUrl: ['NEED_MORE_INFO', 'REJECTED'].includes(payload.status)
+          ? buildExternalRegistrationEditUrl(payload.requestNo, payload.trackingToken)
+          : '',
       });
       await sendExternalRegistrationEmail({ to: row.recipient_email, ...message });
       await callRpc(auth.config, auth.authorization, 'admin_record_external_registration_email_result', {
