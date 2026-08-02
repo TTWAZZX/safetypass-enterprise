@@ -46,4 +46,21 @@ describe('External Registration Thai email encoding', () => {
     expect(messages[2].html).toContain('/external-registration/status');
     expect(messages[2].html).toContain('แก้ไขข้อมูลและส่งคำขอใหม่');
   });
+
+  it('keeps applicant result notes limited to the Admin message', () => {
+    const message = renderExternalRegistrationApplicantNotice({
+      status: 'NEED_MORE_INFO',
+      requestNo: 'EXT-2026-000002',
+      companyName: 'บริษัท ทดสอบ จำกัด',
+      applicantName: 'ผู้สมัคร ทดสอบ',
+      types: 'Contractor',
+      email: 'test@example.com',
+      note: 'กรุณาแนบเอกสารเพิ่มเติม',
+    });
+
+    expect(message.html).toContain('กรุณาแนบเอกสารเพิ่มเติม');
+    expect(message.html).not.toContain('ชื่อภาษาไทย:');
+    expect(message.html).not.toContain('บริษัทที่ผูก:');
+    expect(message.text).toContain('หมายเหตุ: กรุณาแนบเอกสารเพิ่มเติม');
+  });
 });

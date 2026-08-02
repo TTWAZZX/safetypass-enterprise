@@ -47,16 +47,6 @@ export default async function handler(req, res) {
   for (const row of Array.isArray(rows) ? rows : []) {
     const payload = row.payload || {};
     try {
-      const submittedDetails = [
-        payload.note ? `หมายเหตุจาก Admin: ${payload.note}` : '',
-        `ชื่อภาษาไทย: ${payload.applicantName || '-'}`,
-        `ชื่อภาษาอังกฤษ: ${payload.applicantNameEnglish || '-'}`,
-        `ตำแหน่ง: ${payload.jobTitle || '-'}`,
-        `เบอร์โทร: ${payload.phone || '-'}`,
-        `ผู้ประสานงาน TSH: ${payload.coordinators || '-'}`,
-        `บริษัทที่ผูก: ${payload.vendorName || payload.companyName || '-'}`,
-        `สถานะบริษัท: ${payload.companyResolution || '-'}`,
-      ].filter(Boolean).join('\n');
       const message = renderExternalRegistrationApplicantNotice({
         status: payload.status,
         requestNo: payload.requestNo,
@@ -64,7 +54,7 @@ export default async function handler(req, res) {
         applicantName: payload.applicantName,
         types: payload.types,
         email: payload.email,
-        note: submittedDetails,
+        note: payload.note || '',
         trackingUrl: buildExternalRegistrationTrackingUrl(payload.requestNo, payload.trackingToken),
         editUrl: ['NEED_MORE_INFO', 'REJECTED'].includes(payload.status)
           ? buildExternalRegistrationEditUrl(payload.requestNo, payload.trackingToken)

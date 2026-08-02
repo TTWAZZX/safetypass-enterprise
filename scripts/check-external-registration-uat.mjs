@@ -72,6 +72,8 @@ assert(submissionHandler.includes('buildExternalRegistrationTrackingUrl') && sub
 assert(resultHandler.includes('requireAdminUser') && resultHandler.includes('isRateLimited'), 'Admin result API safety contract', 'ไม่มี admin guard หรือ rate limit');
 assert(resultHandler.includes('admin_record_external_registration_email_result'), 'Admin retry outbox contract', 'ไม่มีการบันทึกผล retry Email');
 assert(resultHandler.includes('payload.trackingToken') && resultHandler.includes('buildExternalRegistrationTrackingUrl'), 'Applicant result tracking-link contract', 'อีเมลผลลัพธ์ไม่มี Tracking Link');
+assert(resultHandler.includes('note: payload.note || \'\''), 'Applicant result note contract', 'หมายเหตุในอีเมลผู้สมัครไม่ได้ใช้เฉพาะข้อความจาก Admin');
+assert(!resultHandler.includes('submittedDetails'), 'Applicant result note isolation contract', 'หมายเหตุในอีเมลผู้สมัครยังรวมรายละเอียดผู้สมัครอัตโนมัติ');
 assert(emailModule.includes('ติดตามสถานะคำขอ') && emailModule.includes('buildExternalRegistrationTrackingUrl'), 'Email tracking button contract', 'ไม่พบปุ่ม Tracking Link ใน template ผู้สมัคร');
 assert(emailModule.includes('buildExternalRegistrationEditUrl') && emailModule.includes('แก้ไขและส่งข้อมูลเพิ่มเติม'), 'Applicant edit-link email contract', 'ไม่พบปุ่มแก้ไขข้อมูลใน Email');
 assert(resultHandler.includes('NEED_MORE_INFO') && resultHandler.includes('editUrl'), 'Follow-up status email contract', 'อีเมลขอข้อมูลเพิ่มเติมยังไม่เชื่อมกับแบบฟอร์มแก้ไข');

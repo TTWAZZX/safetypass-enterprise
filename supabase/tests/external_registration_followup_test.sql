@@ -30,6 +30,7 @@ declare
   status_value jsonb;
   result_batch_count integer;
   pending_received_count integer;
+  pending_admin_count integer;
 begin
   submission := public.create_external_access_application(
     'Phase Follow-up Company Co., Ltd.',
@@ -92,6 +93,15 @@ begin
     and payload ->> 'trackingToken' = submission ->> 'tracking_token';
   if pending_received_count < 1 then
     raise exception 'Resubmission did not queue applicant confirmation email';
+  end if;
+
+  select count(*) into pending_admin_count
+  from public.get_external_registration_email_batch(
+    submission ->> 'request_no', submission ->> 'tracking_token'
+  )
+  where template_key = 'external_registration_admin_notice';
+  if pending_admin_count < 2 then
+    raise exception 'Resubmission did not queue a new Admin notification email';
   end if;
 
   status_value := public.admin_delete_external_access_application(
