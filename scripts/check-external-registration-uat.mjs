@@ -68,6 +68,9 @@ assert(resultHandler.includes('admin_record_external_registration_email_result')
 assert(publicPage.includes('get_external_registration_feature_flag') && publicPage.includes('ไม่ใช้ OTP'), 'Applicant no-OTP contract', 'หน้า Applicant ไม่ตรงกับข้อกำหนด no OTP');
 assert(publicPage.includes('Supplier E-Pass') && publicPage.includes('Contractor Online'), 'Target system mapping contract', 'mapping ระบบปลายทางไม่ครบ');
 assert(adminPage.includes('สร้างบริษัทใหม่') && adminPage.includes('ส่ง Email ผลลัพธ์ซ้ำ'), 'Admin UAT contract', 'Admin workflow ไม่ครบ');
+assert(adminPage.includes('role="dialog"') && adminPage.includes('รายละเอียดคำขอ'), 'Admin drawer UX contract', 'ไม่พบ Drawer รายละเอียดคำขอ');
+assert(adminPage.includes('ConfirmationDialog') && adminPage.includes('ยืนยันอนุมัติและส่ง Email'), 'Admin confirmation UX contract', 'ไม่พบหน้าต่างยืนยันก่อนดำเนินการ');
+assert(adminPage.includes('คลิกเพื่อเปิดรายละเอียดและดำเนินการ') && adminPage.includes('ไม่อนุมัติคำขอ'), 'Admin action clarity contract', 'คำแนะนำหรือปุ่มภาษาไทยไม่ครบ');
 
 try {
   const response = await fetch(productionUrl, { headers: { 'cache-control': 'no-cache' } });
