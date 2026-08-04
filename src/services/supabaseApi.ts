@@ -363,26 +363,20 @@ export const api = {
     }>;
   },
 
-  getPendingVendors: async (): Promise<Vendor[]> => {
-    const { data } = await supabase
-      .from('vendors')
-      .select('*')
-      .eq('status', 'PENDING')
-    return data || []
+  adminArchiveVendor: async (id: string) => {
+    const { data, error } = await supabase.rpc('admin_archive_vendor', {
+      vendor_id_param: id,
+    });
+    if (error) throw error;
+    return data as { archived: boolean; links_preserved: boolean; already_rejected: boolean };
   },
 
-  approveVendor: async (id: string) => {
-    const { error } = await supabase.from('vendors')
-      .update({ status: 'APPROVED' })
-      .eq('id', id);
+  adminArchiveUser: async (id: string) => {
+    const { data, error } = await supabase.rpc('admin_archive_user', {
+      user_id_param: id,
+    });
     if (error) throw error;
-  },
-
-  rejectVendor: async (id: string) => {
-    const { error } = await supabase.from('vendors')
-      .update({ status: 'REJECTED' })
-      .eq('id', id);
-    if (error) throw error;
+    return data as { archived: boolean; history_preserved: boolean; already_inactive: boolean };
   },
 
   /* =====================================================
@@ -642,16 +636,6 @@ export const api = {
   /* =====================================================
       5. EXAM SUBMISSION & HISTORY
   ===================================================== */
-
-  deleteUser: async (userId: string) => {
-    // Note: ควรใช้ handleDeleteUser ใน VendorManager เพื่อ Cascade Delete
-    const { error } = await supabase
-      .from('users')
-      .delete()
-      .eq('id', userId);
-    if (error) throw error;
-    return true;
-  },
 
   submitExamWithAnswers: async (
     type: ExamType,

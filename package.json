@@ -27,6 +27,7 @@
     "test:uat:auth:local": "node scripts/run-phase1-local-uat.mjs",
     "test:db:phase2-boundary": "node scripts/check-phase2-service-boundary.mjs",
     "test:db:phase3-identity": "node scripts/check-phase3-identity-boundary.mjs",
+    "test:db:phase4-admin-integrity": "node scripts/check-phase4-admin-integrity.mjs",
     "test:db:restore-parity": "node scripts/check-phase1-restore-parity.mjs",
     "test:db:external-registration:submission": "node scripts/run-remote-db-test.mjs supabase/tests/external_registration_submission_test.sql",
     "test:db:external-registration:admin": "node scripts/run-remote-db-test.mjs supabase/tests/external_registration_admin_workflow_test.sql",

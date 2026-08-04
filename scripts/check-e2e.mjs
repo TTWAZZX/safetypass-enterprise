@@ -81,6 +81,9 @@ async function installMocks(page, options = {}) {
     stagedSignupRequests: 0,
     stagedTokenRequests: 0,
     pinUpgradeRequests: 0,
+    archiveVendorRequests: 0,
+    archiveUserRequests: 0,
+    directHighIntegrityWrites: 0,
   };
   let managedQuestions = examQuestions('INDUCTION');
   managedQuestions[7] = { ...managedQuestions[7], choices_json: managedQuestions[7].choices_json.slice(0, 3) };
@@ -292,6 +295,14 @@ async function installMocks(page, options = {}) {
           vendor: { id: payload.vendor_id_param || '20000000-0000-4000-8000-000000000002', name, status: payload.status_param },
         });
       }
+      if (rpc === 'admin_archive_vendor') {
+        authDiagnostics.archiveVendorRequests += 1;
+        return json(route, { archived: true, links_preserved: true, already_rejected: false });
+      }
+      if (rpc === 'admin_archive_user') {
+        authDiagnostics.archiveUserRequests += 1;
+        return json(route, { archived: true, history_preserved: true, already_inactive: false });
+      }
       if (rpc === 'admin_get_directory_page') {
         if (payload.p_section === 'VENDORS') {
           return json(route, { rows: [{ id: vendorId, name: 'บริษัททดสอบ', status: 'APPROVED', created_at: '2026-07-29T00:00:00.000Z' }], total: 1, stats: null });
@@ -374,6 +385,13 @@ async function installMocks(page, options = {}) {
     }
 
     const table = url.pathname.split('/').pop();
+    const directWrite = !['GET', 'HEAD', 'OPTIONS'].includes(request.method());
+    const highIntegrityWrite = (table === 'vendors' || table === 'audit_logs'
+      || table === 'questions' || table === 'question_revisions'
+      || table === 'system_config' || table === 'exam_history'
+      || table === 'work_permits' || table === 'user_training_access')
+      || (table === 'users' && request.method() === 'DELETE');
+    if (directWrite && highIntegrityWrite) authDiagnostics.directHighIntegrityWrites += 1;
     const expectsObject = (request.headers().accept || '').includes('application/vnd.pgrst.object+json');
     if (request.method() === 'HEAD') {
       return route.fulfill({
@@ -581,7 +599,7 @@ try {
 
   const adminContext = await browser.newContext({ viewport: { width: 1365, height: 900 }, acceptDownloads: true, reducedMotion: 'reduce' });
   const adminPage = await adminContext.newPage();
-  await installMocks(adminPage);
+  const adminAuthDiagnostics = await installMocks(adminPage);
   adminPage.on('dialog', (dialog) => dialog.accept());
   await login(adminPage, adminNationalId);
   await adminPage.getByText('Dashboard Analytics', { exact: false }).waitFor();
@@ -620,6 +638,8 @@ try {
   await uniqueVendorDialog.getByText('ไม่พบชื่อซ้ำหรือชื่อใกล้เคียง', { exact: true }).waitFor();
   await uniqueVendorDialog.getByRole('button', { name: 'เพิ่มบริษัท', exact: true }).click();
   await adminPage.getByText('เพิ่มบริษัทสำเร็จ', { exact: true }).waitFor();
+  await adminPage.getByRole('button', { name: 'เก็บบริษัท บริษัททดสอบ' }).first().click();
+  await adminPage.getByText('เก็บบริษัทแล้ว โดยยังรักษาข้อมูลเชื่อมโยงเดิม', { exact: true }).waitFor();
   await adminPage.getByRole('button', { name: /^Personnel$/i }).click();
   const workbook = new ExcelJSModule.Workbook();
   const sheet = workbook.addWorksheet('Users');
@@ -633,6 +653,14 @@ try {
   });
   await adminPage.getByText(/นำเข้าพนักงานสำเร็จ 1 รายการ/).waitFor();
   await assertA11y(adminPage, 'desktop admin users');
+  await adminPage.getByRole('button', { name: 'เก็บผู้ใช้ ผู้ใช้ทดสอบระบบ' }).first().click();
+  await adminPage.getByText(/เก็บบัญชี ผู้ใช้ทดสอบระบบ แล้ว โดยรักษาประวัติทั้งหมด/).waitFor();
+  if (adminAuthDiagnostics.archiveVendorRequests !== 1 || adminAuthDiagnostics.archiveUserRequests !== 1) {
+    throw new Error('Admin archive actions did not use their authorized RPCs exactly once');
+  }
+  if (adminAuthDiagnostics.directHighIntegrityWrites !== 0) {
+    throw new Error('Admin workflow wrote a high-integrity table directly');
+  }
 
   await adminPage.getByRole('button', { name: /^Questions$/i }).click();
   await adminPage.getByText('Assessment Manager', { exact: false }).waitFor();

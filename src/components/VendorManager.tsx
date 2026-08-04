@@ -124,15 +124,6 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     setSelectedIds(new Set());
   }, [activeTab, searchQuery, selectedVendorFilter, certFilter, itemsPerPage]);
 
-  const logAction = async (action: string, target: string, details: string = '') => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      await supabase.from('audit_logs').insert([{
-        admin_email: user?.email || 'System Admin', action, target, details
-      }]);
-    } catch (err) { console.error('Audit log failure:', err); }
-  };
-
   const loadData = async (silent = false) => {
     if (!silent) {
       setLoading(true);
@@ -254,10 +245,9 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     const confirmMsg = newStatus === 'APPROVED' ? `ยืนยันการอนุมัติบริษัท ${name}?` : `ยืนยันการปฏิเสธบริษัท ${name}?`;
     if (!window.confirm(confirmMsg)) return;
     try {
-      const { error } = await supabase.from('vendors').update({ status: newStatus }).eq('id', id);
-      if (error) throw error;
+      const result = await api.adminSaveVendor({ id, name, status: newStatus, allowSimilar: true });
+      if (!result?.saved) throw new Error('ไม่สามารถปรับสถานะบริษัทได้');
       showToast(`ปรับสถานะบริษัท ${name} เป็น ${newStatus} สำเร็จ`, 'success');
-      logAction(`VENDOR_${newStatus}`, name, `Status updated to ${newStatus}`);
       loadData();
     } catch (err: any) { showToast(err.message, 'error'); }
   };
@@ -329,10 +319,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
         return;
       }
 
-      const previousName = editingVendor?.name;
       showToast(editingVendor ? 'แก้ไขชื่อบริษัทสำเร็จ' : 'เพิ่มบริษัทสำเร็จ', 'success');
-      void logAction(editingVendor ? 'EDIT_VENDOR' : 'CREATE_VENDOR', trimmedName,
-        editingVendor ? `Changed from ${previousName} to ${trimmedName}` : `Status ${vendorFormStatus}`);
       closeVendorDialog(true);
       await Promise.all([loadData(), loadVendorDuplicateGroups()]);
 
@@ -395,7 +382,6 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
 
       if (error) throw error;
       showToast('อัปเดตข้อมูลพนักงานสำเร็จ', 'success');
-      logAction('EDIT_USER', editingUser.name, `Updated Profile including Vendor`);
       setIsEditModalOpen(false);
       loadData();
     } catch (err: any) { showToast(err.message, 'error'); } 
@@ -413,7 +399,6 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
           });
           if (error) throw error;
           showToast(`${actionText} สำเร็จ`, 'success');
-          logAction(currentStatus ? 'BAN_USER' : 'UNBAN_USER', name, `Status changed to ${!currentStatus}`);
           loadData();
       } catch (err: any) {
           showToast(`ไม่สามารถ ${actionText} ได้: ` + err.message, 'error');
@@ -572,10 +557,14 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
   };
 
   const handleDeleteVendor = async (id: string, name: string) => {
-    if (!window.confirm(`ยืนยันการลบบริษัท "${name}"?`)) return;
-    const { error } = await supabase.from('vendors').delete().eq('id', id);
-    if (error) showToast("Cannot delete: Active links exist", 'error');
-    else { showToast('Deleted', 'success'); logAction('DELETE_VENDOR', name); loadData(); }
+    if (!window.confirm(`ยืนยันการเก็บบริษัท "${name}" ออกจากรายการใช้งาน? ข้อมูลเชื่อมโยงเดิมจะยังคงอยู่`)) return;
+    try {
+      await api.adminArchiveVendor(id);
+      showToast('เก็บบริษัทแล้ว โดยยังรักษาข้อมูลเชื่อมโยงเดิม', 'success');
+      loadData();
+    } catch (archiveError: any) {
+      showToast(archiveError?.message || 'ไม่สามารถเก็บบริษัทได้', 'error');
+    }
   };
 
   const handleAddUser = async () => {
@@ -595,23 +584,12 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
   };
 
   const handleDeleteUser = async (id: string, name: string) => {
-    if (!window.confirm(`⚠️ คำเตือน: คุณกำลังจะลบพนักงาน "${name}"\nประวัติการสอบ ใบอนุญาต และข้อมูล Log ทั้งหมดจะถูกลบถาวร ยืนยันการลบ?`)) return;
+    if (!window.confirm(`ยืนยันการระงับและเก็บบัญชี "${name}"?\nประวัติการสอบ ใบอนุญาต และ Audit Log จะถูกเก็บไว้ทั้งหมด`)) return;
     
     setLoading(true);
     try {
-      const childTables = ['exam_logs', 'exam_history', 'work_permits'];
-      await Promise.all(
-        childTables.map(table => supabase.from(table).delete().eq('user_id', id))
-      );
-
-      const { error } = await supabase.from('users').delete().eq('id', id);
-      
-      if (error) {
-        throw new Error(`ติดข้อจำกัดฐานข้อมูล: ${error.message}`);
-      }
-
-      showToast(`ลบข้อมูลพนักงาน ${name} สำเร็จ`, 'success');
-      logAction('DELETE_USER', name, 'Full Cascade Delete Done');
+      await api.adminArchiveUser(id);
+      showToast(`เก็บบัญชี ${name} แล้ว โดยรักษาประวัติทั้งหมด`, 'success');
       loadData();
     } catch (err: any) { 
       console.error("Delete Error:", err);
@@ -624,7 +602,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
   const handleResetTraining = async (id: string, name: string) => {
     if(!window.confirm("Reset induction status for this user?")) return;
     const { error } = await supabase.rpc('admin_reset_induction', { user_ids_param: [id] });
-    if (error) showToast(error.message, 'error'); else { showToast('Reset Complete', 'success'); logAction('RESET_TRAINING', name); loadData(); }
+    if (error) showToast(error.message, 'error'); else { showToast('Reset Complete', 'success'); loadData(); }
   };
 
   const toggleSelect = (id: string) => {
@@ -667,7 +645,6 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
       const { error } = await supabase.rpc('admin_reset_induction', { user_ids_param: ids });
       if (error) throw error;
       showToast(`Reset ${ids.length} users`, 'success');
-      logAction('BULK_RESET', `${ids.length} users`, 'Bulk training reset');
       setSelectedIds(new Set());
       loadData();
     } catch (err: any) {
@@ -1066,7 +1043,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                                   </button>
                                 </>
                               )}
-                              <button onClick={() => activeTab === 'VENDORS' ? handleDeleteVendor(item.id, item.name) : handleDeleteUser(item.id, item.name)} aria-label={`ลบ ${item.name}`} className="p-2.5 rounded-xl border border-slate-100 text-slate-600 hover:text-red-700 hover:bg-red-50 active:scale-90 transition-all shadow-sm"><Trash2 size={16} /></button>
+                              <button onClick={() => activeTab === 'VENDORS' ? handleDeleteVendor(item.id, item.name) : handleDeleteUser(item.id, item.name)} aria-label={`${activeTab === 'VENDORS' ? 'เก็บบริษัท' : 'เก็บผู้ใช้'} ${item.name}`} className="p-2.5 rounded-xl border border-slate-100 text-slate-600 hover:text-red-700 hover:bg-red-50 active:scale-90 transition-all shadow-sm"><Trash2 size={16} /></button>
                             </div>
                           </td>
                         </tr>
@@ -1198,7 +1175,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                                 </button>
                               </>
                             )}
-                            <button onClick={() => activeTab === 'VENDORS' ? handleDeleteVendor(item.id, item.name) : handleDeleteUser(item.id, item.name)} aria-label={`ลบ ${item.name}`} className="min-h-11 min-w-11 p-2.5 rounded-xl border border-slate-200 text-slate-400 bg-slate-50 active:scale-90 transition-all"><Trash2 size={14} /></button>
+                            <button onClick={() => activeTab === 'VENDORS' ? handleDeleteVendor(item.id, item.name) : handleDeleteUser(item.id, item.name)} aria-label={`${activeTab === 'VENDORS' ? 'เก็บบริษัท' : 'เก็บผู้ใช้'} ${item.name}`} className="min-h-11 min-w-11 p-2.5 rounded-xl border border-slate-200 text-slate-400 bg-slate-50 active:scale-90 transition-all"><Trash2 size={14} /></button>
                          </div>
                       </div>
                       );
