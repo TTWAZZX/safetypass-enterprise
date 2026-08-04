@@ -25,10 +25,10 @@ const USER_PROFILE_SELECT = [
 ].join(',');
 
 const getRegistrationStatus = async (nationalId: string): Promise<RegistrationStatus> => {
-  const response = await fetch('/api/check-registration-status', {
+  const response = await fetch('/api/prepare-staged-auth', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nationalId }),
+    body: JSON.stringify({ nationalId, action: 'status' }),
   });
   const result = await response.json().catch(() => null);
   if (!response.ok) throw new Error('ไม่สามารถตรวจสอบสถานะบัญชีได้');

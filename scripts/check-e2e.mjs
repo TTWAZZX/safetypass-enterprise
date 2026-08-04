@@ -409,15 +409,25 @@ async function installMocks(page, options = {}) {
   });
 
   await page.route('**/api/notify-**', (route) => json(route, { success: true }));
-  await page.route('**/api/check-registration-status', (route) => {
-    authDiagnostics.registrationStatusRequests += 1;
+  await page.route('**/api/prepare-staged-auth', (route) => {
     const payload = route.request().postDataJSON?.() || {};
-    const status = payload.nationalId === stagedNationalId
-      ? { user_exists: true, requires_registration: true, is_active: true }
-      : payload.nationalId === unknownNationalId
-        ? null
-        : { user_exists: true, requires_registration: false, is_active: true };
-    return json(route, { status });
+    if (payload.action === 'status') {
+      authDiagnostics.registrationStatusRequests += 1;
+      const status = payload.nationalId === stagedNationalId
+        ? { user_exists: true, requires_registration: true, is_active: true }
+        : payload.nationalId === unknownNationalId
+          ? null
+          : { user_exists: true, requires_registration: false, is_active: true };
+      return json(route, { status });
+    }
+    authDiagnostics.stagedPrepareRequests += 1;
+    currentRole = 'USER';
+    currentAuthEmail = `${stagedNationalId}@safetypass.com`;
+    return json(route, {
+      ok: true,
+      accessToken: createAccessToken(userId, 'USER'),
+      refreshToken: 'test-refresh-token',
+    });
   });
   await page.route('**/api/auth-login', (route) => {
     const payload = route.request().postDataJSON?.() || {};
@@ -437,16 +447,6 @@ async function installMocks(page, options = {}) {
       ok: true,
       accessToken: createAccessToken(userId, 'USER'),
       refreshToken: 'test-refresh-token-v2',
-    });
-  });
-  await page.route('**/api/prepare-staged-auth', (route) => {
-    authDiagnostics.stagedPrepareRequests += 1;
-    currentRole = 'USER';
-    currentAuthEmail = `${stagedNationalId}@safetypass.com`;
-    return json(route, {
-      ok: true,
-      accessToken: createAccessToken(userId, 'USER'),
-      refreshToken: 'test-refresh-token',
     });
   });
   await page.route('https://api.line.me/**', (route) => json(route, {}));

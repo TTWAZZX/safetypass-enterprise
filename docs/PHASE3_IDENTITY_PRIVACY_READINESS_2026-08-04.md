@@ -11,7 +11,8 @@ history, exam history, work permits, or training access.
 
 ## Implemented changes
 
-- Added `POST /api/check-registration-status`.
+- Added a status-only action to the existing `POST /api/prepare-staged-auth`
+  server function so the project remains within the Vercel Hobby function limit.
 - The endpoint validates a 13-digit identity, applies per-client and hashed
   per-identity throttling, returns only the existing three account-state flags,
   and never returns profile fields or upstream diagnostics.

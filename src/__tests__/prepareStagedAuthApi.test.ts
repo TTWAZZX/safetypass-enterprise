@@ -8,7 +8,7 @@ const jsonResponse = (body: unknown, status = 200) => new Response(JSON.stringif
   headers: { 'Content-Type': 'application/json' },
 });
 
-const invoke = async (ip: string) => {
+const invoke = async (ip: string, requestBody: Record<string, unknown> = { nationalId }) => {
   let responseStatus = 0;
   let responseBody: any;
   const response = {
@@ -25,7 +25,7 @@ const invoke = async (ip: string) => {
 
   await handler({
     method: 'POST',
-    body: { nationalId },
+    body: requestBody,
     headers: { 'x-forwarded-for': ip },
   }, response);
 
@@ -38,6 +38,59 @@ describe('prepare-staged-auth API', () => {
     delete process.env.SUPABASE_URL;
     delete process.env.SUPABASE_PUBLISHABLE_KEY;
     delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  });
+
+  it('serves registration status through the existing server-only function', async () => {
+    process.env.SUPABASE_URL = 'https://project.supabase.co';
+    process.env.SUPABASE_PUBLISHABLE_KEY = 'publishable-test-key';
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-test-key';
+    const upstream = vi.fn().mockResolvedValueOnce(jsonResponse([{
+      user_exists: true, requires_registration: true, is_active: true,
+    }]));
+    vi.stubGlobal('fetch', upstream);
+
+    const result = await invoke('192.0.2.20', {
+      nationalId: '1888888888881', action: 'status',
+    });
+
+    expect(result).toEqual({ status: 200, body: { status: {
+      user_exists: true, requires_registration: true, is_active: true,
+    } } });
+    expect(upstream.mock.calls[0][1]?.headers).toMatchObject({
+      apikey: 'service-role-test-key',
+      Authorization: 'Bearer service-role-test-key',
+    });
+  });
+
+  it('returns a privacy-minimal result and caches a repeated status handoff', async () => {
+    process.env.SUPABASE_URL = 'https://project.supabase.co';
+    process.env.SUPABASE_PUBLISHABLE_KEY = 'publishable-test-key';
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-test-key';
+    const upstream = vi.fn().mockResolvedValueOnce(jsonResponse([]));
+    vi.stubGlobal('fetch', upstream);
+    const body = { nationalId: '1888888888882', action: 'status' };
+
+    const first = await invoke('192.0.2.21', body);
+    const handoff = await invoke('192.0.2.21', body);
+
+    expect(first).toEqual({ status: 200, body: { status: null } });
+    expect(handoff).toEqual(first);
+    expect(upstream).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails the status action closed without the service role', async () => {
+    process.env.SUPABASE_URL = 'https://project.supabase.co';
+    process.env.SUPABASE_PUBLISHABLE_KEY = 'publishable-test-key';
+    const upstream = vi.fn();
+    vi.stubGlobal('fetch', upstream);
+
+    const result = await invoke('192.0.2.22', {
+      nationalId: '1888888888883', action: 'status',
+    });
+
+    expect(result.status).toBe(503);
+    expect(result.body).not.toHaveProperty('details');
+    expect(upstream).not.toHaveBeenCalled();
   });
 
   it('returns a new staged session without probing password login', async () => {

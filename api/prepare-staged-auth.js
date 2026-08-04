@@ -1,5 +1,8 @@
 import { getSupabaseConfig, getSupabaseServiceConfig, isRateLimited } from './_auth.js';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
+
+const statusCache = new Map();
+const STATUS_CACHE_MS = 2_000;
 
 const safeJson = async (response) => {
   try {
@@ -35,10 +38,29 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(200).json({ ok: false });
 
   const nationalId = typeof req.body?.nationalId === 'string' ? req.body.nationalId : '';
-  if (!/^[0-9]{13}$/.test(nationalId)) return res.status(200).json({ ok: false });
+  const statusOnly = req.body?.action === 'status';
+  if (!/^[0-9]{13}$/.test(nationalId)) {
+    return statusOnly
+      ? res.status(400).json({ message: 'Invalid identity' })
+      : res.status(200).json({ ok: false });
+  }
 
   const forwardedFor = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
-  if (isRateLimited(`prepare-staged-auth:${forwardedFor || 'unknown'}`, 750)) {
+  const clientKey = forwardedFor || 'unknown';
+  const identityKey = createHash('sha256').update(nationalId).digest('hex');
+  const cached = statusCache.get(identityKey);
+  if (statusOnly && cached && cached.expiresAt > Date.now()) {
+    return res.status(200).json({ status: cached.status });
+  }
+  if (cached && cached.expiresAt <= Date.now()) statusCache.delete(identityKey);
+
+  if (statusOnly && (
+    isRateLimited(`registration-status-client:${clientKey}`, 750)
+    || isRateLimited(`registration-status-identity:${identityKey}`, 1500)
+  )) {
+    return res.status(429).json({ message: 'Please wait before checking again' });
+  }
+  if (!statusOnly && isRateLimited(`prepare-staged-auth:${clientKey}`, 750)) {
     return res.status(200).json({ ok: false });
   }
 
@@ -56,6 +78,18 @@ export default async function handler(req, res) {
     });
     const statusRows = await safeJson(statusResponse);
     const status = Array.isArray(statusRows) ? statusRows[0] : null;
+    if (statusOnly) {
+      if (!statusResponse.ok) {
+        return res.status(503).json({ message: 'Registration service is unavailable' });
+      }
+      const safeStatus = status ? {
+        user_exists: status.user_exists === true,
+        requires_registration: status.requires_registration === true,
+        is_active: status.is_active !== false,
+      } : null;
+      statusCache.set(identityKey, { status: safeStatus, expiresAt: Date.now() + STATUS_CACHE_MS });
+      return res.status(200).json({ status: safeStatus });
+    }
     if (!statusResponse.ok
       || status?.user_exists !== true
       || status?.is_active !== true) {
@@ -102,6 +136,8 @@ export default async function handler(req, res) {
       refreshToken: session.refreshToken,
     });
   } catch {
-    return res.status(503).json({ ok: false });
+    return statusOnly
+      ? res.status(503).json({ message: 'Registration service is unavailable' })
+      : res.status(503).json({ ok: false });
   }
 }
