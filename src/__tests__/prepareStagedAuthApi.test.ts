@@ -83,4 +83,26 @@ describe('prepare-staged-auth API', () => {
     expect(upstream).toHaveBeenCalledTimes(3);
     expect(String(upstream.mock.calls[2][0])).toContain('/auth/v1/token?grant_type=password');
   });
+
+  it('prepares a replacement Auth identity for an active registered orphan', async () => {
+    process.env.SUPABASE_URL = 'https://project.supabase.co';
+    process.env.SUPABASE_PUBLISHABLE_KEY = 'publishable-test-key';
+    const upstream = vi.fn()
+      .mockResolvedValueOnce(jsonResponse([{
+        user_exists: true, requires_registration: false, is_active: true,
+      }]))
+      .mockResolvedValueOnce(jsonResponse({
+        access_token: 'repair-access', refresh_token: 'repair-refresh',
+      }));
+    vi.stubGlobal('fetch', upstream);
+
+    const result = await invoke('192.0.2.12');
+
+    expect(result).toEqual({
+      status: 200,
+      body: { ok: true, accessToken: 'repair-access', refreshToken: 'repair-refresh' },
+    });
+    expect(upstream).toHaveBeenCalledTimes(2);
+    expect(String(upstream.mock.calls[1][0])).toContain('/auth/v1/signup');
+  });
 });

@@ -56,7 +56,6 @@ export default async function handler(req, res) {
     const status = Array.isArray(statusRows) ? statusRows[0] : null;
     if (!statusResponse.ok
       || status?.user_exists !== true
-      || status?.requires_registration !== true
       || status?.is_active !== true) {
       return res.status(200).json({ ok: false });
     }

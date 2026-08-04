@@ -19,6 +19,7 @@
     "test:email:external-registration:real": "node scripts/send-external-registration-real-smoke.mjs",
     "check:external-registration": "node scripts/check-external-registration-preflight.mjs",
     "test:db:registration": "node scripts/run-remote-db-test.mjs supabase/tests/staged_registration_flow_test.sql",
+    "test:db:auth-repair": "node scripts/check-auth-repair-migration.mjs",
     "test:db:external-registration:submission": "node scripts/run-remote-db-test.mjs supabase/tests/external_registration_submission_test.sql",
     "test:db:external-registration:admin": "node scripts/run-remote-db-test.mjs supabase/tests/external_registration_admin_workflow_test.sql",
     "test:db:external-registration:followup": "node scripts/run-remote-db-test.mjs supabase/tests/external_registration_followup_test.sql",

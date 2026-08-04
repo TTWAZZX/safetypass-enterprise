@@ -151,9 +151,38 @@ export const api = {
       }
     }
 
+    // Some legacy rows can remain fully registered in public.users after their
+    // Supabase Auth identity was removed. Prepare a replacement session and let
+    // the database atomically re-link only a verified orphaned USER profile.
+    if (authError && pin && registrationStatus.state === 'REGISTERED') {
+      let repairIdentityCreated = false;
+      try {
+        const repairedIdentity = await ensureStagedRegistrationIdentity(nationalId);
+        repairIdentityCreated = true;
+        const { data: repaired, error: repairError } = await supabase.rpc(
+          'repair_my_orphaned_registration',
+        );
+        if (repairError || repaired !== true) throw repairError || new Error('Profile repair failed');
+
+        const { data: repairedSessionData } = await supabase.auth.getSession();
+        if (!repairedSessionData.session) throw new Error('Repair session is missing');
+        authData = {
+          user: repairedIdentity,
+          session: repairedSessionData.session,
+        };
+        authError = null;
+      } catch (repairError) {
+        if (repairIdentityCreated) await supabase.auth.signOut();
+        console.error('Orphaned Auth profile repair failed:', repairError);
+      }
+    }
+
     if (authError) {
       // ดักจับคนแปลกหน้าที่ไม่เคยมีในระบบเลย พยายามจะมาล็อกอิน
       if (authError.message.includes('Invalid login credentials')) {
+        if (registrationStatus.state === 'REGISTERED') {
+          throw new Error('บัญชีมีข้อมูลในระบบแต่ไม่สามารถยืนยันตัวตนได้ กรุณาติดต่อเจ้าหน้าที่ Safety');
+        }
           throw new Error('ไม่พบข้อมูล: กรุณาลงทะเบียนและยอมรับเงื่อนไขก่อนเข้าใช้งาน');
       }
       throw new Error('เข้าสู่ระบบไม่สำเร็จ: ' + authError.message);
