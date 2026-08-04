@@ -1,0 +1,62 @@
+{
+  "completedAt": "2026-08-04T15:18:15.9472232+07:00",
+  "status": "PASS_ENFORCEMENT_DISABLED",
+  "releaseCommit": "a65031852621af5a3b9115c6b66647d09dcd210c",
+  "backup": {
+    "createdAt": "2026-08-04T15:12:15.2373158+07:00",
+    "evidence": "docs/phase1-production-rollout-backup-evidence.json",
+    "encrypted": true
+  },
+  "migrations": [
+    {
+      "version": "20260804110000",
+      "name": "archive_duplicate_auth_profiles",
+      "sha256": "7736e9ee3847627509133cf34046c9ef2ce0fce062d01bdc7b4fceabd487b1b7",
+      "status": "APPLIED"
+    },
+    {
+      "version": "20260804120000",
+      "name": "progressive_pin_v2",
+      "sha256": "9e8a601d2690724644e941537f3b795daa7cf1678a27a9565e887dc1d3f77ce6",
+      "status": "APPLIED"
+    }
+  ],
+  "postMigration": {
+    "users": 446,
+    "authUsers": 276,
+    "examHistory": 1007,
+    "workPermits": 361,
+    "vendors": 115,
+    "questions": 70,
+    "stableUserIdDigestMatched": true,
+    "stableExamLinkDigestMatched": true,
+    "stablePermitLinkDigestMatched": true,
+    "securityRows": 446,
+    "pinV1Rows": 446,
+    "pinV2Rows": 0,
+    "orphanSecurityRows": 0,
+    "archivedDuplicateProfiles": 2,
+    "remainingDuplicateFingerprints": 0,
+    "serviceOnlyFunctionGrants": true,
+    "blockedLocks": 0
+  },
+  "deployment": {
+    "id": "dpl_EqbC3Mnm3RZKvGYMPcBauxymevWj",
+    "readyState": "READY",
+    "target": "production",
+    "url": "https://safetypass-enterprise-gvu0wnayd-181125411998s-projects.vercel.app",
+    "alias": "https://safetypass-enterprise.vercel.app",
+    "authPinV2Enforcement": false,
+    "secretValuesCaptured": false
+  },
+  "smokeTests": {
+    "productionPage": "PASS_HTTP_200",
+    "loginValidation": "PASS_HTTP_400",
+    "unknownSyntheticIdentity": "PASS_HTTP_401_NO_MATCH_NO_STATE_CHANGE",
+    "sessionWithoutToken": "PASS_HTTP_401",
+    "pinUpdateWithoutToken": "PASS_HTTP_401",
+    "sanitizedErrors": "PASS"
+  },
+  "realAccountUat": "PENDING_OWNER_VALIDATION",
+  "nextGate": "Keep AUTH_PIN_V2_ENFORCEMENT=false until existing USER and ADMIN owner UAT is approved"
+}
