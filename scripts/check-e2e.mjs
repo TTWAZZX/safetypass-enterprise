@@ -75,6 +75,8 @@ async function installMocks(page, options = {}) {
   let currentRole = 'USER';
   let currentAuthEmail = `${userNationalId}@safetypass.com`;
   const authDiagnostics = {
+    registrationStatusRequests: 0,
+    directIdentityRpcRequests: 0,
     stagedPrepareRequests: 0,
     stagedSignupRequests: 0,
     stagedTokenRequests: 0,
@@ -197,12 +199,8 @@ async function installMocks(page, options = {}) {
     if (rpcMatch) {
       const rpc = rpcMatch[1];
       const payload = request.postDataJSON?.() || {};
+      if (rpc === 'check_user_exists') authDiagnostics.directIdentityRpcRequests += 1;
       const rpcResponses = {
-        check_user_exists: payload.search_id === stagedNationalId
-          ? [{ user_exists: true, requires_registration: true, is_active: true }]
-          : payload.search_id === unknownNationalId
-            ? []
-            : [{ user_exists: true, requires_registration: false, is_active: true }],
         get_my_staged_registration_profile: {
           name: 'ผู้ใช้ที่บริษัทเตรียมไว้',
           age: 42,
@@ -411,6 +409,16 @@ async function installMocks(page, options = {}) {
   });
 
   await page.route('**/api/notify-**', (route) => json(route, { success: true }));
+  await page.route('**/api/check-registration-status', (route) => {
+    authDiagnostics.registrationStatusRequests += 1;
+    const payload = route.request().postDataJSON?.() || {};
+    const status = payload.nationalId === stagedNationalId
+      ? { user_exists: true, requires_registration: true, is_active: true }
+      : payload.nationalId === unknownNationalId
+        ? null
+        : { user_exists: true, requires_registration: false, is_active: true };
+    return json(route, { status });
+  });
   await page.route('**/api/auth-login', (route) => {
     const payload = route.request().postDataJSON?.() || {};
     currentRole = payload.nationalId === adminNationalId ? 'ADMIN' : 'USER';
@@ -509,6 +517,8 @@ try {
   if (await registrationAgeInput.inputValue() !== '42') throw new Error('Staged registration did not auto-fill the age');
   if (await registrationNameInput.isEditable()) throw new Error('Staged administrator name is editable');
   if (userAuthDiagnostics.stagedPrepareRequests !== 1) throw new Error('Staged registration did not prepare its Auth identity exactly once');
+  if (userAuthDiagnostics.registrationStatusRequests < 1) throw new Error('Registration did not use the server status boundary');
+  if (userAuthDiagnostics.directIdentityRpcRequests !== 0) throw new Error('Browser called the identity lookup RPC directly');
   if (userAuthDiagnostics.stagedSignupRequests !== 0) throw new Error('Staged registration exposed client-side sign-up fallback');
   if (userAuthDiagnostics.stagedTokenRequests !== 0) throw new Error('Staged registration still exposed a client-side password probe');
 

@@ -1,4 +1,4 @@
-import { getSupabaseConfig, isRateLimited } from './_auth.js';
+import { getSupabaseConfig, getSupabaseServiceConfig, isRateLimited } from './_auth.js';
 import { randomBytes } from 'node:crypto';
 
 const safeJson = async (response) => {
@@ -44,11 +44,12 @@ export default async function handler(req, res) {
 
   try {
     const { url, anonKey } = getSupabaseConfig();
+    const { serviceKey } = getSupabaseServiceConfig();
     const statusResponse = await fetch(`${url}/rest/v1/rpc/check_user_exists`, {
       method: 'POST',
       headers: {
-        apikey: anonKey,
-        Authorization: `Bearer ${anonKey}`,
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ search_id: nationalId }),

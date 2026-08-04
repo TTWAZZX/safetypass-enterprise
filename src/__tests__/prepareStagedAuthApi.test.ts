@@ -37,11 +37,13 @@ describe('prepare-staged-auth API', () => {
     vi.unstubAllGlobals();
     delete process.env.SUPABASE_URL;
     delete process.env.SUPABASE_PUBLISHABLE_KEY;
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
   });
 
   it('returns a new staged session without probing password login', async () => {
     process.env.SUPABASE_URL = 'https://project.supabase.co';
     process.env.SUPABASE_PUBLISHABLE_KEY = 'publishable-test-key';
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-test-key';
     const upstream = vi.fn()
       .mockResolvedValueOnce(jsonResponse([{
         user_exists: true, requires_registration: true, is_active: true,
@@ -58,6 +60,10 @@ describe('prepare-staged-auth API', () => {
       body: { ok: true, accessToken: 'new-access', refreshToken: 'new-refresh' },
     });
     expect(upstream).toHaveBeenCalledTimes(2);
+    expect(upstream.mock.calls[0][1]?.headers).toMatchObject({
+      apikey: 'service-role-test-key',
+      Authorization: 'Bearer service-role-test-key',
+    });
     expect(String(upstream.mock.calls[1][0])).toContain('/auth/v1/signup');
     const signupBody = JSON.parse(String(upstream.mock.calls[1][1]?.body));
     expect(signupBody.password).toMatch(/^SafetyPass-bootstrap-v2-/);
@@ -68,6 +74,7 @@ describe('prepare-staged-auth API', () => {
   it('keeps expected existing-account failures server-side', async () => {
     process.env.SUPABASE_URL = 'https://project.supabase.co';
     process.env.SUPABASE_PUBLISHABLE_KEY = 'publishable-test-key';
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-test-key';
     const upstream = vi.fn()
       .mockResolvedValueOnce(jsonResponse([{
         user_exists: true, requires_registration: true, is_active: true,
@@ -91,6 +98,7 @@ describe('prepare-staged-auth API', () => {
   it('prepares a replacement Auth identity for an active registered orphan', async () => {
     process.env.SUPABASE_URL = 'https://project.supabase.co';
     process.env.SUPABASE_PUBLISHABLE_KEY = 'publishable-test-key';
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-test-key';
     const upstream = vi.fn()
       .mockResolvedValueOnce(jsonResponse([{
         user_exists: true, requires_registration: false, is_active: true,

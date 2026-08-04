@@ -25,12 +25,14 @@ const USER_PROFILE_SELECT = [
 ].join(',');
 
 const getRegistrationStatus = async (nationalId: string): Promise<RegistrationStatus> => {
-  const { data, error } = await supabase.rpc('check_user_exists', {
-    search_id: nationalId,
+  const response = await fetch('/api/check-registration-status', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nationalId }),
   });
-
-  if (error) throw new Error('ไม่สามารถตรวจสอบสถานะบัญชีได้');
-  return resolveRegistrationStatus(data?.[0]);
+  const result = await response.json().catch(() => null);
+  if (!response.ok) throw new Error('ไม่สามารถตรวจสอบสถานะบัญชีได้');
+  return resolveRegistrationStatus(result?.status);
 };
 
 const ensureRegistrationIdentity = async (
