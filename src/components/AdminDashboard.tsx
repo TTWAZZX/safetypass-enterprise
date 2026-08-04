@@ -220,7 +220,7 @@ const AdminDashboard: React.FC<{
       setExportMenuOpen(false);
     } catch (exportError: any) {
       console.error('Supplier & Outsource export failed:', exportError);
-      window.alert('ไม่สามารถส่งออกรายงาน Supplier & Outsource ได้ กรุณาลองใหม่อีกครั้ง');
+      window.alert(exportError?.message || 'ไม่สามารถส่งออกรายงาน Supplier & Outsource ได้ กรุณาลองใหม่อีกครั้ง');
     } finally {
       setSupplierExportLoading(false);
     }

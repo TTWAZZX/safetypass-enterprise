@@ -52,7 +52,24 @@ export type SupplierOutsourceExcelRow = {
   expiration_date: string | null;
 };
 
+const supplierExportNationalId = (value: string | null): string => {
+  const nationalId = String(value || '').trim();
+  return /^\d{13}$/.test(nationalId) ? nationalId : '';
+};
+
+const supplierExportDate = (value: string | null): Date | null => {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+};
+
 export async function createSupplierOutsourceWorkbook(rows: SupplierOutsourceExcelRow[]) {
+  const missingNationalIds = rows.filter((row) => !supplierExportNationalId(row.national_id)).length;
+  if (missingNationalIds > 0) {
+    throw new Error(`พบ ${missingNationalIds} รายการที่ไม่มีเลขบัตรประชาชนจริง 13 หลัก กรุณาตรวจสอบข้อมูลก่อน Export`);
+  }
+
   const { default: ExcelJS } = await import('exceljs');
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet('Sheet1');
@@ -66,17 +83,17 @@ export async function createSupplierOutsourceWorkbook(rows: SupplierOutsourceExc
       sanitizeExcelText(row.name),
       sanitizeExcelText(row.participant_type),
       sanitizeExcelText(row.work_type),
-      row.national_id && /^\d{13}$/.test(row.national_id) ? row.national_id : '',
-      row.test_date ? new Date(row.test_date) : null,
-      row.expiration_date ? new Date(row.expiration_date) : null,
+      supplierExportNationalId(row.national_id),
+      supplierExportDate(row.test_date),
+      supplierExportDate(row.expiration_date),
     ]);
   });
   [6, 54, 54, 12.15, 12.15, 17.55, 13.5, 20.25].forEach((width, index) => {
     worksheet.getColumn(index + 1).width = width;
   });
   worksheet.getColumn(6).numFmt = '@';
-  worksheet.getColumn(7).numFmt = 'mm-dd-yy';
-  worksheet.getColumn(8).numFmt = 'mm-dd-yy';
+  worksheet.getColumn(7).numFmt = 'mm/dd/yyyy';
+  worksheet.getColumn(8).numFmt = 'mm/dd/yyyy';
   return workbook;
 }
 

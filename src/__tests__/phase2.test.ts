@@ -64,8 +64,8 @@ describe('Supplier & Outsource Phase 2', () => {
     ]);
     expect(sheet?.getRow(3).getCell(6).value).toBe('1000000000001');
     expect(sheet?.getColumn(6).numFmt).toBe('@');
-    expect(sheet?.getColumn(7).numFmt).toBe('mm-dd-yy');
-    expect(sheet?.getColumn(8).numFmt).toBe('mm-dd-yy');
+    expect(sheet?.getColumn(7).numFmt).toBe('mm/dd/yyyy');
+    expect(sheet?.getColumn(8).numFmt).toBe('mm/dd/yyyy');
     expect(sheet?.model.merges).toContain('A1:H1');
     expect(Array.from({ length: 8 }, (_, index) => sheet?.getColumn(index + 1).width)).toEqual([
       6, 54, 54, 12.15, 12.15, 17.55, 13.5, 20.25,
