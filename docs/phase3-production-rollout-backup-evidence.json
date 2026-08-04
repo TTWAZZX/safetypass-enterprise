@@ -1,0 +1,28 @@
+{
+  "createdAt": "2026-08-04T16:58:27.5874958+07:00",
+  "status": "PASS_ENCRYPTED_CHECKSUM_VERIFIED",
+  "directory": "C:\\Users\\Admin\\Documents\\SafetyPass Backups\\phase3-production-rollout-20260804-1657",
+  "storageEncryption": {
+    "type": "Windows EFS",
+    "directoryEnabledBeforeDump": true,
+    "everyBackupFileEncryptedAttributeVerified": true
+  },
+  "files": [
+    {
+      "name": "roles.sql",
+      "bytes": 297,
+      "sha256": "25873CEC56A2CC6514E204F420231777F85C03DA818CAA7090CDCDFA89776ECD"
+    },
+    {
+      "name": "schema.sql",
+      "bytes": 224951,
+      "sha256": "BFC817B65F0150B29C6BF695855802395C6286CC4B67A7DB39E09125626DD17C"
+    },
+    {
+      "name": "data.sql",
+      "bytes": 1472334,
+      "sha256": "C00F0E33BBA8F2B40EACC6C937200D85FDBC3916D19F4A4A32BE3281910A5923"
+    }
+  ],
+  "valuesOrRowsCapturedInEvidence": false
+}

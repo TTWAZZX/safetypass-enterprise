@@ -1,0 +1,69 @@
+{
+  "completedAt": "2026-08-04T17:06:24.6495185+07:00",
+  "status": "PASS_IDENTITY_LOOKUP_SERVICE_BOUNDARY",
+  "releaseCommits": [
+    "ba1b9e58389f3daa9dbb38cc1a1370b4cb853f4a",
+    "cf9739ef90e45503bc7b52f7b362880d4974e554"
+  ],
+  "backup": {
+    "evidence": "docs/phase3-production-rollout-backup-evidence.json",
+    "encrypted": true,
+    "checksumsVerified": true
+  },
+  "migration": {
+    "version": "20260804170000",
+    "name": "phase3_identity_lookup_boundary",
+    "sha256": "db9968760a606e8ac9fe138cc8f25caaaf681f6188c83e21d0cc063923178677",
+    "status": "APPLIED",
+    "forwardOnly": true,
+    "containsDataMutation": false
+  },
+  "preAndPostData": {
+    "users": 446,
+    "examHistory": 1009,
+    "workPermits": 361,
+    "trainingAccess": 447,
+    "stableUserIdDigestMatched": true,
+    "stableExamLinkDigestMatched": true,
+    "stablePermitLinkDigestMatched": true,
+    "stableTrainingAccessDigestMatched": true,
+    "blockedLocks": 0
+  },
+  "authorization": {
+    "anonymousIdentityLookup": false,
+    "authenticatedIdentityLookup": false,
+    "serviceRoleIdentityLookup": true,
+    "transactionalRegistrationV4Preserved": true,
+    "protectedUserFieldTriggerPreserved": true
+  },
+  "deployment": {
+    "id": "dpl_H9bjKxfw6miGXuGvpUe1Q4Ao7aVq",
+    "readyState": "READY",
+    "target": "production",
+    "url": "https://safetypass-enterprise-e2959svur-181125411998s-projects.vercel.app",
+    "alias": "https://safetypass-enterprise.vercel.app",
+    "serverlessFunctionCountWithinHobbyLimit": true,
+    "failedOversizedAttemptDidNotReachAlias": true,
+    "authPinV2Enforcement": false,
+    "secretValuesCaptured": false
+  },
+  "tests": {
+    "unit": "PASS_77_OF_77",
+    "typecheck": "PASS",
+    "build": "PASS",
+    "productionAssuranceE2E": "PASS",
+    "accessibility": "PASS",
+    "bundleBudget": "PASS",
+    "restoredDatabaseRegression": "PASS_ROLLED_BACK"
+  },
+  "productionSmoke": {
+    "page": "PASS_HTTP_200",
+    "invalidStatusInput": "PASS_HTTP_400",
+    "unknownSyntheticStatus": "PASS_HTTP_200_NULL_NO_STATE_CHANGE",
+    "shortSanitizedCache": "PASS",
+    "anonymousDirectRpc": "PASS_BLOCKED_HTTP_401",
+    "invalidLogin": "PASS_HTTP_400",
+    "sanitizedErrors": "PASS"
+  },
+  "nextGate": "Keep AUTH_PIN_V2_ENFORCEMENT=false until the separate PIN v2 owner UAT is approved"
+}
