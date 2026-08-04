@@ -52,9 +52,9 @@ export type SupplierOutsourceExcelRow = {
   expiration_date: string | null;
 };
 
-const supplierExportNationalId = (value: string | null): string => {
+const supplierExportNationalId = (value: string | null): number | null => {
   const nationalId = String(value || '').trim();
-  return /^\d{13}$/.test(nationalId) ? nationalId : '';
+  return /^[1-9]\d{12}$/.test(nationalId) ? Number(nationalId) : null;
 };
 
 const supplierExportDate = (value: string | null): Date | null => {
@@ -75,9 +75,12 @@ export async function createSupplierOutsourceWorkbook(rows: SupplierOutsourceExc
   const worksheet = workbook.addWorksheet('Sheet1');
   worksheet.mergeCells('A1:H1');
   worksheet.getCell('A1').value = ' Supplier Epass | Check Member';
+  worksheet.getCell('A1').alignment = { horizontal: 'center' };
+  worksheet.getCell('A1').font = { name: 'Calibri', size: 11 };
   worksheet.addRow(['No.', 'Company', 'Name', 'Type', 'Work Type', 'ID card', 'Test Date', 'Expiration Date']);
+  worksheet.getRow(2).font = { name: 'Calibri', size: 11, bold: true };
   rows.forEach((row, index) => {
-    worksheet.addRow([
+    const excelRow = worksheet.addRow([
       index + 1,
       sanitizeExcelText(row.company),
       sanitizeExcelText(row.name),
@@ -87,13 +90,14 @@ export async function createSupplierOutsourceWorkbook(rows: SupplierOutsourceExc
       supplierExportDate(row.test_date),
       supplierExportDate(row.expiration_date),
     ]);
+    excelRow.getCell(1).numFmt = '0';
+    excelRow.getCell(6).numFmt = '0';
+    excelRow.getCell(7).numFmt = 'mm-dd-yy';
+    excelRow.getCell(8).numFmt = 'mm-dd-yy';
   });
   [6, 54, 54, 12.15, 12.15, 17.55, 13.5, 20.25].forEach((width, index) => {
     worksheet.getColumn(index + 1).width = width;
   });
-  worksheet.getColumn(6).numFmt = '@';
-  worksheet.getColumn(7).numFmt = 'mm/dd/yyyy';
-  worksheet.getColumn(8).numFmt = 'mm/dd/yyyy';
   return workbook;
 }
 

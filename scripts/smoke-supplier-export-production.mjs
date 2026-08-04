@@ -97,23 +97,19 @@ try {
   await workbook.xlsx.readFile(downloadPath);
   const worksheet = workbook.getWorksheet('Sheet1');
   if (!worksheet) throw new Error('Supplier export worksheet is missing');
-  if (worksheet.getColumn(7).numFmt !== 'mm/dd/yyyy'
-      || worksheet.getColumn(8).numFmt !== 'mm/dd/yyyy') {
-    throw new Error('Supplier export date columns do not use MM/DD/YYYY');
-  }
-
   let dataRows = 0;
   let validIdRows = 0;
   let testDateRows = 0;
   let expirationDateRows = 0;
   worksheet.eachRow((row, rowNumber) => {
     if (rowNumber < 3) return;
-    const idCard = String(row.getCell(6).value || '');
+    const idCell = row.getCell(6);
+    const idCard = String(idCell.value || '');
     if (!idCard && row.values.length === 0) return;
     dataRows += 1;
-    if (/^\d{13}$/.test(idCard)) validIdRows += 1;
-    if (row.getCell(7).value instanceof Date) testDateRows += 1;
-    if (row.getCell(8).value instanceof Date) expirationDateRows += 1;
+    if (typeof idCell.value === 'number' && /^\d{13}$/.test(idCard) && idCell.numFmt === '0') validIdRows += 1;
+    if (row.getCell(7).value instanceof Date && row.getCell(7).numFmt === 'mm-dd-yy') testDateRows += 1;
+    if (row.getCell(8).value instanceof Date && row.getCell(8).numFmt === 'mm-dd-yy') expirationDateRows += 1;
   });
 
   if (dataRows === 0 || validIdRows !== dataRows) {
@@ -124,9 +120,9 @@ try {
     downloadSucceeded: true,
     dataRows,
     validRealIdRows: validIdRows,
-    idColumnFormat: worksheet.getColumn(6).numFmt,
-    testDateFormat: worksheet.getColumn(7).numFmt,
-    expirationDateFormat: worksheet.getColumn(8).numFmt,
+    idCellFormat: worksheet.getCell('F3').numFmt,
+    testDateFormat: worksheet.getCell('G3').numFmt,
+    expirationDateFormat: worksheet.getCell('H3').numFmt,
     testDateRows,
     expirationDateRows,
   }, null, 2));
