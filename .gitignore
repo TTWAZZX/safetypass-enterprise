@@ -27,6 +27,7 @@ dist-ssr
 .env*.local
 .supabase/
 supabase/.temp/
+supabase/.branches/
 supabase-schema-*.sql
 .phase8-*
 data backup/

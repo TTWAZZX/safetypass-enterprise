@@ -12,6 +12,23 @@ export function getSupabaseConfig() {
   return { url: url.replace(/\/$/, ''), anonKey };
 }
 
+export function getSupabaseServiceConfig() {
+  const { url, anonKey } = getSupabaseConfig();
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceKey) throw new Error('Missing Supabase service role configuration');
+  return { url, anonKey, serviceKey };
+}
+
+export function getAuthPinPepper() {
+  const pepper = process.env.AUTH_PIN_PEPPER;
+  if (!pepper || pepper.length < 32) throw new Error('Missing or weak authentication PIN pepper');
+  return pepper;
+}
+
+export function isPinV2Enforced() {
+  return process.env.AUTH_PIN_V2_ENFORCEMENT === 'true';
+}
+
 export async function requireAuthenticatedUser(req, res) {
   const authorization = req.headers.authorization;
   if (!authorization?.startsWith('Bearer ')) {

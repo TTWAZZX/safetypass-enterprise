@@ -9,8 +9,14 @@ import {
 import {
   resolveRegistrationStatus, RegistrationStatus, StagedRegistrationProfile,
 } from './registrationAccountState'
+import {
+  getSecurePinError,
+} from './pinSecurity'
 
-const createPinPassword = (nationalId: string, pin: string) => `SafetyPass-${nationalId}-${pin}`;
+export interface AuthLoginResult {
+  user: User;
+  requiresPinUpgrade: boolean;
+}
 
 const USER_PROFILE_SELECT = [
   'id', 'national_id', 'name', 'vendor_id', 'role', 'induction_expiry',
@@ -30,9 +36,11 @@ const getRegistrationStatus = async (nationalId: string): Promise<RegistrationSt
 const ensureRegistrationIdentity = async (
   nationalId: string,
   name = '',
+  securePin: string,
 ) => {
   const email = `${nationalId}@safetypass.com`;
-  const pinPassword = createPinPassword(nationalId, nationalId.slice(-4));
+  const pinError = getSecurePinError(nationalId, securePin);
+  if (pinError) throw new Error(pinError);
   const { data: sessionData } = await supabase.auth.getSession();
   const currentSession = sessionData.session;
 
@@ -41,37 +49,22 @@ const ensureRegistrationIdentity = async (
   }
   if (currentSession) await supabase.auth.signOut();
 
-  const attempts = ['SIGN_UP', 'SIGN_IN_PIN', 'SIGN_IN_LEGACY'] as const;
-
-  for (const attempt of attempts) {
-    if (attempt === 'SIGN_UP') {
-      const signUp = await supabase.auth.signUp({
-        email,
-        password: pinPassword,
-        options: { data: { name, password_scheme: 'pin-v1' } },
-      });
-      if (!signUp.error && signUp.data.session?.user) return signUp.data.session.user;
-      if (signUp.error && !/already registered|already exists|user exists/i.test(signUp.error.message)) {
-        throw new Error('ไม่สามารถเปิดบัญชีสำหรับข้อมูลเดิมได้ กรุณาติดต่อเจ้าหน้าที่ Safety');
-      }
-      continue;
-    }
-
-    const password = attempt === 'SIGN_IN_LEGACY' ? nationalId : pinPassword;
-    const login = await supabase.auth.signInWithPassword({ email, password });
-    if (login.error || !login.data.user) continue;
-
-    if (attempt === 'SIGN_IN_LEGACY') {
-      const { error: updateError } = await supabase.auth.updateUser({
-        password: pinPassword,
-        data: { password_scheme: 'pin-v1' },
-      });
-      if (updateError) throw updateError;
-    }
-    return login.data.user;
+  const bootstrapBytes = new Uint8Array(32);
+  crypto.getRandomValues(bootstrapBytes);
+  const bootstrapPassword = `SafetyPass-bootstrap-v2-${Array.from(
+    bootstrapBytes,
+    (value) => value.toString(16).padStart(2, '0'),
+  ).join('')}`;
+  const signUp = await supabase.auth.signUp({
+    email,
+    password: bootstrapPassword,
+    options: { data: { name, password_scheme: 'bootstrap-v2', must_change_pin: true } },
+  });
+  if (!signUp.error && signUp.data.session?.user) return signUp.data.session.user;
+  if (signUp.error && /already registered|already exists|user exists/i.test(signUp.error.message)) {
+    throw new Error('บัญชีนี้มีอยู่แล้ว กรุณาเข้าสู่ระบบก่อนดำเนินการลงทะเบียน');
   }
-
-  throw new Error('ไม่สามารถยืนยันบัญชีเดิมได้ กรุณาติดต่อเจ้าหน้าที่ Safety');
+  throw signUp.error || new Error('ไม่สามารถเปิดบัญชีสำหรับการลงทะเบียนได้');
 };
 
 const ensureStagedRegistrationIdentity = async (nationalId: string) => {
@@ -112,7 +105,7 @@ export const api = {
       1. AUTH & REGISTRATION (HYBRID SECURITY MODE 🔒)
   ===================================================== */
 
-  login: async (nationalId: string, pin?: string): Promise<User> => {
+  login: async (nationalId: string, pin?: string): Promise<AuthLoginResult> => {
 
     // 🔥 1. PRE-CHECK: ด่านตรวจก่อนเข้า Auth
     // วิ่งไปเช็คในตาราง users ก่อนว่า แอดมินสร้างชื่อคนนี้รอไว้หรือยัง?
@@ -125,36 +118,37 @@ export const api = {
     }
 
     // 2. ดำเนินการ Login กับ Supabase Auth ตามปกติ (สำหรับคนที่ PDPA = true แล้ว)
-    const email = `${nationalId}@safetypass.com`
-    const expectedPin = nationalId.slice(-4);
-    if (pin && pin !== expectedPin) {
-      throw new Error('PIN must match the last four digits of the national ID');
+    if (!pin || !/^\d{4}(?:\d{2})?$/.test(pin)) {
+      throw new Error('กรุณากรอก PIN เดิม 4 หลัก หรือ PIN ใหม่ 6 หลัก');
     }
-    const password = pin ? createPinPassword(nationalId, pin) : nationalId;
 
-    let { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    })
+    const response = await fetch('/api/auth-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nationalId, pin }),
+    });
+    const loginResult = await response.json().catch(() => null);
+    let authError: Error | null = response.ok ? null : new Error(loginResult?.message || 'Invalid login credentials');
+    let authData: any = { user: null, session: null };
+    let requiresPinUpgrade = loginResult?.requiresPinUpgrade === true;
 
-    // Existing accounts used the national ID as their password. Allow a one-time
-    // migration after the user confirms the last four digits, then replace it.
-    if (authError && pin) {
-      const legacy = await supabase.auth.signInWithPassword({ email, password: nationalId });
-      if (!legacy.error) {
-        authData = legacy.data;
-        authError = null;
-        const { error: updateError } = await supabase.auth.updateUser({
-          password: createPinPassword(nationalId, pin),
-        });
-        if (updateError) throw updateError;
+    if (response.ok && typeof loginResult?.accessToken === 'string'
+        && typeof loginResult?.refreshToken === 'string') {
+      const { data, error } = await supabase.auth.setSession({
+        access_token: loginResult.accessToken,
+        refresh_token: loginResult.refreshToken,
+      });
+      if (error || !data.user || !data.session) {
+        authError = error || new Error('Invalid authentication session');
+      } else {
+        authData = data;
       }
     }
 
     // Some legacy rows can remain fully registered in public.users after their
     // Supabase Auth identity was removed. Prepare a replacement session and let
     // the database atomically re-link only a verified orphaned USER profile.
-    if (authError && pin && registrationStatus.state === 'REGISTERED') {
+    if (authError && pin.length === 4 && registrationStatus.state === 'REGISTERED') {
       let repairIdentityCreated = false;
       try {
         const repairedIdentity = await ensureStagedRegistrationIdentity(nationalId);
@@ -171,6 +165,7 @@ export const api = {
           session: repairedSessionData.session,
         };
         authError = null;
+        requiresPinUpgrade = true;
       } catch (repairError) {
         if (repairIdentityCreated) await supabase.auth.signOut();
         console.error('Orphaned Auth profile repair failed:', repairError);
@@ -179,11 +174,17 @@ export const api = {
 
     if (authError) {
       // ดักจับคนแปลกหน้าที่ไม่เคยมีในระบบเลย พยายามจะมาล็อกอิน
-      if (authError.message.includes('Invalid login credentials')) {
+      if (/Invalid (?:login )?credentials/i.test(authError.message)) {
         if (registrationStatus.state === 'REGISTERED') {
           throw new Error('บัญชีมีข้อมูลในระบบแต่ไม่สามารถยืนยันตัวตนได้ กรุณาติดต่อเจ้าหน้าที่ Safety');
         }
           throw new Error('ไม่พบข้อมูล: กรุณาลงทะเบียนและยอมรับเงื่อนไขก่อนเข้าใช้งาน');
+      }
+      if (/temporarily locked/i.test(authError.message)) {
+        throw new Error('บัญชีถูกล็อกชั่วคราวจากการกรอก PIN ผิดหลายครั้ง กรุณารอ 15 นาทีแล้วลองใหม่');
+      }
+      if (/suspended/i.test(authError.message)) {
+        throw new Error('บัญชีของคุณถูกระงับสิทธิ์ชั่วคราว โปรดติดต่อเจ้าหน้าที่ Safety');
       }
       throw new Error('เข้าสู่ระบบไม่สำเร็จ: ' + authError.message);
     }
@@ -210,10 +211,39 @@ export const api = {
     if (decryptError) console.error("Decryption failed:", decryptError);
 
     return {
-      ...userData,
-      national_id: realId || userData.national_id, 
-      vendor_id: userData.vendor_id 
-    } as unknown as User
+      user: {
+        ...userData,
+        national_id: realId || userData.national_id,
+        vendor_id: userData.vendor_id,
+      } as unknown as User,
+      requiresPinUpgrade,
+    }
+  },
+
+  upgradeMyPin: async (nationalId: string, securePin: string): Promise<void> => {
+    const pinError = getSecurePinError(nationalId, securePin);
+    if (pinError) throw new Error(pinError);
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+    if (!accessToken) throw new Error('ไม่พบ session สำหรับเปลี่ยน PIN');
+    const response = await fetch('/api/set-auth-pin', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ nationalId, pin: securePin }),
+    });
+    const result = await response.json().catch(() => null);
+    if (!response.ok || result?.ok !== true
+        || typeof result?.accessToken !== 'string' || typeof result?.refreshToken !== 'string') {
+      throw new Error(result?.message || 'ไม่สามารถบันทึก PIN ใหม่ได้');
+    }
+    const { error: sessionError } = await supabase.auth.setSession({
+      access_token: result.accessToken,
+      refresh_token: result.refreshToken,
+    });
+    if (sessionError) throw sessionError;
   },
 
   checkRegistrationStatus: getRegistrationStatus,
@@ -233,6 +263,7 @@ export const api = {
 
   register: async (
     nationalId: string,
+    securePin: string,
     name: string,
     vendorId: string | null, // เปลี่ยนให้รองรับ null
     age: number,
@@ -246,7 +277,7 @@ export const api = {
       accessEndDate?: string;
     }
   ): Promise<User> => {
-    const authUser = await ensureRegistrationIdentity(nationalId, name);
+    const authUser = await ensureRegistrationIdentity(nationalId, name, securePin);
 
     if (!authUser) throw new Error('ไม่สามารถเชื่อมต่อระบบยืนยันตัวตนได้');
 
@@ -278,6 +309,8 @@ export const api = {
       }
       throw new Error('ลงทะเบียนไม่สำเร็จ: ' + registrationError.message);
     }
+
+    await api.upgradeMyPin(nationalId, securePin);
 
     return { ...registeredUser, national_id: nationalId } as unknown as User;
   },

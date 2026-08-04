@@ -14,6 +14,8 @@ const complete = {
   accessStartDate: '',
   accessEndDate: '',
   pdpaAccepted: true,
+  securePin: '246801',
+  securePinConfirmation: '246801',
 };
 
 describe('registration progress', () => {
@@ -27,6 +29,8 @@ describe('registration progress', () => {
     expect(getRegistrationDisabledReason({ ...complete, vendorId: '' })).toBe('เลือกบริษัทก่อน');
     expect(getRegistrationDisabledReason({ ...complete, pdpaAccepted: false })).toContain('นโยบายความเป็นส่วนตัว');
     expect(getRegistrationDisabledReason({ ...complete, selectedPrograms: [] })).toContain('หลักสูตร');
+    expect(getRegistrationDisabledReason({ ...complete, securePin: '123456' })).toContain('PIN');
+    expect(getRegistrationDisabledReason({ ...complete, securePinConfirmation: '135790' })).toContain('PIN');
     expect(getRegistrationDisabledReason(complete)).toBeNull();
   });
 });

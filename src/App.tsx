@@ -55,7 +55,16 @@ const AppContent: React.FC = () => {
           // ป้องกันกรณีที่ localStorage มีข้อมูลเหลือค้างแต่ Session หมดอายุแล้ว
           const { data: { session } } = await supabase.auth.getSession();
           if (session) {
-            setCurrentUser(JSON.parse(savedUser));
+            const statusResponse = await fetch('/api/auth-session-status', {
+              headers: { Authorization: `Bearer ${session.access_token}` },
+            });
+            const authStatus = await statusResponse.json().catch(() => null);
+            if (statusResponse.ok && authStatus?.requiresPinUpgrade === false) {
+              setCurrentUser(JSON.parse(savedUser));
+            } else {
+              await supabase.auth.signOut();
+              localStorage.removeItem('safety_pass_current_user');
+            }
           } else {
             // Session หมดอายุ → เคลียร์ข้อมูลเก่าออก บังคับ Login ใหม่
             localStorage.removeItem('safety_pass_current_user');

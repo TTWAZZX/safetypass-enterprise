@@ -1,17 +1,21 @@
 # SafetyPass Enterprise — Database Backup Strategy
 
 ## ภาพรวม
-ระบบนี้ใช้ Supabase (PostgreSQL) เป็น Backend ซึ่งมี built-in backup mechanisms ระดับ enterprise
+ระบบนี้ใช้ Supabase (PostgreSQL) เป็น Backend แต่ความพร้อมของ backup ขึ้นกับแผนและการตั้งค่าของ project จริง ห้ามสรุปว่ามี backup ที่กู้ได้จากเอกสารนี้เพียงอย่างเดียว ต้องตรวจหน้า Dashboard → Database → Backups และเก็บหลักฐานก่อน rollout ทุกครั้ง
 
 ---
 
-## 1. Supabase Built-in Backups (ทำอัตโนมัติ ไม่ต้องตั้งค่าเอง)
+## 1. Supabase Built-in Backups
 
 | Plan | Backup Type | Retention |
 |------|-------------|-----------|
-| Free | Point-in-Time Recovery (PITR) | ไม่รวม |
+| Free | ไม่มี daily backup retention ที่ใช้แทน manual off-site backup ได้ | ต้องทำ logical backup เอง |
 | Pro | Daily automated backups | 7 วัน |
-| Pro + PITR add-on | Continuous WAL archiving | 7–30 วัน |
+| Team | Daily automated backups | 14 วัน |
+| Enterprise | Daily automated backups | สูงสุด 30 วัน |
+| Pro/Team/Enterprise + PITR | Point-in-Time Recovery add-on | ตาม retention ที่ซื้อ |
+
+อ้างอิง: [Supabase Database Backups](https://supabase.com/docs/guides/platform/backups)
 
 **วิธีดู/restore backup บน Supabase:**
 1. ไปที่ Supabase Dashboard → Project → Settings → Database
@@ -22,19 +26,20 @@
 
 ## 2. Manual Export (ทำเองเป็นประจำ)
 
-### วิธีที่ 1: pg_dump ผ่าน Supabase connection string
+### วิธีที่ 1: Supabase CLI (แนะนำสำหรับ logical backup ของ Supabase)
 ```bash
-pg_dump \
-  "postgresql://postgres:[PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres" \
-  --no-owner \
-  --no-acl \
-  -Fc \
-  -f backup_$(date +%Y%m%d_%H%M%S).dump
+supabase db dump --db-url "[CONNECTION_STRING]" -f roles.sql --role-only
+supabase db dump --db-url "[CONNECTION_STRING]" -f schema.sql
+supabase db dump --db-url "[CONNECTION_STRING]" -f data.sql --use-copy --data-only
 ```
 
-### วิธีที่ 2: Export ผ่าน Supabase Dashboard
+อ้างอิง: [Supabase Backup and Restore using the CLI](https://supabase.com/docs/guides/platform/migrating-within-supabase/backup-restore)
+
+### วิธีที่ 2: Export CSV สำหรับตรวจสอบเพิ่มเติมเท่านั้น
 - Dashboard → Table Editor → เลือก table → Download CSV
 - ทำทีละตาราง: `users`, `exam_history`, `work_permits`, `questions`, `vendors`
+
+CSV ไม่ใช่ full backup และใช้แทน restore point ไม่ได้ เพราะไม่ครอบคลุม Auth identities, functions, triggers, grants, RLS policies และ migration history
 
 ### ตารางที่สำคัญที่สุด (backup ก่อนเสมอ)
 ```
@@ -69,14 +74,13 @@ system_config     ← ค่าตั้งระบบ (เกณฑ์คะ�
 5. ตรวจสอบข้อมูลว่าครบ
 6. เปิดระบบใหม่
 
-### Restore จาก pg_dump file:
+### Restore จาก logical backup:
 ```bash
-pg_restore \
-  -d "postgresql://postgres:[PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres" \
-  --no-owner \
-  --no-acl \
-  backup_YYYYMMDD_HHMMSS.dump
+# ใช้ขั้นตอน restore ที่ตรงกับรูปแบบไฟล์จาก Supabase CLI
+# และทดสอบใน isolated project/database ก่อนเสมอ
 ```
+
+ห้ามทดสอบ restore ทับ production และห้ามถือว่า backup ใช้งานได้จนกว่าจะ restore สำเร็จใน isolated environment พร้อมตรวจ row counts และความสัมพันธ์ของข้อมูลสำคัญ
 
 ---
 
@@ -101,9 +105,9 @@ ALTER TABLE work_permits ENABLE ROW LEVEL SECURITY;
 
 - **อย่า hardcode connection string** ไว้ใน source code
 - **เก็บ SUPABASE_SERVICE_ROLE_KEY** ไว้ใน Vercel Environment Variables เท่านั้น
-- **ทดสอบ restore** อย่างน้อยปีละ 1 ครั้ง เพื่อให้มั่นใจว่า backup ใช้งานได้จริง
+- **ทดสอบ restore** ก่อน authentication rollout นี้ และอย่างน้อยปีละ 1 ครั้งหลังจากนั้น
 - **Monitor Supabase dashboard** สำหรับ disk usage และ connection limits
 
 ---
 
-*อัปเดตล่าสุด: 2026*
+*อัปเดตล่าสุด: 2026-08-04*

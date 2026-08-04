@@ -59,6 +59,10 @@ describe('prepare-staged-auth API', () => {
     });
     expect(upstream).toHaveBeenCalledTimes(2);
     expect(String(upstream.mock.calls[1][0])).toContain('/auth/v1/signup');
+    const signupBody = JSON.parse(String(upstream.mock.calls[1][1]?.body));
+    expect(signupBody.password).toMatch(/^SafetyPass-bootstrap-v2-/);
+    expect(signupBody.password).not.toContain(nationalId);
+    expect(signupBody.data).toEqual({ password_scheme: 'bootstrap-v2', must_change_pin: true });
   });
 
   it('keeps expected existing-account failures server-side', async () => {

@@ -29,6 +29,9 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   // Login State
   const [loginId, setLoginId] = useState('');
   const [loginPin, setLoginPin] = useState('');
+  const [pendingPinUpgradeUser, setPendingPinUpgradeUser] = useState<User | null>(null);
+  const [newPin, setNewPin] = useState('');
+  const [newPinConfirmation, setNewPinConfirmation] = useState('');
 
   // Register State
   const [regId, setRegId] = useState('');
@@ -39,6 +42,8 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [vendorId, setVendorId] = useState('');
   const [otherVendor, setOtherVendor] = useState('');
   const [pdpaAccepted, setPdpaAccepted] = useState(false);
+  const [registrationPin, setRegistrationPin] = useState('');
+  const [registrationPinConfirmation, setRegistrationPinConfirmation] = useState('');
   const [showPolicyModal, setShowPolicyModal] = useState(false);
   const [supplierOutsourceEnabled, setSupplierOutsourceEnabled] = useState(false);
   const [selectedPrograms, setSelectedPrograms] = useState<TrainingProgram[]>(['CONTRACTOR']);
@@ -84,6 +89,8 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     accessStartDate,
     accessEndDate,
     pdpaAccepted,
+    securePin: registrationPin,
+    securePinConfirmation: registrationPinConfirmation,
   };
   const exactVendorMatch = vendorMatches.find((match) => match.match_type === 'EXACT');
   const vendorDuplicateDisabledReason = exactVendorMatch?.status === 'APPROVED'
@@ -251,7 +258,16 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     setError("");
     setInfoMsg("");
     try {
-      const user = await api.login(loginId, loginPin || undefined);
+      const result = await api.login(loginId, loginPin || undefined);
+      const user = result.user;
+
+      if (result.requiresPinUpgrade) {
+        setPendingPinUpgradeUser(user);
+        setNewPin('');
+        setNewPinConfirmation('');
+        setInfoMsg('เพื่อความปลอดภัย กรุณาตั้ง PIN ใหม่ 6 หลักก่อนเข้าใช้งาน');
+        return;
+      }
       
       // แสตมป์เวลาเข้าสู่ระบบล่าสุด (fire-and-forget ไม่ block login flow)
       supabase.from('users').update({ last_login: new Date().toISOString() }).eq('id', user.id);
@@ -276,6 +292,23 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     }
   };
 
+  const handlePinUpgrade = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pendingPinUpgradeUser) return;
+    setLoading(true);
+    setError('');
+    try {
+      if (newPin !== newPinConfirmation) throw new Error('PIN ใหม่และการยืนยัน PIN ไม่ตรงกัน');
+      await api.upgradeMyPin(pendingPinUpgradeUser.national_id, newPin);
+      supabase.from('users').update({ last_login: new Date().toISOString() }).eq('id', pendingPinUpgradeUser.id);
+      onLogin(pendingPinUpgradeUser);
+    } catch (pinError: any) {
+      setError(pinError?.message || 'ไม่สามารถตั้ง PIN ใหม่ได้ กรุณาลองอีกครั้ง');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -290,7 +323,8 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         throw new Error('วันที่สิ้นสุดต้องไม่น้อยกว่าวันที่เริ่มต้น');
       }
       const user = await api.register(
-        regId, 
+        regId,
+        registrationPin,
         name, 
         vendorId === 'OTHER' ? '' : vendorId, 
         Number(age), 
@@ -358,7 +392,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       <div className="bg-white p-6 md:p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 w-full max-w-md border border-slate-100 relative overflow-hidden">
         
         {/* Toggle Switcher */}
-        <div className="flex bg-slate-100 p-1.5 rounded-[1.2rem] mb-6 relative z-10">
+        {!pendingPinUpgradeUser && <div className="flex bg-slate-100 p-1.5 rounded-[1.2rem] mb-6 relative z-10">
           <button 
             type="button"
             onClick={() => { setMode('LOGIN'); setError(''); }}
@@ -373,22 +407,41 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           >
             {t('auth.register')}
           </button>
-        </div>
+        </div>}
 
         <div className="mb-6 text-center relative z-10">
           <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-blue-100 shadow-inner">
-            {mode === 'LOGIN' ? <LogIn size={24} /> : <UserPlus size={24} />}
+            {pendingPinUpgradeUser ? <ShieldCheck size={24} /> : mode === 'LOGIN' ? <LogIn size={24} /> : <UserPlus size={24} />}
           </div>
           <h2 className="text-xl font-black text-slate-900 tracking-tight uppercase">
-            {mode === 'LOGIN' ? 'Welcome Back' : 'Create Account'}
+            {pendingPinUpgradeUser ? 'Secure Your Account' : mode === 'LOGIN' ? 'Welcome Back' : 'Create Account'}
           </h2>
           <div className="text-[10px] text-slate-600 font-bold uppercase tracking-widest mt-1.5 flex items-center justify-center gap-1.5">
             <ShieldCheck size={12} className="text-blue-500" /> Security Passport Verification
           </div>
         </div>
 
+        {pendingPinUpgradeUser && (
+          <form onSubmit={handlePinUpgrade} className="space-y-4 relative z-10">
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-xs font-bold leading-relaxed text-blue-800">
+              บัญชีและประวัติเดิมของคุณยังอยู่ครบ กรุณาตั้ง PIN ส่วนตัว 6 หลัก โดยห้ามใช้เลข 6 หลักท้ายบัตรหรือเลขเรียงกัน
+            </div>
+            <label className="block space-y-1.5 text-left text-[9px] font-black uppercase tracking-widest text-slate-600">
+              PIN ใหม่ 6 หลัก
+              <input required type="password" inputMode="numeric" autoComplete="new-password" maxLength={6} value={newPin} onChange={(e) => setNewPin(e.target.value.replace(/\D/g, '').slice(0, 6))} className="w-full rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3.5 text-base font-bold outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" />
+            </label>
+            <label className="block space-y-1.5 text-left text-[9px] font-black uppercase tracking-widest text-slate-600">
+              ยืนยัน PIN ใหม่
+              <input required type="password" inputMode="numeric" autoComplete="new-password" maxLength={6} value={newPinConfirmation} onChange={(e) => setNewPinConfirmation(e.target.value.replace(/\D/g, '').slice(0, 6))} className="w-full rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3.5 text-base font-bold outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" />
+            </label>
+            <button disabled={loading || newPin.length !== 6 || newPinConfirmation.length !== 6} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 py-4 text-xs font-black uppercase tracking-widest text-white disabled:opacity-50">
+              {loading ? <Loader2 size={18} className="animate-spin" /> : <><ShieldCheck size={17} /> บันทึก PIN และเข้าใช้งาน</>}
+            </button>
+          </form>
+        )}
+
         {/* LOGIN FORM */}
-        {mode === 'LOGIN' && (
+        {mode === 'LOGIN' && !pendingPinUpgradeUser && (
           <form onSubmit={handleLogin} className="space-y-4 relative z-10">
             
             {infoMsg && (
@@ -416,16 +469,17 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             </div>
 
             <div className="space-y-1.5 text-left">
-              <label className="block text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">PIN 4 หลักท้ายบัตรประชาชน</label>
+              <label className="block text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">PIN ใหม่ 6 หลัก หรือ PIN เดิม 4 หลัก</label>
               <input
                 required
                 inputMode="numeric"
-                maxLength={4}
+                autoComplete="current-password"
+                maxLength={6}
                 type="password"
                 className="w-full px-4 py-3.5 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-sm text-slate-700 transition-all shadow-inner"
                 value={loginPin}
-                onChange={e => setLoginPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                placeholder="4 หลักท้ายบัตรประชาชน"
+                onChange={e => setLoginPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="กรอก PIN 4 หรือ 6 หลัก"
               />
               <p className="text-[8px] font-bold text-slate-600 ml-1">ผู้ใช้เดิมใช้เลข 4 หลักท้ายบัตรประชาชนเพื่อย้ายบัญชีครั้งแรก</p>
             </div>
@@ -437,7 +491,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         )}
 
         {/* REGISTER FORM */}
-        {mode === 'REGISTER' && (
+        {mode === 'REGISTER' && !pendingPinUpgradeUser && (
           <form onSubmit={handleRegister} className="space-y-3.5 text-left relative z-10">
             <ProgressSteps
               currentStep={registrationStep}
@@ -716,6 +770,38 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 )}
               </div>
             )}
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="space-y-1 text-[9px] font-black uppercase tracking-widest text-slate-600">
+                PIN ส่วนตัว 6 หลัก
+                <input
+                  required
+                  type="password"
+                  inputMode="numeric"
+                  autoComplete="new-password"
+                  maxLength={6}
+                  value={registrationPin}
+                  onChange={(event) => setRegistrationPin(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                  className="w-full rounded-xl border border-slate-200 bg-white p-3 text-base font-bold normal-case text-slate-700"
+                />
+              </label>
+              <label className="space-y-1 text-[9px] font-black uppercase tracking-widest text-slate-600">
+                ยืนยัน PIN ส่วนตัว
+                <input
+                  required
+                  type="password"
+                  inputMode="numeric"
+                  autoComplete="new-password"
+                  maxLength={6}
+                  value={registrationPinConfirmation}
+                  onChange={(event) => setRegistrationPinConfirmation(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                  className="w-full rounded-xl border border-slate-200 bg-white p-3 text-base font-bold normal-case text-slate-700"
+                />
+              </label>
+              <p className="text-[9px] font-bold text-slate-500 sm:col-span-2">
+                ห้ามใช้เลข 6 หลักท้ายบัตร เลขซ้ำ หรือเลขเรียงที่คาดเดาง่าย
+              </p>
+            </div>
 
             <div className="mt-4 flex items-start gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
               <input 

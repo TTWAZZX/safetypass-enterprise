@@ -71,10 +71,15 @@ function examQuestions(type) {
   }));
 }
 
-async function installMocks(page) {
+async function installMocks(page, options = {}) {
   let currentRole = 'USER';
   let currentAuthEmail = `${userNationalId}@safetypass.com`;
-  const authDiagnostics = { stagedPrepareRequests: 0, stagedSignupRequests: 0, stagedTokenRequests: 0 };
+  const authDiagnostics = {
+    stagedPrepareRequests: 0,
+    stagedSignupRequests: 0,
+    stagedTokenRequests: 0,
+    pinUpgradeRequests: 0,
+  };
   let managedQuestions = examQuestions('INDUCTION');
   managedQuestions[7] = { ...managedQuestions[7], choices_json: managedQuestions[7].choices_json.slice(0, 3) };
   managedQuestions[9] = {
@@ -406,6 +411,26 @@ async function installMocks(page) {
   });
 
   await page.route('**/api/notify-**', (route) => json(route, { success: true }));
+  await page.route('**/api/auth-login', (route) => {
+    const payload = route.request().postDataJSON?.() || {};
+    currentRole = payload.nationalId === adminNationalId ? 'ADMIN' : 'USER';
+    const currentProfile = profile(currentRole);
+    currentAuthEmail = `${payload.nationalId}@safetypass.com`;
+    return json(route, {
+      accessToken: createAccessToken(currentProfile.id, currentRole),
+      refreshToken: 'test-refresh-token',
+      requiresPinUpgrade: options.requirePinUpgrade === true,
+    });
+  });
+  await page.route('**/api/auth-session-status', (route) => json(route, { requiresPinUpgrade: false }));
+  await page.route('**/api/set-auth-pin', (route) => {
+    authDiagnostics.pinUpgradeRequests += 1;
+    return json(route, {
+      ok: true,
+      accessToken: createAccessToken(userId, 'USER'),
+      refreshToken: 'test-refresh-token-v2',
+    });
+  });
   await page.route('**/api/prepare-staged-auth', (route) => {
     authDiagnostics.stagedPrepareRequests += 1;
     currentRole = 'USER';
@@ -524,6 +549,25 @@ try {
   await userPage.getByText(/^คำถามทดสอบ \d+$/, { exact: true }).first().waitFor();
   await assertA11y(userPage, 'mobile resumed exam');
   await userContext.close();
+
+  const legacyContext = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
+  const legacyPage = await legacyContext.newPage();
+  const legacyDiagnostics = await installMocks(legacyPage, { requirePinUpgrade: true });
+  await login(legacyPage, userNationalId);
+  await legacyPage.getByRole('heading', { name: 'Secure Your Account', exact: true }).waitFor();
+  if (await legacyPage.getByRole('heading', { name: 'ผู้ใช้ทดสอบระบบ', exact: true }).count()) {
+    throw new Error('Legacy PIN session reached the application before PIN upgrade');
+  }
+  await legacyPage.getByLabel('PIN ใหม่ 6 หลัก').fill('246801');
+  await legacyPage.getByLabel('ยืนยัน PIN ใหม่').fill('246801');
+  await legacyPage.waitForFunction(() => Array.from(document.querySelectorAll('button')).some((button) => (
+    button.textContent?.includes('บันทึก PIN และเข้าใช้งาน') && !button.disabled
+  )));
+  await assertA11y(legacyPage, 'legacy forced PIN upgrade');
+  await legacyPage.getByRole('button', { name: /บันทึก PIN และเข้าใช้งาน/ }).click();
+  await legacyPage.getByRole('heading', { name: 'ผู้ใช้ทดสอบระบบ', exact: true }).waitFor();
+  if (legacyDiagnostics.pinUpgradeRequests !== 1) throw new Error('PIN v2 upgrade endpoint was not called exactly once');
+  await legacyContext.close();
 
   const adminContext = await browser.newContext({ viewport: { width: 1365, height: 900 }, acceptDownloads: true, reducedMotion: 'reduce' });
   const adminPage = await adminContext.newPage();

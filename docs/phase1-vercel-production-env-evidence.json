@@ -1,0 +1,15 @@
+{
+  "verifiedAt": "2026-08-04T14:13:02+07:00",
+  "project": "safetypass-enterprise",
+  "verifiedBy": "Vercel CLI 58.5.1 metadata listing",
+  "valuesCaptured": false,
+  "variables": {
+    "SUPABASE_SERVICE_ROLE_KEY": ["Production"],
+    "AUTH_PIN_PEPPER": ["Production"],
+    "AUTH_PIN_V2_ENFORCEMENT": ["Production"]
+  },
+  "notes": {
+    "AUTH_PIN_PEPPER": "Generated from 48 cryptographically random bytes and stored as a Sensitive variable.",
+    "AUTH_PIN_V2_ENFORCEMENT": "Explicitly overwritten with false; no deployment was triggered."
+  }
+}

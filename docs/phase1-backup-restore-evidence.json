@@ -1,0 +1,45 @@
+{
+  "createdAt": "2026-08-04T14:15:00+07:00",
+  "restoreVerifiedAt": "2026-08-04T14:24:00+07:00",
+  "source": "Supabase Production PostgreSQL 17.6",
+  "backupDirectory": "C:\\Users\\Admin\\Documents\\SafetyPass Backups\\phase1-pre-rollout-20260804-1415",
+  "storageEncryption": {
+    "type": "Windows EFS",
+    "directoryEncryptedAttributeVerified": true,
+    "everyBackupFileEncryptedAttributeVerified": true
+  },
+  "valuesOrRowsCapturedInEvidence": false,
+  "files": [
+    {
+      "name": "roles.sql",
+      "bytes": 297,
+      "sha256": "25873CEC56A2CC6514E204F420231777F85C03DA818CAA7090CDCDFA89776ECD"
+    },
+    {
+      "name": "schema.sql",
+      "bytes": 263226,
+      "sha256": "BC018F1F8260E6B38F3798EE72253FCC1A65A27AFE194860EDBAB4E0641E4BA6"
+    },
+    {
+      "name": "data.sql",
+      "bytes": 1417387,
+      "sha256": "958F9B76ADED36A0AEA12B3F1BC0FCCD6F9C65B12166987A1E77AC3F4606B0CF"
+    }
+  ],
+  "restore": {
+    "target": "isolated local PostgreSQL container",
+    "roles": "PASS",
+    "schema": "PASS",
+    "data": "PASS",
+    "tablesChecked": 40,
+    "exactTableMatches": 39,
+    "unexpectedMismatches": 0,
+    "expectedPlatformManagedExclusions": ["auth.schema_migrations"],
+    "migrationChain": "PASS_ROLLED_BACK",
+    "duplicateGroupsExercised": 2,
+    "duplicateProfilesExercised": 2,
+    "protectedHistoryPreserved": true
+  },
+  "productionChanged": false,
+  "deploymentTriggered": false
+}

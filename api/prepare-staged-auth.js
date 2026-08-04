@@ -1,4 +1,5 @@
 import { getSupabaseConfig, isRateLimited } from './_auth.js';
+import { randomBytes } from 'node:crypto';
 
 const safeJson = async (response) => {
   try {
@@ -61,12 +62,13 @@ export default async function handler(req, res) {
     }
 
     const email = `${nationalId}@safetypass.com`;
-    const pinPassword = `SafetyPass-${nationalId}-${nationalId.slice(-4)}`;
+    const bootstrapPassword = `SafetyPass-bootstrap-v2-${randomBytes(32).toString('base64url')}`;
+    const legacyPinPassword = `SafetyPass-${nationalId}-${nationalId.slice(-4)}`;
 
     const signUp = await authRequest(url, anonKey, '/auth/v1/signup', {
       email,
-      password: pinPassword,
-      data: { password_scheme: 'pin-v1' },
+      password: bootstrapPassword,
+      data: { password_scheme: 'bootstrap-v2', must_change_pin: true },
     });
     let session = sessionResult(signUp);
 
@@ -75,7 +77,7 @@ export default async function handler(req, res) {
         url,
         anonKey,
         '/auth/v1/token?grant_type=password',
-        { email, password: pinPassword },
+        { email, password: legacyPinPassword },
       );
       session = sessionResult(pinLogin);
     }
@@ -88,16 +90,8 @@ export default async function handler(req, res) {
         { email, password: nationalId },
       );
       session = sessionResult(legacyLogin);
-      if (session) {
-        const passwordUpdate = await authRequest(
-          url,
-          anonKey,
-          '/auth/v1/user',
-          { password: pinPassword, data: { password_scheme: 'pin-v1' } },
-          session.accessToken,
-        );
-        if (!passwordUpdate.ok) session = null;
-      }
+      // Keep the legacy credential unchanged until the authenticated user
+      // chooses a private PIN v2 in the registration or migration screen.
     }
 
     if (!session) return res.status(200).json({ ok: false });

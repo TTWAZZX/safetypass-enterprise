@@ -1,0 +1,29 @@
+{
+  "generatedAt": "2026-08-04T15:06:54.8794028+07:00",
+  "status": "PASS",
+  "environment": "local-docker-only",
+  "productionTouched": false,
+  "deploymentPerformed": false,
+  "databaseSource": "Production public schema only; no Production rows copied",
+  "migrationsApplied": [
+    "20260804110000_archive_duplicate_auth_profiles.sql",
+    "20260804120000_progressive_pin_v2.sql"
+  ],
+  "scenarioCount": 12,
+  "scenarios": [
+    "Synthetic legacy profiles initialized as PIN v1",
+    "Legacy 4-digit PIN login with enforcement disabled",
+    "Legacy ADMIN login and role preservation",
+    "Progressive PIN upgrade request with enforcement enabled",
+    "Legacy session upgrade status",
+    "Weak 6-digit PIN rejection",
+    "Upgrade to secure 6-digit PIN and session renewal",
+    "Old PIN rejection and new PIN login",
+    "Upgraded session status",
+    "Suspended account rejection",
+    "Persistent lockout after five failures",
+    "Profile identity, role, active status, and PDPA preservation"
+  ],
+  "fixtureData": "Synthetic local-only accounts",
+  "runner": "scripts/run-phase1-local-uat.mjs"
+}

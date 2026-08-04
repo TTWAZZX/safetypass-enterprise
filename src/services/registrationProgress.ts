@@ -1,4 +1,5 @@
 import { TrainingProgram } from '../types';
+import { getSecurePinError } from './pinSecurity';
 
 interface RegistrationProgressInput {
   loading: boolean;
@@ -13,6 +14,8 @@ interface RegistrationProgressInput {
   accessStartDate: string;
   accessEndDate: string;
   pdpaAccepted: boolean;
+  securePin: string;
+  securePinConfirmation: string;
 }
 
 export const getRegistrationDisabledReason = (input: RegistrationProgressInput): string | null => {
@@ -21,6 +24,9 @@ export const getRegistrationDisabledReason = (input: RegistrationProgressInput):
   if (!input.name.trim()) return 'กรอกชื่อและนามสกุล';
   if (!input.age || Number(input.age) <= 0) return 'กรอกอายุให้ถูกต้อง';
   if (!input.nationality.trim()) return 'ระบุสัญชาติ';
+  const pinError = getSecurePinError(input.regId, input.securePin);
+  if (pinError) return pinError;
+  if (input.securePin !== input.securePinConfirmation) return 'PIN ใหม่และการยืนยัน PIN ไม่ตรงกัน';
   if (!input.vendorId) return 'เลือกบริษัทก่อน';
   if (input.vendorId === 'OTHER' && !input.otherVendor.trim()) return 'ระบุชื่อบริษัทใหม่';
   if (input.supplierOutsourceEnabled && input.selectedPrograms.length === 0) return 'เลือกหลักสูตรอย่างน้อย 1 รายการ';
@@ -33,7 +39,9 @@ export const getRegistrationStepIndex = (input: Omit<RegistrationProgressInput, 
   const identityComplete = input.regId.length === 13
     && Boolean(input.name.trim())
     && Boolean(input.age && Number(input.age) > 0)
-    && Boolean(input.nationality.trim());
+    && Boolean(input.nationality.trim())
+    && !getSecurePinError(input.regId, input.securePin)
+    && input.securePin === input.securePinConfirmation;
   if (!identityComplete) return 0;
 
   const companyComplete = Boolean(input.vendorId)
