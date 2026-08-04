@@ -86,11 +86,11 @@ try {
         not has_function_privilege('anon', 'public.admin_archive_vendor(uuid)', 'EXECUTE') as anonymous_archive_vendor_blocked,
         exists (
           select 1 from pg_trigger
-          where tgname = 'audit_admin_user_mutation' and tgenabled <> 'D'
+          where tgname = 'trg_audit_admin_user_mutation' and tgenabled <> 'D'
         ) as user_audit_trigger_enabled,
         exists (
           select 1 from pg_trigger
-          where tgname = 'audit_admin_vendor_mutation' and tgenabled <> 'D'
+          where tgname = 'trg_audit_admin_vendor_mutation' and tgenabled <> 'D'
         ) as vendor_audit_trigger_enabled
     `)).rows[0];
   }

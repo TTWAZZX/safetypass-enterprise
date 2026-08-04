@@ -1,0 +1,82 @@
+{
+  "completedAt": "2026-08-04T17:45:08.5864919+07:00",
+  "status": "PASS_ADMIN_INTEGRITY_AND_DATABASE_AUDIT",
+  "releaseCommits": [
+    "95bee95",
+    "4a7b14335261840a035f72e22eb0e25355bf6c58"
+  ],
+  "backup": {
+    "evidence": "docs/phase4-production-rollout-backup-evidence.json",
+    "encrypted": true,
+    "checksumsVerified": true
+  },
+  "migration": {
+    "version": "20260804180000",
+    "name": "phase4_admin_integrity_audit",
+    "sha256": "625B027BBC9BD57E34A88FC1411DF334D6ECC54ABB81A37949F77B2556D0A011",
+    "status": "APPLIED",
+    "forwardOnly": true,
+    "containsExistingDataMutation": false,
+    "postRolloutDryRunUpToDate": true
+  },
+  "preAndPostData": {
+    "users": 446,
+    "vendors": 115,
+    "examHistory": 1009,
+    "workPermits": 361,
+    "trainingAccess": 447,
+    "auditLogs": 203,
+    "stableUserIdDigestMatched": true,
+    "stableVendorIdDigestMatched": true,
+    "stableExamLinkDigestMatched": true,
+    "stablePermitLinkDigestMatched": true,
+    "stableTrainingAccessDigestMatched": true,
+    "stableAuditIdDigestMatched": true,
+    "blockedLocks": 0
+  },
+  "integrityControls": {
+    "anonymousAuditForgeryBlocked": true,
+    "authenticatedAuditForgeryBlocked": true,
+    "directVendorUpdateBlocked": true,
+    "directUserDeleteBlocked": true,
+    "archiveUserRpcAvailableToAuthenticated": true,
+    "archiveVendorRpcAvailableToAuthenticated": true,
+    "archiveRpcsBlockedForAnonymous": true,
+    "userAuditTriggerEnabled": true,
+    "vendorAuditTriggerEnabled": true,
+    "reversibleArchiveVerified": true,
+    "linkedHistoryPreserved": true,
+    "databaseAuditVerified": true
+  },
+  "deployment": {
+    "id": "dpl_BXureXNKdXUCHZeTce25NNnT7qU7",
+    "readyState": "READY",
+    "target": "production",
+    "url": "https://safetypass-enterprise-l9a8dsy1a-181125411998s-projects.vercel.app",
+    "alias": "https://safetypass-enterprise.vercel.app",
+    "releaseCommit": "4a7b14335261840a035f72e22eb0e25355bf6c58",
+    "authPinV2Enforcement": false,
+    "secretValuesCaptured": false
+  },
+  "tests": {
+    "unit": "PASS_77_OF_77",
+    "typecheck": "PASS",
+    "build": "PASS",
+    "productionAssuranceE2E": "PASS",
+    "accessibility": "PASS",
+    "bundleBudget": "PASS",
+    "restoredDatabaseRegression": "PASS_ROLLED_BACK",
+    "productionDatabaseSmoke": "PASS_ROLLED_BACK"
+  },
+  "productionSmoke": {
+    "page": "PASS_HTTP_200",
+    "loginForm": "PASS_VISIBLE",
+    "mobileViewport": "PASS",
+    "consoleErrors": 0,
+    "httpServerErrors": 0,
+    "authenticatedDataAccessedByBrowserSmoke": false,
+    "filesDownloaded": false,
+    "transactionalArchiveTestPersistedRows": false
+  },
+  "nextGate": "Keep AUTH_PIN_V2_ENFORCEMENT=false until the separate PIN v2 owner UAT is approved"
+}
