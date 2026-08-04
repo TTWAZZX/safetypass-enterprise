@@ -1,0 +1,56 @@
+{
+  "completedAt": "2026-08-04T16:38:14.8657020+07:00",
+  "status": "PASS_SERVICE_BOUNDARIES_HARDENED",
+  "releaseCommit": "56943e4fb251de8532131b2c14d139aeb610ec95",
+  "backup": {
+    "createdAt": "2026-08-04T16:34:09.6177487+07:00",
+    "directory": "C:\\Users\\Admin\\Documents\\SafetyPass Backups\\phase2-production-rollout-20260804-1633",
+    "evidence": "docs/phase2-production-rollout-backup-evidence.json",
+    "encrypted": true
+  },
+  "migration": {
+    "version": "20260804160000",
+    "name": "phase2_service_boundary_hardening",
+    "sha256": "8232227c537e5888855e775f2d06b6790c3ed193d2ca503394d14f7ee5b7a7ef",
+    "status": "APPLIED",
+    "forwardOnly": true,
+    "containsDataMutation": false
+  },
+  "postMigration": {
+    "users": 446,
+    "emailOutbox": 45,
+    "examHistory": 1009,
+    "workPermits": 361,
+    "stableUserIdDigestMatched": true,
+    "stableExamLinkDigestMatched": true,
+    "stablePermitLinkDigestMatched": true,
+    "legacyExamRpcAbsent": true,
+    "anonymousOutboxRead": false,
+    "anonymousOutboxUpdate": false,
+    "authenticatedOutboxRead": false,
+    "authenticatedOutboxUpdate": false,
+    "authenticatedLegacyTrainingRpc": false,
+    "serviceRoleOutboxRead": true,
+    "serviceRoleOutboxUpdate": true,
+    "unsafeClientTableGrants": 0,
+    "blockedLocks": 0
+  },
+  "deployment": {
+    "id": "dpl_5cKD9BKmL2EbvMYHxTGEz4SLrTs9",
+    "readyState": "READY",
+    "target": "production",
+    "url": "https://safetypass-enterprise-jplw7fbex-181125411998s-projects.vercel.app",
+    "alias": "https://safetypass-enterprise.vercel.app",
+    "authPinV2Enforcement": false,
+    "secretValuesCaptured": false
+  },
+  "smokeTests": {
+    "productionPage": "PASS_HTTP_200",
+    "invalidSubmissionPayload": "PASS_HTTP_400",
+    "serverOnlySubmissionRoute": "PASS_HTTP_200_NO_MATCH_NO_STATE_CHANGE",
+    "anonymousEmailBatchRpc": "PASS_BLOCKED_HTTP_404",
+    "anonymousEmailResultRpc": "PASS_BLOCKED_HTTP_404",
+    "sanitizedErrors": "PASS"
+  },
+  "nextGate": "Keep AUTH_PIN_V2_ENFORCEMENT=false; Phase 2 changes only authorization boundaries and does not force PIN v2"
+}
