@@ -1,0 +1,27 @@
+{
+  "createdAt": "2026-08-04T16:34:09.6177487+07:00",
+  "source": "Supabase Production",
+  "mode": "read-only logical dump",
+  "backupDirectory": "C:\\Users\\Admin\\Documents\\SafetyPass Backups\\phase2-production-rollout-20260804-1633",
+  "storageEncryption": "Windows EFS verified for every dump file",
+  "files": [
+    {
+      "name": "roles.sql",
+      "bytes": 297,
+      "sha256": "25873CEC56A2CC6514E204F420231777F85C03DA818CAA7090CDCDFA89776ECD"
+    },
+    {
+      "name": "schema.sql",
+      "bytes": 225725,
+      "sha256": "1388F34E287518617E767A48DCA679A65667BE88EC57CBD99DDA268413A277C8"
+    },
+    {
+      "name": "data.sql",
+      "bytes": 1472334,
+      "sha256": "EDBB8BED68B9B52E4717E9802D5306B5CF8B397BA9E2742F5D10899FCB891B8E"
+    }
+  ],
+  "secretValuesCaptured": false,
+  "productionChanged": false,
+  "deploymentTriggered": false
+}

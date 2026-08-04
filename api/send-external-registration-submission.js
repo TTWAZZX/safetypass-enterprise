@@ -1,4 +1,4 @@
-import { cleanText, getSupabaseConfig, isRateLimited } from './_auth.js';
+import { cleanText, getSupabaseServiceConfig, isRateLimited } from './_auth.js';
 import {
   buildExternalRegistrationTrackingUrl,
   renderExternalRegistrationAdminNotice,
@@ -9,7 +9,11 @@ import {
 async function callRpc(config, name, body) {
   const response = await fetch(`${config.url}/rest/v1/rpc/${name}`, {
     method: 'POST',
-    headers: { apikey: config.anonKey, Authorization: `Bearer ${config.anonKey}`, 'Content-Type': 'application/json' },
+    headers: {
+      apikey: config.serviceKey,
+      Authorization: `Bearer ${config.serviceKey}`,
+      'Content-Type': 'application/json',
+    },
     body: JSON.stringify(body),
   });
   const data = await response.json().catch(() => null);
@@ -55,7 +59,7 @@ export default async function handler(req, res) {
   }
 
   let config;
-  try { config = getSupabaseConfig(); }
+  try { config = getSupabaseServiceConfig(); }
   catch { return res.status(500).json({ message: 'Email service is not configured' }); }
 
   let rows;
