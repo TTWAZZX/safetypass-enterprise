@@ -1,0 +1,39 @@
+{
+  "createdAt": "2026-08-04T17:38:43.7922976+07:00",
+  "status": "PASS_ENCRYPTED_CHECKSUM_VERIFIED",
+  "directory": "C:\\Users\\Admin\\Documents\\SafetyPass Backups\\phase4-production-rollout-20260804-1735",
+  "storageEncryption": {
+    "type": "Windows EFS",
+    "directoryEnabledBeforeDump": true,
+    "everyBackupFileEncryptedAttributeVerified": true
+  },
+  "files": [
+    {
+      "name": "roles.sql",
+      "bytes": 297,
+      "sha256": "25873CEC56A2CC6514E204F420231777F85C03DA818CAA7090CDCDFA89776ECD"
+    },
+    {
+      "name": "schema.sql",
+      "bytes": 224778,
+      "sha256": "A6A08C6CFF82393963FA3A9B3E0E9D7803A9A14944313C35E62E8979C465F9BF"
+    },
+    {
+      "name": "data.sql",
+      "bytes": 1472538,
+      "sha256": "84694ACB66EB09F66E13B60BB01266FB38CEACDA20CB8E92D5834A5FD5122A06"
+    }
+  ],
+  "preRollout": {
+    "migrationApplied": false,
+    "blockedLocks": 0,
+    "users": 446,
+    "vendors": 115,
+    "examHistory": 1009,
+    "workPermits": 361,
+    "trainingAccess": 447,
+    "auditLogs": 203,
+    "stableDigestsRecorded": true
+  },
+  "valuesOrRowsCapturedInEvidence": false
+}
