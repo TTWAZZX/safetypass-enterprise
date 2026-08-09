@@ -40,6 +40,8 @@ import { QRCodeSVG } from 'qrcode.react';
 import { useToastContext } from './ToastProvider';
 import liff from '@line/liff'; // ✅ นำเข้า LINE LIFF
 import { useDialogFocus } from '../hooks/useDialogFocus';
+import UserReadinessSummary from './UserReadinessSummary';
+import { getUserReadiness } from '../services/userReadiness';
 
 const maskNationalID = (id: string) => {
   if (!id || id.length < 13) return id;
@@ -319,6 +321,20 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
   const supplierPassActive = Boolean(supplierStatus?.expires_at && new Date(supplierStatus.expires_at) > new Date());
   const supplierPassNearExpiry = Boolean(supplierStatus?.expires_at
     && (new Date(supplierStatus.expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24) < 30);
+  const readiness = getUserReadiness({
+    isActive: !isBanned,
+    hasInduction: Boolean(hasInduction),
+    hasActivePermit: Boolean(activePermit),
+  });
+
+  const handleReadinessAction = () => {
+    if (readiness.primaryAction === 'START_INDUCTION') setActiveStage('INDUCTION');
+    if (readiness.primaryAction === 'START_PERMIT') setActiveStage('WORK_PERMIT');
+    if (readiness.primaryAction === 'VIEW_PERMIT') {
+      setCardType('WORK_PERMIT');
+      setShowCard(true);
+    }
+  };
 
   // ✅ 3.1 ฟังก์ชันบันทึกข้อมูล (รวมอัปเดต Vendor ID และ วันเกิด ลง Database)
   const handleUpdateProfile = async () => {
@@ -684,6 +700,12 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
               </div>
           </div>
         </div>
+
+        <UserReadinessSummary
+          language={language}
+          readiness={readiness}
+          onPrimaryAction={handleReadinessAction}
+        />
 
         {/* 🔵 Safety Journey Timeline */}
         <div className="space-y-5 px-1">
