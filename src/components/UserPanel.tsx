@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   User, WorkPermitSession, ExamType, SupplierOutsourceStatus,
-  SupplierOutsourceType, SupplierOutsourceWorkType,
+  SupplierOutsourceType, SupplierOutsourceWorkType, TrainingProgram,
 } from '../types';
 import { api as mockApi } from '../services/supabaseApi';
 import { supabase } from '../services/supabaseClient'; 
@@ -41,7 +41,9 @@ import { useToastContext } from './ToastProvider';
 import liff from '@line/liff'; // ✅ นำเข้า LINE LIFF
 import { useDialogFocus } from '../hooks/useDialogFocus';
 import UserReadinessSummary from './UserReadinessSummary';
-import { getUserReadiness } from '../services/userReadiness';
+import {
+  getSupplierAccessWindowState, getUserReadiness, ReadinessAction,
+} from '../services/userReadiness';
 import { getExpiryLabel, getExpiryStatus } from '../services/expiryStatus';
 
 const maskNationalID = (id: string) => {
@@ -81,6 +83,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
   const [showHistory, setShowHistory] = useState(false);
   const [supplierOutsourceEnabled, setSupplierOutsourceEnabled] = useState(false);
   const [supplierStatus, setSupplierStatus] = useState<SupplierOutsourceStatus | null>(null);
+  const [trainingPrograms, setTrainingPrograms] = useState<TrainingProgram[]>(['CONTRACTOR']);
   const [showSupplierEnrollment, setShowSupplierEnrollment] = useState(false);
   const [supplierParticipantType, setSupplierParticipantType] = useState<SupplierOutsourceType>('supplier');
   const [supplierWorkType, setSupplierWorkType] = useState<SupplierOutsourceWorkType>('Driver');
@@ -207,9 +210,17 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
 
   const loadSupplierStatus = async () => {
     try {
-      const flags = await mockApi.getPublicFeatureFlags();
+      const [flags, programs] = await Promise.all([
+        mockApi.getPublicFeatureFlags(),
+        mockApi.getMyTrainingPrograms(),
+      ]);
       setSupplierOutsourceEnabled(flags.supplierOutsourceEnabled);
-      if (flags.supplierOutsourceEnabled) setSupplierStatus(await mockApi.getMySupplierOutsourceStatus());
+      setTrainingPrograms(programs.length > 0 ? programs : ['CONTRACTOR']);
+      if (flags.supplierOutsourceEnabled && programs.includes('SUPPLIER_OUTSOURCE')) {
+        setSupplierStatus(await mockApi.getMySupplierOutsourceStatus());
+      } else {
+        setSupplierStatus(null);
+      }
     } catch (error) {
       console.error('Supplier and Outsource status error:', error);
     }
@@ -325,17 +336,41 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
   const permitExpiryStatus = getExpiryStatus(activePermit?.expire_date);
   const permitNearExpiry = permitExpiryStatus.state === 'EXPIRING' || permitExpiryStatus.state === 'URGENT';
   const supplierExpiryStatus = getExpiryStatus(supplierStatus?.expires_at);
+  const activeTrainingPrograms = trainingPrograms.filter((program) => (
+    program === 'CONTRACTOR' || supplierOutsourceEnabled
+  ));
+  const hasContractorProgram = activeTrainingPrograms.includes('CONTRACTOR');
+  const supplierAccessWindow = getSupplierAccessWindowState(
+    supplierStatus?.access_start_date,
+    supplierStatus?.access_end_date,
+    getTodayIsoDate(),
+  );
+  const supplierAccessReady = supplierPassActive && supplierAccessWindow === 'ACTIVE';
   const readiness = getUserReadiness({
     isActive: !isBanned,
+    programs: activeTrainingPrograms,
     hasInduction: Boolean(hasInduction),
     hasActivePermit: Boolean(activePermit),
+    contractorNearExpiry: Boolean(isNearExpiry || permitNearExpiry),
+    hasSupplierPass: supplierPassActive,
+    supplierAccessWindow,
+    supplierNearExpiry: supplierPassNearExpiry,
   });
 
-  const handleReadinessAction = () => {
-    if (readiness.primaryAction === 'START_INDUCTION') setActiveStage('INDUCTION');
-    if (readiness.primaryAction === 'START_PERMIT') setActiveStage('WORK_PERMIT');
-    if (readiness.primaryAction === 'VIEW_PERMIT') {
+  const handleReadinessAction = (action: ReadinessAction) => {
+    if (action === 'START_INDUCTION') setActiveStage('INDUCTION');
+    if (action === 'START_PERMIT') setActiveStage('WORK_PERMIT');
+    if (action === 'VIEW_CONTRACTOR_CARD') {
       setCardType('WORK_PERMIT');
+      setShowCard(true);
+    }
+    if (action === 'START_SUPPLIER_EXAM') {
+      if (supplierStatus) setActiveStage('SUPPLIER_OUTSOURCE');
+      else openSupplierEnrollment();
+    }
+    if (action === 'EDIT_SUPPLIER_ACCESS') openSupplierEnrollment();
+    if (action === 'VIEW_SUPPLIER_CARD') {
+      setCardType('SUPPLIER_OUTSOURCE');
       setShowCard(true);
     }
   };
@@ -708,7 +743,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
         <UserReadinessSummary
           language={language}
           readiness={readiness}
-          onPrimaryAction={handleReadinessAction}
+          onAction={handleReadinessAction}
         />
 
         {/* 🔵 Safety Journey Timeline */}
@@ -725,7 +760,8 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
 
           <div className="grid grid-cols-1 gap-4">
             {/* ส่ง isBanned ไปให้ StageCard ล็อกการทำงาน */}
-            <StageCard
+            {hasContractorProgram && <>
+              <StageCard
               title={t('user.stage1')} 
               isActive={hasInduction}
               isNearExpiry={isNearExpiry}
@@ -737,9 +773,9 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
               isBanned={isBanned}
               buttonText={hasInduction && !isNearExpiry ? (language === 'th' ? "แสดงบัตรดิจิทัล" : "Show Digital ID") : (language === 'th' ? "เริ่มการอบรม" : "Start Induction Exam")}
               color="blue"
-            />
+              />
 
-            <StageCard
+              <StageCard
               title={t('user.stage2')} 
               isActive={!!activePermit}
               isNearExpiry={permitNearExpiry}
@@ -752,7 +788,8 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
               permitNo={activePermit?.permit_no}
               buttonText={!!activePermit ? (language === 'th' ? "ดูใบอนุญาต" : "View Permit") : (language === 'th' ? "ขอใบอนุญาตทำงาน" : "Get Work Permit")}
               color="indigo"
-            />
+              />
+            </>}
 
             {supplierOutsourceEnabled && (
               <div className="rounded-[2rem] border border-emerald-100 bg-white p-5 shadow-sm">
@@ -762,8 +799,14 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
                         <h4 className="text-sm font-black uppercase text-slate-900">Supplier & Outsource</h4>
-                        <span className={`rounded-full px-2 py-1 text-[8px] font-black uppercase ${supplierPassActive ? 'bg-emerald-100 text-emerald-700' : supplierStatus ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
-                          {supplierPassActive ? (supplierPassNearExpiry ? 'ใกล้หมดอายุ' : 'ผ่าน') : supplierStatus?.last_status === 'FAILED' ? 'ไม่ผ่าน' : supplierStatus ? 'พร้อมสอบ' : 'ยังไม่มีสิทธิ์'}
+                        <span className={`rounded-full px-2 py-1 text-[8px] font-black uppercase ${supplierAccessReady ? 'bg-emerald-100 text-emerald-700' : supplierStatus ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
+                          {supplierAccessReady
+                            ? (supplierPassNearExpiry ? 'ใกล้หมดอายุ' : 'พร้อมเข้าพื้นที่')
+                            : supplierPassActive && supplierAccessWindow === 'UPCOMING'
+                              ? 'ยังไม่ถึงช่วงอนุญาต'
+                              : supplierPassActive && supplierAccessWindow === 'ENDED'
+                                ? 'ช่วงอนุญาตสิ้นสุด'
+                                : supplierStatus?.last_status === 'FAILED' ? 'ไม่ผ่าน' : supplierStatus ? 'พร้อมสอบ' : 'ยังไม่มีสิทธิ์'}
                         </span>
                       </div>
                       <p className="mt-1 text-[10px] font-bold text-slate-600">
@@ -781,11 +824,24 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {supplierStatus && (
-                      <button disabled={isBanned} onClick={() => supplierPassActive && !supplierPassNearExpiry ? (setCardType('SUPPLIER_OUTSOURCE'), setShowCard(true)) : setActiveStage('SUPPLIER_OUTSOURCE')} className="flex-1 rounded-xl bg-emerald-700 px-4 py-3 text-[9px] font-black uppercase tracking-widest text-white hover:bg-emerald-800 disabled:opacity-40">
-                        {supplierPassActive && !supplierPassNearExpiry ? 'ดูบัตร' : 'เริ่มสอบ'}
+                      <button
+                        disabled={isBanned}
+                        onClick={() => {
+                          if (supplierAccessReady && !supplierPassNearExpiry) {
+                            setCardType('SUPPLIER_OUTSOURCE');
+                            setShowCard(true);
+                          } else if (supplierPassActive && supplierAccessWindow !== 'ACTIVE') {
+                            openSupplierEnrollment();
+                          } else {
+                            setActiveStage('SUPPLIER_OUTSOURCE');
+                          }
+                        }}
+                        className="flex-1 rounded-xl bg-emerald-700 px-4 py-3 text-[9px] font-black uppercase tracking-widest text-white hover:bg-emerald-800 disabled:opacity-40"
+                      >
+                        {supplierAccessReady && !supplierPassNearExpiry ? 'ดูบัตร' : supplierPassActive && supplierAccessWindow !== 'ACTIVE' ? 'แก้ไขสิทธิ์' : 'เริ่มสอบ'}
                       </button>
                     )}
-                    {supplierStatus && supplierPassActive && !supplierPassNearExpiry && (
+                    {supplierStatus && supplierAccessReady && !supplierPassNearExpiry && (
                       <button
                         disabled={isBanned}
                         onClick={() => {
@@ -806,7 +862,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
               </div>
             )}
 
-            {!hasInduction && !activePermit && !isBanned && (
+            {hasContractorProgram && !hasInduction && !activePermit && !isBanned && (
               <div className="bg-blue-50/50 border-2 border-dashed border-blue-200 rounded-[2rem] p-8 text-center animate-in zoom-in">
                 <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm">
                   <ArrowRightCircle size={32} className="text-blue-500 animate-soft-pulse" />

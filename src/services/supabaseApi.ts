@@ -732,6 +732,16 @@ export const api = {
     return (data?.[0] as SupplierOutsourceStatus | undefined) || null;
   },
 
+  getMyTrainingPrograms: async (): Promise<TrainingProgram[]> => {
+    const { data, error } = await supabase
+      .from('user_training_access')
+      .select('program_code');
+    if (error) throw error;
+    return [...new Set((data || [])
+      .map((row) => row.program_code)
+      .filter((program): program is TrainingProgram => program === 'CONTRACTOR' || program === 'SUPPLIER_OUTSOURCE'))];
+  },
+
   linkMyLineIdentity: async (lineUserId: string) => {
     const { error } = await supabase.rpc('link_my_line_identity', { line_user_id_param: lineUserId });
     if (error) throw error;

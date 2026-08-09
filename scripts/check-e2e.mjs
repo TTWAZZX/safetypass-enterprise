@@ -420,6 +420,10 @@ async function installMocks(page, options = {}) {
       };
       return json(route, expectsObject ? permit : [permit]);
     }
+    if (table === 'user_training_access') return json(route, [
+      { program_code: 'CONTRACTOR' },
+      { program_code: 'SUPPLIER_OUTSOURCE' },
+    ]);
     if (table === 'exam_history') return json(route, [
       { status: 'PASSED', exam_type: 'INDUCTION' },
       { status: 'PASSED', exam_type: 'SUPPLIER_OUTSOURCE' },
@@ -585,6 +589,11 @@ try {
   await login(userPage, userNationalId);
   await userPage.getByRole('heading', { name: 'ผู้ใช้ทดสอบระบบ', exact: true }).waitFor();
   await userPage.getByText('Supplier & Outsource', { exact: true }).first().waitFor();
+  const readinessRegion = userPage.getByRole('region', { name: 'พร้อมเข้าพื้นที่', exact: true });
+  await readinessRegion.waitFor();
+  await readinessRegion.getByText('พร้อม 2 จาก 2 ประเภท', { exact: true }).waitFor();
+  await readinessRegion.getByText('ผู้รับเหมา (Contractor)', { exact: true }).waitFor();
+  await readinessRegion.getByText('Supplier & Outsource', { exact: true }).waitFor();
   const localStorageValues = await userPage.evaluate(() => Object.values(localStorage));
   if (localStorageValues.some((value) => value.includes(userNationalId))) {
     throw new Error('National ID was persisted in localStorage after login');
