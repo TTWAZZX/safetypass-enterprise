@@ -70,8 +70,7 @@ const ImportPreviewDialog: React.FC<Props> = ({ fileName, kindLabel, rows, summa
 
 const Summary = ({ label, value, tone }: { label: string; value: number; tone: 'slate' | 'emerald' | 'amber' | 'red' }) => {
   const classes = { slate: 'border-slate-200 bg-white text-slate-700', emerald: 'border-emerald-200 bg-emerald-50 text-emerald-800', amber: 'border-amber-200 bg-amber-50 text-amber-800', red: 'border-red-200 bg-red-50 text-red-800' };
-  return <div className={`rounded-xl border px-3 py-2 ${classes[tone]}`}><p className="text-[8px] font-black uppercase tracking-wider opacity-70">{label}</p><p className="mt-0.5 text-xl font-black tabular-nums">{value}</p></div>;
+  return <div className={`rounded-xl border px-3 py-2 ${classes[tone]}`}><p className="text-[8px] font-black uppercase tracking-wider">{label}</p><p className="mt-0.5 text-xl font-black tabular-nums">{value}</p></div>;
 };
 
 export default ImportPreviewDialog;
-

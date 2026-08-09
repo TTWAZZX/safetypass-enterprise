@@ -224,22 +224,27 @@ const AppContent: React.FC = () => {
           {/* 1. ปุ่มเปิดเมนู (แสดงเมื่อเมนูปิดอยู่) */}
           <div className={`md:hidden fixed bottom-6 right-6 z-[60] transition-all duration-500 ${isNavOpen ? 'translate-y-24 opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'}`}>
              <button 
+                type="button"
                 onClick={() => setIsNavOpen(true)}
+                tabIndex={isNavOpen ? -1 : 0}
                 aria-label={language === 'th' ? 'เปิดเมนูนำทาง' : 'Open navigation'}
-                className="bg-slate-900 text-white p-4 rounded-full shadow-xl shadow-slate-900/40 border border-slate-700 active:scale-90 transition-all flex items-center justify-center animate-bounce-slow"
+                aria-hidden={isNavOpen}
+                className="flex min-h-14 min-w-14 items-center justify-center rounded-full border border-slate-700 bg-slate-900 p-4 text-white shadow-xl shadow-slate-900/40 transition-all active:scale-90 animate-bounce-slow"
              >
                 <Menu size={24} />
              </button>
           </div>
 
           {/* 2. แถบเมนูเต็ม (แสดงเมื่อเมนูเปิดอยู่) */}
-          <nav className={`md:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] w-[90%] max-w-sm transition-all duration-500 cubic-bezier(0.175, 0.885, 0.32, 1.275) ${isNavOpen ? 'translate-y-0 opacity-100' : 'translate-y-32 opacity-0 pointer-events-none'}`}>
+          <nav aria-label={language === 'th' ? 'เมนูนำทางผู้ใช้' : 'User navigation'} aria-hidden={!isNavOpen} className={`md:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] w-[90%] max-w-sm transition-all duration-500 cubic-bezier(0.175, 0.885, 0.32, 1.275) ${isNavOpen ? 'translate-y-0 opacity-100' : 'translate-y-32 opacity-0 pointer-events-none'}`}>
             
             {/* ปุ่มปิดเมนูเล็กๆ ด้านบน */}
             <button 
+              type="button"
               onClick={() => setIsNavOpen(false)}
+              tabIndex={isNavOpen ? 0 : -1}
               aria-label={language === 'th' ? 'ปิดเมนูนำทาง' : 'Close navigation'}
-              className="absolute -top-10 left-1/2 -translate-x-1/2 bg-white text-slate-500 p-2 rounded-full shadow-sm border border-slate-100 hover:bg-slate-50 active:scale-90 transition-all"
+              className="absolute -top-12 left-1/2 flex min-h-11 min-w-11 -translate-x-1/2 items-center justify-center rounded-full border border-slate-100 bg-white p-2 text-slate-500 shadow-sm transition-all hover:bg-slate-50 active:scale-90"
             >
                <ChevronDown size={20} />
             </button>
@@ -247,8 +252,12 @@ const AppContent: React.FC = () => {
             <div className="bg-slate-900 border border-white/10 rounded-full p-2 flex items-center justify-around shadow-[0_20px_40px_rgba(0,0,0,0.4)] will-change-transform">
               
               <button 
+                type="button"
                 onClick={() => { setActiveTab('HOME'); window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' }); }}
-                className={`p-3 flex flex-col items-center gap-1 transition-all active:scale-90 ${activeTab === 'HOME' ? 'text-blue-400' : 'text-slate-400'}`}
+                tabIndex={isNavOpen ? 0 : -1}
+                aria-label={language === 'th' ? 'หน้าหลัก' : 'Home'}
+                aria-current={activeTab === 'HOME' ? 'page' : undefined}
+                className={`flex min-h-12 min-w-14 flex-col items-center gap-1 p-3 transition-all active:scale-90 ${activeTab === 'HOME' ? 'text-blue-400' : 'text-slate-400'}`}
               >
                 <Home size={20} />
                 <span className="text-[8px] font-black uppercase tracking-widest">Home</span>
@@ -256,7 +265,10 @@ const AppContent: React.FC = () => {
               
               {/* ปุ่ม QR ตรงกลาง */}
               <button 
-                className="bg-blue-600 text-white p-4 rounded-full -mt-10 shadow-xl shadow-blue-500/40 border-4 border-slate-50 active:scale-95 transition-all relative group"
+                type="button"
+                tabIndex={isNavOpen ? 0 : -1}
+                aria-label={language === 'th' ? 'ไปยัง QR Code บัตรของฉัน' : 'Go to my ID QR code'}
+                className="group relative -mt-10 flex min-h-16 min-w-16 items-center justify-center rounded-full border-4 border-slate-50 bg-blue-600 p-4 text-white shadow-xl shadow-blue-500/40 transition-all active:scale-95"
                 onClick={scrollToQR}
               >
                 <QrCode size={24} className="group-active:rotate-12 transition-transform" />
@@ -264,8 +276,12 @@ const AppContent: React.FC = () => {
               </button>
 
               <button 
+                type="button"
                 onClick={() => { setActiveTab('LOGS'); window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' }); }}
-                className={`p-3 flex flex-col items-center gap-1 transition-all active:scale-90 ${activeTab === 'LOGS' ? 'text-blue-400' : 'text-slate-400'}`}
+                tabIndex={isNavOpen ? 0 : -1}
+                aria-label={language === 'th' ? 'ประวัติการใช้งาน' : 'Activity logs'}
+                aria-current={activeTab === 'LOGS' ? 'page' : undefined}
+                className={`flex min-h-12 min-w-14 flex-col items-center gap-1 p-3 transition-all active:scale-90 ${activeTab === 'LOGS' ? 'text-blue-400' : 'text-slate-400'}`}
               >
                 <History size={20} />
                 <span className="text-[8px] font-black uppercase tracking-widest">Logs</span>

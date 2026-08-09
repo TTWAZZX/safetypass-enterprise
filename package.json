@@ -6,6 +6,7 @@
   "scripts": {
     "check:text": "node scripts/check-text-encoding.mjs",
     "check:api-budget": "node scripts/check-api-budget.mjs",
+    "check:ux": "node scripts/check-ux-standards.mjs",
     "prebuild": "npm run check:text",
     "dev": "vite",
     "build": "vite build",

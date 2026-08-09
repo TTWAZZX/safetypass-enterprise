@@ -460,7 +460,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               ยืนยัน PIN ใหม่
               <input required type={showUpgradePin ? 'text' : 'password'} inputMode="numeric" autoComplete="new-password" maxLength={6} value={newPinConfirmation} onChange={(e) => setNewPinConfirmation(e.target.value.replace(/\D/g, '').slice(0, 6))} className="w-full rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3.5 text-base font-bold outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" />
             </label>
-            <p aria-live="polite" className={`text-left text-[10px] font-bold ${upgradePinConfirmationState === 'MATCH' ? 'text-emerald-600' : upgradePinConfirmationState === 'MISMATCH' ? 'text-rose-600' : 'text-slate-500'}`}>
+            <p aria-live="polite" className={`text-left text-[10px] font-bold ${upgradePinConfirmationState === 'MATCH' ? 'text-emerald-700' : upgradePinConfirmationState === 'MISMATCH' ? 'text-rose-600' : 'text-slate-500'}`}>
               {upgradePinConfirmationState === 'MATCH' && 'PIN ทั้งสองช่องตรงกัน'}
               {upgradePinConfirmationState === 'MISMATCH' && 'PIN ทั้งสองช่องไม่ตรงกัน กรุณาตรวจสอบอีกครั้ง'}
               {upgradePinConfirmationState === 'INCOMPLETE' && 'กรอก PIN และยืนยันให้ครบช่องละ 6 หลัก'}
@@ -838,7 +838,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               <p className="text-[9px] font-bold text-slate-500 sm:col-span-2">
                 ห้ามใช้เลข 6 หลักท้ายบัตร, 000000 หรือ 123456
               </p>
-              <p aria-live="polite" className={`text-[9px] font-bold sm:col-span-2 ${registrationPinConfirmationState === 'MATCH' ? 'text-emerald-600' : registrationPinConfirmationState === 'MISMATCH' ? 'text-rose-600' : 'text-slate-500'}`}>
+              <p aria-live="polite" className={`text-[9px] font-bold sm:col-span-2 ${registrationPinConfirmationState === 'MATCH' ? 'text-emerald-700' : registrationPinConfirmationState === 'MISMATCH' ? 'text-rose-600' : 'text-slate-500'}`}>
                 {registrationPinConfirmationState === 'MATCH' && 'PIN ทั้งสองช่องตรงกัน'}
                 {registrationPinConfirmationState === 'MISMATCH' && 'PIN ทั้งสองช่องไม่ตรงกัน กรุณาตรวจสอบอีกครั้ง'}
                 {registrationPinConfirmationState === 'INCOMPLETE' && 'กรอก PIN และยืนยันให้ครบช่องละ 6 หลัก'}

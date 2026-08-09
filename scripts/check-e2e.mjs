@@ -697,6 +697,11 @@ try {
     mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     buffer: workbookBuffer,
   });
+  const importPreviewDialog = adminPage.getByRole('dialog', { name: /Preview Import/ });
+  await importPreviewDialog.waitFor();
+  await assertDialogFitsViewport(adminPage, '[aria-labelledby="import-preview-title"]', 'Excel import preview');
+  await assertA11y(adminPage, 'Excel import preview', '[aria-labelledby="import-preview-title"]');
+  await importPreviewDialog.getByRole('button', { name: /ยืนยันนำเข้า 1 รายการ/ }).click();
   await adminPage.getByText(/นำเข้าพนักงานสำเร็จ 1 รายการ/).waitFor();
   await assertA11y(adminPage, 'desktop admin users');
   await adminPage.getByRole('button', { name: 'รีเซ็ต PIN ของ ผู้ใช้ทดสอบระบบ' }).first().click();

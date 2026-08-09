@@ -1012,7 +1012,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
 
 // 🔵 Premium Shared UI Components
 const ResourceCard = ({ icon, title, desc, onClick }: any) => (
-  <button onClick={onClick} className="bg-white p-5 rounded-[1.5rem] border border-slate-100 active:bg-slate-50 hover:shadow-lg transition-all flex flex-col items-center text-center gap-3 group relative overflow-hidden">
+  <button type="button" onClick={onClick} aria-label={`${title}: ${desc}`} className="group relative flex min-h-11 flex-col items-center gap-3 overflow-hidden rounded-[1.5rem] border border-slate-100 bg-white p-5 text-center transition-all hover:shadow-lg active:bg-slate-50">
     <div className="p-4 bg-slate-50 text-blue-600 rounded-2xl group-active:bg-blue-600 group-active:text-white transition-all shadow-inner">{icon}</div>
     <div className="min-w-0">
       <h4 className="font-black text-slate-800 text-xs truncate uppercase tracking-tight mb-1">{title}</h4>
@@ -1113,8 +1113,10 @@ const StageCard = ({ title, isActive, isNearExpiry, expiryDate, icon, onClick, o
                         {/* ปุ่มสอบใหม่ - ซ่อนถ้าถูกแบน */}
                         {isActive && !isActionDisabled && onRetake && (
                             <button 
+                              type="button"
                               onClick={(e) => { e.stopPropagation(); onRetake(); }} 
-                              className="p-2.5 rounded-xl bg-slate-50 text-slate-400 hover:text-blue-600 hover:bg-blue-50 border border-slate-100 transition-all active:scale-90"
+                              aria-label={`ทำแบบทดสอบ ${title} ใหม่`}
+                              className="flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-slate-100 bg-slate-50 p-2.5 text-slate-500 transition-all hover:bg-blue-50 hover:text-blue-600 active:scale-90"
                               title="สอบใหม่ (Retake)"
                             >
                                 <RotateCcw size={16} />
@@ -1122,9 +1124,10 @@ const StageCard = ({ title, isActive, isNearExpiry, expiryDate, icon, onClick, o
                         )}
                         
                         <button 
+                          type="button"
                           disabled={isActionDisabled}
                           onClick={(e) => { e.stopPropagation(); onClick(); }} 
-                          className={`px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-2 transition-all shadow-md active:scale-95 ${
+                          className={`flex min-h-11 items-center gap-2 rounded-xl px-5 py-2.5 text-[9px] font-black uppercase tracking-widest shadow-md transition-all active:scale-95 ${
                             statusType === 'BANNED' ? 'bg-red-100 text-red-400 cursor-not-allowed shadow-none' :
                             statusType === 'PASSED' ? 'bg-slate-900 text-white hover:bg-slate-800 shadow-slate-200' : 
                             disabled ? 'bg-slate-100 text-slate-400 cursor-not-allowed shadow-none' : 
