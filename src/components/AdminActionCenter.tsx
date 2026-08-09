@@ -33,7 +33,7 @@ const AdminActionCenter: React.FC<Props> = ({ items, lastUpdatedAt, onNavigateTo
         <div><p className="text-sm font-black">ไม่มีรายการเร่งด่วน</p><p className="text-[10px] font-bold opacity-75">ข้อมูลปัจจุบันไม่มีงานค้างที่ต้องติดตามจาก Dashboard</p></div>
       </div>
     ) : (
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {items.map((item) => {
           const meta = metadata[item.kind];
           const onClick = item.destination === 'supplier' ? onNavigateToSupplier : onNavigateToUsers;
@@ -60,4 +60,3 @@ const AdminActionCenter: React.FC<Props> = ({ items, lastUpdatedAt, onNavigateTo
 );
 
 export default AdminActionCenter;
-
