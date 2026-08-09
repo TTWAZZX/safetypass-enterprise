@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import handler from '../../api/admin-reset-user-pin.js';
+import handler from '../../api/set-auth-pin.js';
 
 const adminId = '10000000-0000-4000-8000-000000000001';
 const userId = '20000000-0000-4000-8000-000000000002';
@@ -21,7 +21,7 @@ const invoke = async (body: unknown, ip: string, authorization = 'Bearer admin-a
     json(value: unknown) { responseBody = value; return this; },
   };
   await handler({
-    method: 'POST', body, headers: { authorization, 'x-forwarded-for': ip },
+    method: 'POST', body: { action: 'admin-reset-user-pin', ...(body as object) }, headers: { authorization, 'x-forwarded-for': ip },
   }, response);
   return { status, body: responseBody };
 };

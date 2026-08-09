@@ -18,10 +18,7 @@ const authorizedRpc = async (auth, name, body) => {
   return { ok: response.ok, data: await safeJson(response) };
 };
 
-export default async function handler(req, res) {
-  res.setHeader('Cache-Control', 'no-store');
-  if (req.method !== 'POST') return res.status(405).json({ message: 'Method Not Allowed' });
-
+export const handleAdminResetUserPin = async (req, res) => {
   const auth = await requireAdminUser(req, res);
   if (!auth) return undefined;
 
@@ -100,5 +97,4 @@ export default async function handler(req, res) {
   } catch {
     return res.status(503).json({ message: 'PIN reset service is unavailable' });
   }
-}
-
+};

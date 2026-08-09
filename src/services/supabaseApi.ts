@@ -418,13 +418,13 @@ export const api = {
     const accessToken = sessionData.session?.access_token;
     if (!accessToken) throw new Error('ไม่พบ session ของผู้ดูแลระบบ');
 
-    const response = await fetch('/api/admin-reset-user-pin', {
+    const response = await fetch('/api/set-auth-pin', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ userId: id }),
+      body: JSON.stringify({ action: 'admin-reset-user-pin', userId: id }),
     });
     const result = await response.json().catch(() => null);
     if (!response.ok || result?.ok !== true || typeof result?.expiresAt !== 'string') {

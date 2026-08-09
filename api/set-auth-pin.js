@@ -1,11 +1,13 @@
 import {
   cleanText, getAuthPinPepper, getSupabaseServiceConfig, isRateLimited, requireAuthenticatedUser,
 } from './_auth.js';
+import { handleAdminResetUserPin } from './_adminPinReset.js';
 import { createSecurePinPassword, getPermanentPinError } from './_pin.js';
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'POST') return res.status(405).json({ message: 'Method Not Allowed' });
+  if (req.body?.action === 'admin-reset-user-pin') return handleAdminResetUserPin(req, res);
 
   const auth = await requireAuthenticatedUser(req, res);
   if (!auth) return undefined;

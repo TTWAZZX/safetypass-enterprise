@@ -464,18 +464,19 @@ async function installMocks(page, options = {}) {
   });
   await page.route('**/api/auth-session-status', (route) => json(route, { requiresPinUpgrade: false }));
   await page.route('**/api/set-auth-pin', (route) => {
+    const payload = route.request().postDataJSON?.() || {};
+    if (payload.action === 'admin-reset-user-pin') {
+      authDiagnostics.adminPinResetRequests += 1;
+      return json(route, {
+        ok: true,
+        expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+      });
+    }
     authDiagnostics.pinUpgradeRequests += 1;
     return json(route, {
       ok: true,
       accessToken: createAccessToken(userId, 'USER'),
       refreshToken: 'test-refresh-token-v2',
-    });
-  });
-  await page.route('**/api/admin-reset-user-pin', (route) => {
-    authDiagnostics.adminPinResetRequests += 1;
-    return json(route, {
-      ok: true,
-      expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
     });
   });
   await page.route('https://liffsdk.line-scdn.net/**', (route) => {
