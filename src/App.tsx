@@ -1,6 +1,14 @@
 import React, { lazy, Suspense, useState, useEffect } from 'react';
 import { User } from './types';
-import { supabase } from './services/supabaseClient';
+import { purgeLegacyBrowserAuthStorage, supabase } from './services/supabaseClient';
+import { api } from './services/supabaseApi';
+import {
+  clearAuthenticatedAppSession,
+  hasAuthenticatedAppSession,
+  LEGACY_CURRENT_USER_STORAGE_KEY,
+  markAuthenticatedAppSession,
+  restoreAuthenticatedUser,
+} from './services/authSessionRestore';
 import { LanguageProvider, useTranslation } from './context/LanguageContext';
 import LanguageSwitcher from './components/LanguageSwitcher';
 import {
@@ -49,27 +57,31 @@ const AppContent: React.FC = () => {
       try {
         document.documentElement.classList.remove('dark');
         localStorage.removeItem('safety_pass_theme');
-        const savedUser = localStorage.getItem('safety_pass_current_user');
-        if (savedUser) {
-          // 🛡️ SESSION FALLBACK: ตรวจสอบว่า Supabase Session ยังใช้งานได้อยู่ไหม
-          // ป้องกันกรณีที่ localStorage มีข้อมูลเหลือค้างแต่ Session หมดอายุแล้ว
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session) {
+        localStorage.removeItem(LEGACY_CURRENT_USER_STORAGE_KEY);
+        purgeLegacyBrowserAuthStorage();
+
+        // A staged registration deliberately has a temporary Supabase session.
+        // Restore the app only after a completed login, not during registration.
+        if (!hasAuthenticatedAppSession(sessionStorage)) return;
+
+        const restoredUser = await restoreAuthenticatedUser({
+          storage: localStorage,
+          getSession: async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            return session;
+          },
+          validateSession: async (accessToken) => {
             const statusResponse = await fetch('/api/auth-session-status', {
-              headers: { Authorization: `Bearer ${session.access_token}` },
+              headers: { Authorization: `Bearer ${accessToken}` },
             });
-            const authStatus = await statusResponse.json().catch(() => null);
-            if (statusResponse.ok && authStatus?.requiresPinUpgrade === false) {
-              setCurrentUser(JSON.parse(savedUser));
-            } else {
-              await supabase.auth.signOut();
-              localStorage.removeItem('safety_pass_current_user');
-            }
-          } else {
-            // Session หมดอายุ → เคลียร์ข้อมูลเก่าออก บังคับ Login ใหม่
-            localStorage.removeItem('safety_pass_current_user');
-          }
-        }
+            if (!statusResponse.ok) return null;
+            return statusResponse.json().catch(() => null);
+          },
+          loadProfile: () => api.getCurrentUser(),
+          signOut: () => supabase.auth.signOut(),
+        });
+        setCurrentUser(restoredUser);
+        if (!restoredUser) clearAuthenticatedAppSession(sessionStorage);
       } catch (err) {
         console.error('Init error:', err);
       } finally {
@@ -83,14 +95,16 @@ const AppContent: React.FC = () => {
 
   const handleLogin = (user: User) => {
     setCurrentUser(user);
-    localStorage.setItem('safety_pass_current_user', JSON.stringify(user));
+    localStorage.removeItem(LEGACY_CURRENT_USER_STORAGE_KEY);
+    markAuthenticatedAppSession(sessionStorage);
   };
 
   const handleLogout = () => {
     if(window.confirm(language === 'th' ? "คุณต้องการออกจากระบบใช่หรือไม่?" : "Are you sure you want to logout?")) {
       supabase.auth.signOut();
       setCurrentUser(null);
-      localStorage.removeItem('safety_pass_current_user');
+      localStorage.removeItem(LEGACY_CURRENT_USER_STORAGE_KEY);
+      clearAuthenticatedAppSession(sessionStorage);
       setActiveTab('HOME');
     }
   };

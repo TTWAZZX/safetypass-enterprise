@@ -562,6 +562,16 @@ try {
   await login(userPage, userNationalId);
   await userPage.getByRole('heading', { name: 'ผู้ใช้ทดสอบระบบ', exact: true }).waitFor();
   await userPage.getByText('Supplier & Outsource', { exact: true }).first().waitFor();
+  const localStorageValues = await userPage.evaluate(() => Object.values(localStorage));
+  if (localStorageValues.some((value) => value.includes(userNationalId))) {
+    throw new Error('National ID was persisted in localStorage after login');
+  }
+  if (await userPage.evaluate(() => localStorage.getItem('safety_pass_current_user') !== null)) {
+    throw new Error('Legacy PII profile cache was retained after login');
+  }
+  if (await userPage.evaluate(() => sessionStorage.getItem('safety_pass_auth_session') === null)) {
+    throw new Error('Auth session was not stored in sessionStorage');
+  }
   await assertA11y(userPage, 'mobile user dashboard');
 
   await userPage.getByRole('button', { name: /สอบใหม่ \/ Retake/i }).click();

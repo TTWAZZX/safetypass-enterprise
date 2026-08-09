@@ -6,6 +6,7 @@ import { Vendor, VendorNameMatch, VendorStatus } from '../types';
 import { useToastContext } from './ToastProvider';
 import { downloadWorkbook } from '../services/excelExport';
 import { readFirstWorksheetRows } from '../services/excelImport';
+import { processExcelDate } from '../utils/excelDates';
 import { 
   Users, Building2, Search, Plus, RotateCcw, CheckCircle, Loader2,
   Trash2, Edit3, UserPlus, Upload, Download, History, ShieldCheck,
@@ -24,42 +25,6 @@ const normalizeVendorNameForComparison = (name: string) => name
   .trim()
   .toLocaleLowerCase()
   .replace(/[\s\p{P}\p{S}]+/gu, '');
-
-const processExcelDate = (excelDate: any): string | null => {
-    if (!excelDate) return null;
-    try {
-        let date: Date | null = null;
-        if (typeof excelDate === 'number') {
-            date = new Date(Math.round((excelDate - 25569) * 86400 * 1000));
-        } else if (typeof excelDate === 'string') {
-            const cleanStr = excelDate.trim().replace(/[-.]/g, '/');
-            const tryDirect = new Date(cleanStr);
-            if (!isNaN(tryDirect.getTime()) && cleanStr.includes('-')) {
-                date = tryDirect;
-            } else {
-                const parts = cleanStr.split('/');
-                if (parts.length === 3) {
-                    const p0 = parseInt(parts[0]);
-                    const p1 = parseInt(parts[1]);
-                    const p2 = parseInt(parts[2]);
-                    const year = p2 < 100 ? 2000 + p2 : p2;
-                    if (p0 > 12) { date = new Date(year, p1 - 1, p0); } 
-                    else if (p1 > 12) { date = new Date(year, p0 - 1, p1); } 
-                    else { date = new Date(year, p0 - 1, p1); }
-                }
-            }
-        } else if (excelDate instanceof Date) { date = excelDate; }
-
-        if (date && !isNaN(date.getTime())) {
-            date.setHours(12, 0, 0, 0); 
-            return date.toISOString();
-        }
-        return null;
-    } catch (e) {
-        console.error("Date Parse Error:", e);
-        return null;
-    }
-};
 
 const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSearch }) => {
   const { showToast } = useToastContext();

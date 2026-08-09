@@ -29,7 +29,27 @@ export default async function handler(req, res) {
       body: JSON.stringify({ national_id_param: nationalId }),
     });
     const context = await response.json().catch(() => null);
-    if (!response.ok || !context?.user_exists || !context?.is_active) {
+
+    // A staged account can temporarily hold a Supabase session while it fills
+    // in its registration. Check the registration boundary server-side so a
+    // client-controlled browser marker cannot restore it into the app early.
+    const registrationResponse = await fetch(`${config.url}/rest/v1/rpc/check_user_exists`, {
+      method: 'POST',
+      headers: {
+        apikey: config.serviceKey,
+        Authorization: `Bearer ${config.serviceKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ search_id: nationalId }),
+    });
+    const registrationRows = await registrationResponse.json().catch(() => null);
+    const registrationStatus = Array.isArray(registrationRows) ? registrationRows[0] : null;
+
+    if (!response.ok || !context?.user_exists || !context?.is_active
+      || !registrationResponse.ok
+      || registrationStatus?.user_exists !== true
+      || registrationStatus?.is_active !== true
+      || registrationStatus?.requires_registration !== false) {
       return res.status(403).json({ message: 'Account is not available' });
     }
     return res.status(200).json({

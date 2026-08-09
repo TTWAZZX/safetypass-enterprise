@@ -38,7 +38,8 @@ describe('auth-session-status API', () => {
     configure();
     const upstream = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ id: 'user-1', email: '1234567890123@safetypass.com' }))
-      .mockResolvedValueOnce(jsonResponse({ user_exists: true, is_active: true, pin_version: 1 }));
+      .mockResolvedValueOnce(jsonResponse({ user_exists: true, is_active: true, pin_version: 1 }))
+      .mockResolvedValueOnce(jsonResponse([{ user_exists: true, is_active: true, requires_registration: false }]));
     vi.stubGlobal('fetch', upstream);
 
     expect(await invoke()).toEqual({ status: 200, body: { requiresPinUpgrade: true } });
@@ -48,7 +49,8 @@ describe('auth-session-status API', () => {
     configure();
     const upstream = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ id: 'user-1', email: '1234567890123@safetypass.com' }))
-      .mockResolvedValueOnce(jsonResponse({ user_exists: true, is_active: true, pin_version: 2 }));
+      .mockResolvedValueOnce(jsonResponse({ user_exists: true, is_active: true, pin_version: 2 }))
+      .mockResolvedValueOnce(jsonResponse([{ user_exists: true, is_active: true, requires_registration: false }]));
     vi.stubGlobal('fetch', upstream);
 
     expect(await invoke()).toEqual({ status: 200, body: { requiresPinUpgrade: false } });
@@ -59,9 +61,21 @@ describe('auth-session-status API', () => {
     process.env.AUTH_PIN_V2_ENFORCEMENT = 'false';
     const upstream = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ id: 'user-1', email: '1234567890123@safetypass.com' }))
-      .mockResolvedValueOnce(jsonResponse({ user_exists: true, is_active: true, pin_version: 1 }));
+      .mockResolvedValueOnce(jsonResponse({ user_exists: true, is_active: true, pin_version: 1 }))
+      .mockResolvedValueOnce(jsonResponse([{ user_exists: true, is_active: true, requires_registration: false }]));
     vi.stubGlobal('fetch', upstream);
 
     expect(await invoke()).toEqual({ status: 200, body: { requiresPinUpgrade: false } });
+  });
+
+  it('refuses to restore a staged account before registration and PDPA are complete', async () => {
+    configure();
+    const upstream = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ id: 'user-1', email: '1234567890123@safetypass.com' }))
+      .mockResolvedValueOnce(jsonResponse({ user_exists: true, is_active: true, pin_version: 2 }))
+      .mockResolvedValueOnce(jsonResponse([{ user_exists: true, is_active: true, requires_registration: true }]));
+    vi.stubGlobal('fetch', upstream);
+
+    expect(await invoke()).toEqual({ status: 403, body: { message: 'Account is not available' } });
   });
 });

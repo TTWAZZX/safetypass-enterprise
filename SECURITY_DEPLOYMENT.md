@@ -2,6 +2,35 @@
 
 The notification endpoints now require a valid Supabase access token and verify an active work permit before notifying LINE.
 
+## Browser response headers
+
+`vercel.json` is the source of truth for browser security headers. It enforces a
+Content Security Policy and sends MIME-sniffing, clickjacking, referrer,
+permissions, and HTTPS-transport protections on every route.
+
+The application currently does not use camera, microphone, geolocation, payment,
+or USB browser permissions; those capabilities remain disabled with
+`Permissions-Policy`. If a future feature needs one, update the policy and add a
+corresponding security review and test in the same change.
+
+LINE LIFF requires only these CSP exceptions:
+
+- `https://static.line-scdn.net` in `script-src`
+- `https://api.line.me` in `connect-src`
+- `https://profile.line-scdn.net` in `img-src`
+
+Do not replace the allowlists with wildcards or weaken the remaining CSP directives.
+
+## Browser session privacy
+
+The Supabase Auth session is stored in `sessionStorage`, never `localStorage`.
+This prevents the synthetic login email (which includes the national ID) and
+access tokens from remaining on a device after the browser tab is closed. A
+new tab requires signing in again; a reload within the same tab keeps the
+session and reloads the profile only after validation. On first load, the app
+also removes the legacy Supabase and `safety_pass_current_user` localStorage
+entries used by previous releases.
+
 Before deployment, configure these Vercel environment variables:
 
 - `NEXT_PUBLIC_SUPABASE_URL` (or `SUPABASE_URL` / legacy `VITE_SUPABASE_URL`)

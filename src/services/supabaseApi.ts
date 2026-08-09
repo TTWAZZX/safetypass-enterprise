@@ -101,6 +101,28 @@ const ensureStagedRegistrationIdentity = async (nationalId: string) => {
   return authData.user;
 };
 
+const loadAuthenticatedUserProfile = async (userId: string): Promise<User> => {
+  const { data: rawUserData, error: userError } = await supabase
+    .from('users')
+    .select(USER_PROFILE_SELECT)
+    .eq('id', userId)
+    .single();
+
+  if (userError || !rawUserData) {
+    throw new Error('User profile is unavailable');
+  }
+
+  const userData = rawUserData as any;
+  const { data: realId, error: decryptError } = await supabase.rpc('get_my_decrypted_id');
+  if (decryptError) console.error('Decryption failed:', decryptError);
+
+  return {
+    ...userData,
+    national_id: realId || userData.national_id,
+    vendor_id: userData.vendor_id,
+  } as User;
+};
+
 export const api = {
 
 /* =====================================================
@@ -220,6 +242,12 @@ export const api = {
       } as unknown as User,
       requiresPinUpgrade,
     }
+  },
+
+  getCurrentUser: async (): Promise<User> => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user?.id) throw new Error('User session is unavailable');
+    return loadAuthenticatedUserProfile(session.user.id);
   },
 
   upgradeMyPin: async (nationalId: string, securePin: string): Promise<void> => {
