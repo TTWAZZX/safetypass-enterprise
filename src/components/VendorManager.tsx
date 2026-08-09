@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import AsyncState from './AsyncState';
 import { useDialogFocus } from '../hooks/useDialogFocus';
+import { buildDirectoryFilterSummary } from '../services/directoryFilterSummary';
 
 const maskNationalID = (id: string | null | undefined) => {
   if (!id || id.length < 13) return '-------------';
@@ -720,6 +721,18 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     || !vendorFormName.trim()
     || Boolean(exactVendorDialogMatch)
     || (similarVendorDialogMatches.length > 0 && !allowSimilarVendor);
+  const directoryFilterChips = buildDirectoryFilterSummary({
+    search: searchQuery,
+    vendorId: activeTab === 'USERS' ? selectedVendorFilter : '',
+    vendorName: allVendors.find((vendor) => vendor.id === selectedVendorFilter)?.name,
+    certificate: activeTab === 'USERS' ? certFilter : '',
+  });
+  const clearDirectoryFilters = () => {
+    setSearchQuery('');
+    setSelectedVendorFilter('');
+    setCertFilter('');
+    setCurrentPage(1);
+  };
 
   return (
     <div className="space-y-4 md:space-y-6 text-left animate-in fade-in duration-500 pb-10 relative px-2 md:px-0">
@@ -828,6 +841,24 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
             )}
           </div>
         </div>
+
+        {activeTab !== 'LOGS' && (
+          <div className="flex flex-col gap-3 border-b border-slate-100 bg-white px-4 py-3 md:flex-row md:items-center md:justify-between md:px-6" aria-live="polite">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <span className="text-[10px] font-black text-slate-700">พบ {totalItems.toLocaleString('th-TH')} รายการ</span>
+              {directoryFilterChips.map((chip) => (
+                <span key={chip.kind} className="max-w-full truncate rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-[9px] font-bold text-blue-800" title={chip.label}>
+                  {chip.label}
+                </span>
+              ))}
+            </div>
+            {directoryFilterChips.length > 0 && (
+              <button type="button" onClick={clearDirectoryFilters} className="flex min-h-10 items-center justify-center gap-1.5 self-start rounded-xl border border-slate-200 bg-white px-3 text-[9px] font-black text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-800 md:self-auto">
+                <X size={13} aria-hidden="true" /> ล้างตัวกรองทั้งหมด
+              </button>
+            )}
+          </div>
+        )}
 
         {activeTab === 'VENDORS' && vendorDuplicateGroups.length > 0 && (
           <div role="status" className="mx-4 mt-3 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 md:mx-6">
