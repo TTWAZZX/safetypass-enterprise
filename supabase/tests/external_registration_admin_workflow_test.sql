@@ -27,7 +27,6 @@ declare
   application_id_value uuid;
   detail_value jsonb;
   resolve_value jsonb;
-  result_email_count integer;
 begin
   submission := public.create_external_access_application(
     'Phase Four Admin Workflow Company',
@@ -43,6 +42,8 @@ begin
   if application_id_value is null then
     raise exception 'Admin list did not return the submitted application';
   end if;
+  perform set_config('safetypass_test.request_no', submission ->> 'request_no', true);
+  perform set_config('safetypass_test.tracking_token', submission ->> 'tracking_token', true);
 
   detail_value := public.admin_get_external_access_application(application_id_value);
   if detail_value -> 'application' ->> 'status' <> 'SUBMITTED'
@@ -58,16 +59,6 @@ begin
     raise exception 'Admin approval did not create and link a new company: %', resolve_value;
   end if;
 
-  select count(*) into result_email_count
-  from public.get_external_registration_email_batch(
-    submission ->> 'request_no', submission ->> 'tracking_token'
-  )
-  where template_key = 'external_registration_applicant_result'
-    and recipient_email = 'tawun666956666956@gmail.com';
-  if result_email_count <> 1 then
-    raise exception 'Approval result email was not queued';
-  end if;
-
   if not exists (
     select 1
     from public.admin_get_external_registration_result_email_batch(application_id_value)
@@ -76,11 +67,29 @@ begin
     raise exception 'Approval result email batch did not expose the applicant tracking token';
   end if;
 
+end;
+$$;
+
+reset role;
+
+set local role service_role;
+do $$
+declare
+  request_no_value text := current_setting('safetypass_test.request_no');
+  tracking_token_value text := current_setting('safetypass_test.tracking_token');
+  result_email_count integer;
+begin
+  select count(*) into result_email_count
+  from public.get_external_registration_email_batch(request_no_value, tracking_token_value)
+  where template_key = 'external_registration_applicant_result'
+    and recipient_email = 'tawun666956666956@gmail.com';
+  if result_email_count <> 1 then
+    raise exception 'Approval result email was not queued';
+  end if;
+
   if not exists (
     select 1
-    from public.get_external_registration_email_batch(
-      submission ->> 'request_no', submission ->> 'tracking_token'
-    )
+    from public.get_external_registration_email_batch(request_no_value, tracking_token_value)
     where template_key = 'external_registration_admin_notice'
       and recipient_email = 'sattaya_w@thaisummit-harness.co.th'
   ) then
@@ -88,6 +97,5 @@ begin
   end if;
 end;
 $$;
-
 reset role;
 rollback;

@@ -88,6 +88,25 @@ const pinRegression = readFileSync('supabase/tests/progressive_pin_v2_test.sql',
 try {
   await client.connect();
   await client.query('begin');
+  const archiveColumnBefore = (await client.query(`
+    select exists (
+      select 1 from information_schema.columns
+      where table_schema = 'public' and table_name = 'users'
+        and column_name = 'identity_archived_at'
+    ) as present
+  `)).rows[0].present;
+  const archivedCountBefore = archiveColumnBefore
+    ? Number((await client.query(`
+      select count(*) from public.users
+      where identity_archive_reason = 'DUPLICATE_AUTH_PROFILE'
+        and identity_archived_at is not null
+        and identity_merged_into_user_id is not null
+        and is_active = false
+        and national_id_fingerprint is null
+        and national_id_hash is null
+        and national_id_cipher is null
+    `)).rows[0].count)
+    : 0;
   const initial = (await client.query(snapshotSql)).rows[0].snapshot;
   if (isLocalDatabase) {
     const localDuplicateGroups = Number((await client.query(`
@@ -174,8 +193,9 @@ try {
       and national_id_hash is null
       and national_id_cipher is null
   `)).rows[0].count);
-  if (archivedCount !== Number(before.duplicate_profiles)) {
-    throw new Error(`Expected ${before.duplicate_profiles} archived profiles, found ${archivedCount}`);
+  const expectedArchivedCount = archivedCountBefore + Number(before.duplicate_profiles);
+  if (archivedCount !== expectedArchivedCount) {
+    throw new Error(`Expected ${expectedArchivedCount} archived profiles, found ${archivedCount}`);
   }
   const uniqueIndex = (await client.query(`
     select to_regclass('public.users_national_id_fingerprint_unique')::text as name
@@ -203,7 +223,8 @@ try {
         and column_name = 'identity_archived_at'
     ) as present
   `)).rows[0].present;
-  if (JSON.stringify(initial) !== JSON.stringify(afterRollback) || archiveColumnAfterRollback) {
+  if (JSON.stringify(initial) !== JSON.stringify(afterRollback)
+      || archiveColumnBefore !== archiveColumnAfterRollback) {
     throw new Error('Rollback did not restore the exact pre-migration schema/data snapshot');
   }
   console.log(JSON.stringify({

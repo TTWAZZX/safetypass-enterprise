@@ -12,8 +12,8 @@ begin
   if (select count(*) from public.user_auth_security) <> (select count(*) from public.users) then
     raise exception 'Existing users were not backfilled exactly once';
   end if;
-  if exists (select 1 from public.user_auth_security where pin_version <> 1) then
-    raise exception 'Existing accounts were not kept in legacy-compatible PIN state';
+  if exists (select 1 from public.user_auth_security where pin_version not in (1, 2)) then
+    raise exception 'Existing accounts contain an unsupported PIN version';
   end if;
 end;
 $$;

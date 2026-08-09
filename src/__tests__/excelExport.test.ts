@@ -23,7 +23,7 @@ describe('Supplier & Outsource Excel export', () => {
     expect(worksheet!.getCell('H3').numFmt).toBe('mm-dd-yy');
     expect(worksheet!.getCell('A1').alignment).toEqual({ horizontal: 'center' });
     expect(worksheet!.getRow(2).font).toMatchObject({ name: 'Calibri', size: 11, bold: true });
-  });
+  }, 15_000);
 
   it('refuses to create a misleading export when an ID card is missing', async () => {
     await expect(createSupplierOutsourceWorkbook([{

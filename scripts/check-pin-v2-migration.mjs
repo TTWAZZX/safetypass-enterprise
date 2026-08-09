@@ -31,6 +31,20 @@ const snapshotSql = `
   ) as snapshot
 `;
 
+const readSecurityState = async (client) => {
+  const relation = (await client.query(
+    "select to_regclass('public.user_auth_security')::text as name",
+  )).rows[0].name;
+  if (!relation) return { present: false };
+  const state = (await client.query(`
+    select
+      count(*)::integer as row_count,
+      md5(coalesce(string_agg(row_to_json(s)::text, '|' order by s.user_id::text), '')) as row_digest
+    from public.user_auth_security s
+  `)).rows[0];
+  return { present: true, ...state };
+};
+
 const env = parseEnv('.env.local');
 const databaseUrlOverride = process.env.PIN_V2_TEST_DATABASE_URL?.trim();
 if (!databaseUrlOverride && !env.SUPABASE_DB_PASSWORD) {
@@ -59,7 +73,7 @@ const regression = unwrapTransaction(readFileSync(
 
 try {
   await client.connect();
-  const relationBefore = (await client.query("select to_regclass('public.user_auth_security')::text as name")).rows[0].name;
+  const securityBefore = await readSecurityState(client);
   await client.query('begin');
   const before = (await client.query(snapshotSql)).rows[0].snapshot;
   await client.query(migration);
@@ -67,11 +81,25 @@ try {
   if (JSON.stringify(before) !== JSON.stringify(afterMigration)) {
     throw new Error(`Existing users or history changed during migration: ${JSON.stringify({ before, afterMigration })}`);
   }
+  const securityAfterMigration = await readSecurityState(client);
+  if (securityBefore.present) {
+    if (JSON.stringify(securityBefore) !== JSON.stringify(securityAfterMigration)) {
+      throw new Error('Existing PIN security state changed while rechecking the migration');
+    }
+  } else {
+    const invalidBackfill = Number((await client.query(`
+      select count(*)
+      from public.user_auth_security
+      where pin_version <> 1
+    `)).rows[0].count);
+    if (invalidBackfill !== 0) throw new Error('Fresh PIN v2 backfill did not preserve legacy compatibility');
+  }
   await client.query(regression);
   await client.query('rollback');
   const afterRollback = (await client.query(snapshotSql)).rows[0].snapshot;
-  const relationAfter = (await client.query("select to_regclass('public.user_auth_security')::text as name")).rows[0].name;
-  if (JSON.stringify(before) !== JSON.stringify(afterRollback) || relationBefore !== relationAfter) {
+  const securityAfterRollback = await readSecurityState(client);
+  if (JSON.stringify(before) !== JSON.stringify(afterRollback)
+      || JSON.stringify(securityBefore) !== JSON.stringify(securityAfterRollback)) {
     throw new Error('Rollback did not restore the original schema and data snapshot');
   }
   console.log('PIN v2 migration regression passed; existing data matched and transaction rolled back.');

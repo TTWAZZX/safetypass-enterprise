@@ -29,8 +29,6 @@ declare
   detail_value jsonb;
   status_value jsonb;
   result_batch_count integer;
-  pending_received_count integer;
-  pending_admin_count integer;
 begin
   submission := public.create_external_access_application(
     'Phase Follow-up Company Co., Ltd.',
@@ -38,6 +36,8 @@ begin
     'Follow', 'Up', 'Follow', 'Up', 'Coordinator',
     'tawun666956666956@gmail.com', '0800000000', array['TSH Follow-up Owner']::text[], true
   );
+  perform set_config('safetypass_test.request_no', submission ->> 'request_no', true);
+  perform set_config('safetypass_test.tracking_token', submission ->> 'tracking_token', true);
 
   select id into application_id_value
   from public.admin_get_external_access_applications(null, submission ->> 'request_no', 10, 0)
@@ -85,25 +85,6 @@ begin
     raise exception 'Resubmission did not update the original application: %', detail_value;
   end if;
 
-  select count(*) into pending_received_count
-  from public.get_external_registration_email_batch(
-    submission ->> 'request_no', submission ->> 'tracking_token'
-  )
-  where template_key = 'external_registration_applicant_received'
-    and payload ->> 'trackingToken' = submission ->> 'tracking_token';
-  if pending_received_count < 1 then
-    raise exception 'Resubmission did not queue applicant confirmation email';
-  end if;
-
-  select count(*) into pending_admin_count
-  from public.get_external_registration_email_batch(
-    submission ->> 'request_no', submission ->> 'tracking_token'
-  )
-  where template_key = 'external_registration_admin_notice';
-  if pending_admin_count < 2 then
-    raise exception 'Resubmission did not queue a new Admin notification email';
-  end if;
-
   status_value := public.admin_delete_external_access_application(
     application_id_value, 'ลบคำขอหลังจบ regression test'
   );
@@ -120,5 +101,30 @@ begin
 end;
 $$;
 
+reset role;
+set local role service_role;
+do $$
+declare
+  request_no_value text := current_setting('safetypass_test.request_no');
+  tracking_token_value text := current_setting('safetypass_test.tracking_token');
+  pending_received_count integer;
+  pending_admin_count integer;
+begin
+  select count(*) into pending_received_count
+  from public.get_external_registration_email_batch(request_no_value, tracking_token_value)
+  where template_key = 'external_registration_applicant_received'
+    and payload ->> 'trackingToken' = tracking_token_value;
+  if pending_received_count < 1 then
+    raise exception 'Resubmission did not queue applicant confirmation email';
+  end if;
+
+  select count(*) into pending_admin_count
+  from public.get_external_registration_email_batch(request_no_value, tracking_token_value)
+  where template_key = 'external_registration_admin_notice';
+  if pending_admin_count < 2 then
+    raise exception 'Resubmission did not queue a new Admin notification email';
+  end if;
+end;
+$$;
 reset role;
 rollback;
