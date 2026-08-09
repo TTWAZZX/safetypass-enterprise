@@ -52,8 +52,15 @@ export default async function handler(req, res) {
       || registrationStatus?.requires_registration !== false) {
       return res.status(403).json({ message: 'Account is not available' });
     }
+    const resetState = String(context.pin_reset_state || 'NONE');
+    const resetExpiresAt = context.pin_reset_expires_at ? new Date(context.pin_reset_expires_at) : null;
+    const pendingResetIsCurrent = resetState === 'PENDING'
+      && resetExpiresAt
+      && resetExpiresAt.getTime() > Date.now();
     return res.status(200).json({
-      requiresPinUpgrade: isPinV2Enforced() && Number(context.pin_version || 1) < 2,
+      requiresPinUpgrade: resetState === 'ACTIVE'
+        || Boolean(pendingResetIsCurrent)
+        || (isPinV2Enforced() && Number(context.pin_version || 1) < 2),
     });
   } catch {
     return res.status(503).json({ message: 'Authentication service is unavailable' });

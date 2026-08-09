@@ -68,6 +68,22 @@ After any account has migrated to PIN v2, do not roll the whole application back
 
 Do not deploy the Phase 1 application code if any gate fails or either server-only secret is missing. Do not rotate `AUTH_PIN_PEPPER` during routine deployments.
 
+## Administrator PIN reset
+
+An administrator can reset an active `USER` account from the personnel screen.
+The temporary PIN is the last six digits of that user's national ID, expires
+after 30 minutes, and forces the user to choose a permanent six-digit PIN
+before entering the application. Permanent PINs may be memorable, but cannot
+be `000000`, `123456`, or the last six digits of the user's national ID.
+
+The reset endpoint verifies the administrator session, derives the temporary
+credential only on the server, and never returns or records the PIN or national
+ID. The audit event records only the target user UUID, reset method, expiry,
+and confirmation that no PIN value was recorded. Apply
+`20260809104500_admin_pin_reset.sql` before deploying the matching API code,
+and run `npm run test:db:admin-pin-reset` first; that regression test always
+rolls back its transaction.
+
 Keep Row Level Security enabled in Supabase. A signed-in user must be allowed to read only their own `work_permits` record; administrators require separate explicit policies. Do not disable RLS to work around an authorization error.
 
 Database schema changes are managed through the versioned SQL files in `supabase/migrations`.

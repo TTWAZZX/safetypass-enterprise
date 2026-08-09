@@ -65,7 +65,11 @@ describe('set-auth-pin API', () => {
     });
     expect(adminBody.password).not.toContain(nationalId);
     expect(adminBody.password).not.toContain('246801');
-    expect(String(upstream.mock.calls[2][0])).toContain('record_auth_login_success');
+    expect(String(upstream.mock.calls[2][0])).toContain('complete_auth_pin_change');
+    expect(JSON.parse(String(upstream.mock.calls[2][1]?.body))).toEqual({
+      user_id_param: userId,
+      national_id_param: nationalId,
+    });
     expect(String(upstream.mock.calls[3][0])).toContain('/auth/v1/token?grant_type=password');
   });
 
@@ -93,5 +97,30 @@ describe('set-auth-pin API', () => {
 
     expect(result.status).toBe(401);
     expect(upstream).not.toHaveBeenCalled();
+  });
+
+  it('accepts a memorable six-digit PIN', async () => {
+    configure();
+    const upstream = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        id: userId, email: `${nationalId}@safetypass.com`, user_metadata: {},
+      }))
+      .mockResolvedValueOnce(jsonResponse({ id: userId }))
+      .mockResolvedValueOnce(jsonResponse(null))
+      .mockResolvedValueOnce(jsonResponse({ access_token: 'access', refresh_token: 'refresh' }));
+    vi.stubGlobal('fetch', upstream);
+
+    expect((await invoke({ nationalId, pin: '111111' }, '192.0.2.23')).status).toBe(200);
+  });
+
+  it.each(['000000', '123456', '890123'])('rejects reserved permanent PIN %s', async (pin) => {
+    configure();
+    const upstream = vi.fn().mockResolvedValueOnce(jsonResponse({
+      id: userId, email: `${nationalId}@safetypass.com`, user_metadata: {},
+    }));
+    vi.stubGlobal('fetch', upstream);
+
+    expect((await invoke({ nationalId, pin }, `192.0.2.${24 + Number(pin === '123456')}`)).status).toBe(400);
+    expect(upstream).toHaveBeenCalledTimes(1);
   });
 });

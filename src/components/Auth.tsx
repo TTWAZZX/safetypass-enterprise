@@ -424,7 +424,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         {pendingPinUpgradeUser && (
           <form onSubmit={handlePinUpgrade} className="space-y-4 relative z-10">
             <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-xs font-bold leading-relaxed text-blue-800">
-              บัญชีและประวัติเดิมของคุณยังอยู่ครบ กรุณาตั้ง PIN ส่วนตัว 6 หลัก โดยห้ามใช้เลข 6 หลักท้ายบัตรหรือเลขเรียงกัน
+              บัญชีและประวัติเดิมของคุณยังอยู่ครบ กรุณาตั้ง PIN ส่วนตัว 6 หลัก โดยห้ามใช้เลข 6 หลักท้ายบัตร, 000000 หรือ 123456
             </div>
             <label className="block space-y-1.5 text-left text-[9px] font-black uppercase tracking-widest text-slate-600">
               PIN ใหม่ 6 หลัก

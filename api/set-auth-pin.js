@@ -1,18 +1,7 @@
-import { createHmac } from 'node:crypto';
 import {
   cleanText, getAuthPinPepper, getSupabaseServiceConfig, isRateLimited, requireAuthenticatedUser,
 } from './_auth.js';
-
-const securePinIsWeak = (nationalId, pin) => (
-  !/^\d{6}$/.test(pin)
-  || /^(\d)\1{5}$/.test(pin)
-  || ['012345', '123456', '654321', '987654'].includes(pin)
-  || nationalId.slice(-6) === pin
-);
-
-const createSecurePassword = (nationalId, pin, pepper) => (
-  `SafetyPass-v2-${createHmac('sha256', pepper).update(`${nationalId}:${pin}`).digest('base64url')}`
-);
+import { createSecurePinPassword, getPermanentPinError } from './_pin.js';
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
@@ -24,7 +13,7 @@ export default async function handler(req, res) {
   const nationalId = cleanText(req.body?.nationalId, 13);
   const pin = cleanText(req.body?.pin, 6);
   const expectedEmail = nationalId ? `${nationalId}@safetypass.com` : '';
-  if (!nationalId || !/^\d{13}$/.test(nationalId) || !pin || securePinIsWeak(nationalId, pin)
+  if (!nationalId || !/^\d{13}$/.test(nationalId) || !pin || getPermanentPinError(nationalId, pin)
       || auth.user?.email?.toLowerCase() !== expectedEmail.toLowerCase()) {
     return res.status(400).json({ message: 'PIN does not meet security requirements' });
   }
@@ -44,7 +33,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const password = createSecurePassword(nationalId, pin, pepper);
+    const password = createSecurePinPassword(nationalId, pin, pepper);
     const passwordResponse = await fetch(`${config.url}/auth/v1/admin/users/${auth.user.id}`, {
       method: 'PUT',
       headers: {
@@ -65,14 +54,14 @@ export default async function handler(req, res) {
       return res.status(503).json({ message: 'Unable to update authentication PIN' });
     }
 
-    const stateResponse = await fetch(`${config.url}/rest/v1/rpc/record_auth_login_success`, {
+    const stateResponse = await fetch(`${config.url}/rest/v1/rpc/complete_auth_pin_change`, {
       method: 'POST',
       headers: {
         apikey: config.serviceKey,
         Authorization: `Bearer ${config.serviceKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ national_id_param: nationalId, pin_version_param: 2 }),
+      body: JSON.stringify({ user_id_param: auth.user.id, national_id_param: nationalId }),
     });
     if (!stateResponse.ok) return res.status(503).json({ message: 'Unable to synchronize authentication PIN' });
 

@@ -68,6 +68,20 @@ describe('auth-session-status API', () => {
     expect(await invoke()).toEqual({ status: 200, body: { requiresPinUpgrade: false } });
   });
 
+  it('requires a PIN change after an admin reset even while migration enforcement is paused', async () => {
+    configure();
+    process.env.AUTH_PIN_V2_ENFORCEMENT = 'false';
+    const upstream = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ id: 'user-1', email: '1234567890123@safetypass.com' }))
+      .mockResolvedValueOnce(jsonResponse({
+        user_exists: true, is_active: true, pin_version: 2, pin_reset_state: 'ACTIVE',
+      }))
+      .mockResolvedValueOnce(jsonResponse([{ user_exists: true, is_active: true, requires_registration: false }]));
+    vi.stubGlobal('fetch', upstream);
+
+    expect(await invoke()).toEqual({ status: 200, body: { requiresPinUpgrade: true } });
+  });
+
   it('refuses to restore a staged account before registration and PDPA are complete', async () => {
     configure();
     const upstream = vi.fn()

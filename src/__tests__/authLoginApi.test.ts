@@ -139,4 +139,84 @@ describe('auth-login API', () => {
     expect(result.status).toBe(200);
     expect(result.body.requiresPinUpgrade).toBe(false);
   });
+
+  it('accepts the active last-six temporary PIN and always requires a new PIN', async () => {
+    configure();
+    process.env.AUTH_PIN_V2_ENFORCEMENT = 'false';
+    const expiresAt = new Date(Date.now() + 30 * 60_000).toISOString();
+    const upstream = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        user_exists: true,
+        is_active: true,
+        pin_version: 2,
+        pin_reset_state: 'ACTIVE',
+        pin_reset_expires_at: expiresAt,
+      }))
+      .mockResolvedValueOnce(jsonResponse({ access_token: 'reset-access', refresh_token: 'reset-refresh' }))
+      .mockResolvedValueOnce(jsonResponse(null));
+    vi.stubGlobal('fetch', upstream);
+
+    const result = await invoke('890123', '192.0.2.7');
+    const password = JSON.parse(String(upstream.mock.calls[1][1]?.body)).password;
+    const digest = createHmac('sha256', pepper).update(`${nationalId}:890123`).digest('base64url');
+
+    expect(result.status).toBe(200);
+    expect(result.body.requiresPinUpgrade).toBe(true);
+    expect(password).toBe(`SafetyPass-v2-${digest}`);
+  });
+
+  it('rejects the previous PIN while an admin reset is active', async () => {
+    configure();
+    const upstream = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        user_exists: true,
+        is_active: true,
+        pin_version: 2,
+        pin_reset_state: 'ACTIVE',
+        pin_reset_expires_at: new Date(Date.now() + 30 * 60_000).toISOString(),
+      }))
+      .mockResolvedValueOnce(jsonResponse({ failed_attempts: 1, locked_until: null }));
+    vi.stubGlobal('fetch', upstream);
+
+    const result = await invoke('246801', '192.0.2.8');
+
+    expect(result.status).toBe(401);
+    expect(upstream).toHaveBeenCalledTimes(2);
+    expect(String(upstream.mock.calls[1][0])).toContain('record_auth_login_failure');
+  });
+
+  it('does not authenticate while a PIN reset is pending', async () => {
+    configure();
+    const upstream = vi.fn().mockResolvedValueOnce(jsonResponse({
+      user_exists: true,
+      is_active: true,
+      pin_version: 2,
+      pin_reset_state: 'PENDING',
+      pin_reset_expires_at: new Date(Date.now() + 30 * 60_000).toISOString(),
+    }));
+    vi.stubGlobal('fetch', upstream);
+
+    const result = await invoke('890123', '192.0.2.9');
+
+    expect(result.status).toBe(503);
+    expect(upstream).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects an expired temporary PIN before calling Supabase Auth', async () => {
+    configure();
+    const upstream = vi.fn().mockResolvedValueOnce(jsonResponse({
+      user_exists: true,
+      is_active: true,
+      pin_version: 2,
+      pin_reset_state: 'ACTIVE',
+      pin_reset_expires_at: new Date(Date.now() - 1_000).toISOString(),
+    }));
+    vi.stubGlobal('fetch', upstream);
+
+    const result = await invoke('890123', '192.0.2.10');
+
+    expect(result.status).toBe(401);
+    expect(result.body.message).toContain('expired');
+    expect(upstream).toHaveBeenCalledTimes(1);
+  });
 });

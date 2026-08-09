@@ -11,7 +11,7 @@ import {
   Users, Building2, Search, Plus, RotateCcw, CheckCircle, Loader2,
   Trash2, Edit3, UserPlus, Upload, Download, History, ShieldCheck,
   X, Globe2, Calendar, CalendarClock, Ban, Clock, CheckCircle2,
-  ShieldAlert, ChevronLeft, ChevronRight
+  ShieldAlert, ChevronLeft, ChevronRight, KeyRound
 } from 'lucide-react';
 import AsyncState from './AsyncState';
 import { useDialogFocus } from '../hooks/useDialogFocus';
@@ -35,6 +35,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
   const [certFilter, setCertFilter] = useState<'' | 'NO_CERT' | 'EXPIRING' | 'HAS_CERT'>('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [resettingPinUserId, setResettingPinUserId] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -564,6 +565,23 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     }
   };
 
+  const handleResetUserPin = async (id: string, name: string) => {
+    const confirmed = window.confirm(
+      `รีเซต PIN ของ "${name}" ใช่หรือไม่?\n\nผู้ใช้จะต้องเข้าสู่ระบบด้วยเลขบัตรประชาชน 6 หลักท้ายภายใน 30 นาที และตั้ง PIN ใหม่ก่อนเข้าใช้งาน`,
+    );
+    if (!confirmed) return;
+
+    setResettingPinUserId(id);
+    try {
+      await api.adminResetUserPin(id);
+      showToast(`รีเซต PIN ของ ${name} แล้ว กรุณาแจ้งให้ใช้เลขบัตร 6 หลักท้ายภายใน 30 นาที`, 'success');
+    } catch (error: any) {
+      showToast(error?.message || 'ไม่สามารถรีเซต PIN ได้', 'error');
+    } finally {
+      setResettingPinUserId(null);
+    }
+  };
+
   const handleResetTraining = async (id: string, name: string) => {
     if(!window.confirm("Reset induction status for this user?")) return;
     const { error } = await supabase.rpc('admin_reset_induction', { user_ids_param: [id] });
@@ -998,6 +1016,17 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                               <button onClick={() => activeTab === 'VENDORS' ? handleEditVendor(item as Vendor) : handleEditUser(item)} aria-label={`แก้ไข ${item.name}`} className="p-2.5 rounded-xl border border-slate-100 text-slate-600 hover:text-blue-700 hover:bg-blue-50 active:scale-90 transition-all shadow-sm"><Edit3 size={16} /></button>
                               {activeTab === 'USERS' && (
                                 <>
+                                  {item.role === 'USER' && item.is_active !== false && (
+                                    <button
+                                      onClick={() => handleResetUserPin(item.id, item.name)}
+                                      disabled={resettingPinUserId === item.id}
+                                      aria-label={`รีเซ็ต PIN ของ ${item.name}`}
+                                      title="Reset PIN"
+                                      className="p-2.5 rounded-xl border border-violet-100 text-violet-600 hover:bg-violet-50 transition-all active:scale-90 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                      {resettingPinUserId === item.id ? <Loader2 size={16} className="animate-spin" /> : <KeyRound size={16} />}
+                                    </button>
+                                  )}
                                   <button onClick={() => handleResetTraining(item.id, item.name)} title="Reset Compliance" className="p-2.5 rounded-xl border border-amber-100 text-amber-500 hover:bg-amber-50 transition-all active:scale-90 shadow-sm"><RotateCcw size={16} /></button>
                                   <button
                                       onClick={() => handleToggleUserBan(item.id, item.name, item.is_active !== false)}
@@ -1130,6 +1159,16 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                             <button onClick={() => activeTab === 'VENDORS' ? handleEditVendor(item as Vendor) : handleEditUser(item)} aria-label={`แก้ไข ${item.name}`} className="min-h-11 min-w-11 p-2.5 rounded-xl border border-slate-200 text-slate-500 bg-white active:scale-90 transition-all"><Edit3 size={14} /></button>
                             {activeTab === 'USERS' && (
                               <>
+                                {item.role === 'USER' && item.is_active !== false && (
+                                  <button
+                                    onClick={() => handleResetUserPin(item.id, item.name)}
+                                    disabled={resettingPinUserId === item.id}
+                                    aria-label={`รีเซ็ต PIN ของ ${item.name}`}
+                                    className="min-h-11 min-w-11 p-2.5 rounded-xl border border-violet-200 text-violet-600 bg-violet-50 active:scale-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    {resettingPinUserId === item.id ? <Loader2 size={14} className="animate-spin" /> : <KeyRound size={14} />}
+                                  </button>
+                                )}
                                 <button onClick={() => handleResetTraining(item.id, item.name)} aria-label={`รีเซ็ตการอบรมของ ${item.name}`} className="min-h-11 min-w-11 p-2.5 rounded-xl border border-amber-200 text-amber-500 bg-amber-50 active:scale-90 transition-all"><RotateCcw size={14} /></button>
                                 <button
                                     onClick={() => handleToggleUserBan(item.id, item.name, item.is_active !== false)}

@@ -102,7 +102,7 @@ Record only masked identity references in evidence.
 |---|---|---|---|---|
 | AUTH-01 | Existing USER logs in with old 4-digit PIN while enforcement is false | Login succeeds; no forced migration |  | [ ] |
 | AUTH-02 | Existing USER logs in after enforcement is true | Forced 6-digit PIN screen appears before application access |  | [ ] |
-| AUTH-03 | Try fewer than 6 digits, repeated digits, sequences, and last 6 ID digits | Every weak PIN is rejected without changing account data |  | [ ] |
+| AUTH-03 | Try fewer than 6 digits, `000000`, `123456`, and the last 6 ID digits | Every reserved PIN is rejected without changing account data; other memorable 6-digit PINs are allowed |  | [ ] |
 | AUTH-04 | Set an allowed PIN and continue | Existing user ID, profile, vendor, exams, permits, and role are unchanged |  | [ ] |
 | AUTH-05 | Log out; retry old 4-digit PIN | Old PIN is rejected |  | [ ] |
 | AUTH-06 | Log in with the new 6-digit PIN | Login and session refresh succeed |  | [ ] |
@@ -116,6 +116,10 @@ Record only masked identity references in evidence.
 | AUTH-14 | Successful login after lock expires | Failure count and lock timestamp are cleared |  | [ ] |
 | AUTH-15 | Change network/browser during lock | Persistent DB lock is still enforced |  | [ ] |
 | AUTH-16 | Toggle enforcement back to false using the reviewed artifact | New legacy migrations pause; migrated PIN-v2 accounts still log in |  | [ ] |
+| AUTH-17 | Admin resets an active USER PIN | Only the selected USER is reset; response and audit contain no PIN or national ID |  | [ ] |
+| AUTH-18 | USER signs in with the last 6 ID digits within 30 minutes | Login succeeds only into the forced PIN-change flow |  | [ ] |
+| AUTH-19 | USER tries the old PIN or an expired temporary PIN | Access is denied and the user is told to contact an administrator |  | [ ] |
+| AUTH-20 | USER chooses a permitted memorable PIN | Reset state is cleared and the new PIN works on the next login |  | [ ] |
 | REG-01 | Existing registered identity selects Register | User is redirected to Login without creating another profile |  | [ ] |
 | REG-02 | Staged identity lookup and registration | Prepared name/company/history remain attached to the same intended identity |  | [ ] |
 | DATA-01 | Compare pre/post counts | Users, exams, permits, vendors, questions have no unexpected loss |  | [ ] |

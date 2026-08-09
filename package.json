@@ -22,6 +22,7 @@
     "test:db:auth-repair": "node scripts/check-auth-repair-migration.mjs",
     "test:db:identity-dedup": "node scripts/check-identity-dedup-migration.mjs",
     "test:db:pin-v2": "node scripts/check-pin-v2-migration.mjs",
+    "test:db:admin-pin-reset": "node scripts/check-admin-pin-reset-migration.mjs",
     "check:rollout:phase1": "node scripts/check-phase1-rollout-readiness.mjs",
     "check:staging:readiness": "node scripts/check-staging-readiness.mjs",
     "test:uat:auth:local": "node scripts/run-phase1-local-uat.mjs",

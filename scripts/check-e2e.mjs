@@ -81,6 +81,7 @@ async function installMocks(page, options = {}) {
     stagedSignupRequests: 0,
     stagedTokenRequests: 0,
     pinUpgradeRequests: 0,
+    adminPinResetRequests: 0,
     archiveVendorRequests: 0,
     archiveUserRequests: 0,
     directHighIntegrityWrites: 0,
@@ -470,6 +471,13 @@ async function installMocks(page, options = {}) {
       refreshToken: 'test-refresh-token-v2',
     });
   });
+  await page.route('**/api/admin-reset-user-pin', (route) => {
+    authDiagnostics.adminPinResetRequests += 1;
+    return json(route, {
+      ok: true,
+      expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+    });
+  });
   await page.route('https://liffsdk.line-scdn.net/**', (route) => {
     authDiagnostics.liffManifestRequests += 1;
     return json(route, {});
@@ -690,10 +698,13 @@ try {
   });
   await adminPage.getByText(/นำเข้าพนักงานสำเร็จ 1 รายการ/).waitFor();
   await assertA11y(adminPage, 'desktop admin users');
+  await adminPage.getByRole('button', { name: 'รีเซ็ต PIN ของ ผู้ใช้ทดสอบระบบ' }).first().click();
+  await adminPage.getByText(/รีเซต PIN ของ ผู้ใช้ทดสอบระบบ แล้ว กรุณาแจ้งให้ใช้เลขบัตร 6 หลักท้ายภายใน 30 นาที/).waitFor();
   await adminPage.getByRole('button', { name: 'เก็บผู้ใช้ ผู้ใช้ทดสอบระบบ' }).first().click();
   await adminPage.getByText(/เก็บบัญชี ผู้ใช้ทดสอบระบบ แล้ว โดยรักษาประวัติทั้งหมด/).waitFor();
-  if (adminAuthDiagnostics.archiveVendorRequests !== 1 || adminAuthDiagnostics.archiveUserRequests !== 1) {
-    throw new Error('Admin archive actions did not use their authorized RPCs exactly once');
+  if (adminAuthDiagnostics.archiveVendorRequests !== 1 || adminAuthDiagnostics.archiveUserRequests !== 1
+      || adminAuthDiagnostics.adminPinResetRequests !== 1) {
+    throw new Error('Admin protected user actions did not use their authorized boundaries exactly once');
   }
   if (adminAuthDiagnostics.directHighIntegrityWrites !== 0) {
     throw new Error('Admin workflow wrote a high-integrity table directly');

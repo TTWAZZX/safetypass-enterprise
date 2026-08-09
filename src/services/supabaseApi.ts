@@ -207,6 +207,12 @@ export const api = {
       if (/temporarily locked/i.test(authError.message)) {
         throw new Error('บัญชีถูกล็อกชั่วคราวจากการกรอก PIN ผิดหลายครั้ง กรุณารอ 15 นาทีแล้วลองใหม่');
       }
+      if (/temporary PIN has expired/i.test(authError.message)) {
+        throw new Error('PIN ชั่วคราวหมดอายุแล้ว กรุณาติดต่อแอดมินเพื่อรีเซตอีกครั้ง');
+      }
+      if (/PIN reset is being prepared/i.test(authError.message)) {
+        throw new Error('ระบบกำลังเตรียม PIN ชั่วคราว กรุณารอสักครู่แล้วลองใหม่');
+      }
       if (/suspended/i.test(authError.message)) {
         throw new Error('บัญชีของคุณถูกระงับสิทธิ์ชั่วคราว โปรดติดต่อเจ้าหน้าที่ Safety');
       }
@@ -405,6 +411,26 @@ export const api = {
     });
     if (error) throw error;
     return data as { archived: boolean; history_preserved: boolean; already_inactive: boolean };
+  },
+
+  adminResetUserPin: async (id: string): Promise<{ expiresAt: string }> => {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+    if (!accessToken) throw new Error('ไม่พบ session ของผู้ดูแลระบบ');
+
+    const response = await fetch('/api/admin-reset-user-pin', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ userId: id }),
+    });
+    const result = await response.json().catch(() => null);
+    if (!response.ok || result?.ok !== true || typeof result?.expiresAt !== 'string') {
+      throw new Error(result?.message || 'ไม่สามารถรีเซต PIN ได้');
+    }
+    return { expiresAt: result.expiresAt };
   },
 
   /* =====================================================

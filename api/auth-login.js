@@ -1,8 +1,8 @@
-import { createHmac } from 'node:crypto';
 import {
   cleanText, getAuthPinPepper, getSupabaseConfig, getSupabaseServiceConfig, isPinV2Enforced,
   isRateLimited,
 } from './_auth.js';
+import { createSecurePinPassword, getPermanentPinError } from './_pin.js';
 
 const safeJson = async (response) => response.json().catch(() => null);
 
@@ -59,17 +59,6 @@ const recoverBootstrapIdentity = async (config, userId, legacyPassword) => {
   return updateResponse.ok;
 };
 
-const securePinIsWeak = (nationalId, pin) => (
-  !/^\d{6}$/.test(pin)
-  || /^(\d)\1{5}$/.test(pin)
-  || ['012345', '123456', '654321', '987654'].includes(pin)
-  || nationalId.slice(-6) === pin
-);
-
-const createSecurePassword = (nationalId, pin, pepper) => (
-  `SafetyPass-v2-${createHmac('sha256', pepper).update(`${nationalId}:${pin}`).digest('base64url')}`
-);
-
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'POST') return res.status(405).json({ message: 'Method Not Allowed' });
@@ -106,7 +95,28 @@ export default async function handler(req, res) {
 
     const pinVersion = Number(context.pin_version || 1);
     const isSecurePin = pin.length === 6;
-    if (isSecurePin && securePinIsWeak(nationalId, pin)) {
+    const resetState = String(context.pin_reset_state || 'NONE');
+    const resetExpiresAt = context.pin_reset_expires_at ? new Date(context.pin_reset_expires_at) : null;
+    const resetHasTimeRemaining = Boolean(
+      resetExpiresAt && resetExpiresAt.getTime() > Date.now(),
+    );
+    const resetIsCurrent = resetState === 'ACTIVE'
+      && resetHasTimeRemaining;
+    const isTemporaryResetPin = Boolean(
+      resetIsCurrent && isSecurePin && pin === nationalId.slice(-6),
+    );
+
+    if (resetState === 'PENDING' && resetHasTimeRemaining) {
+      return res.status(503).json({ message: 'PIN reset is being prepared; please try again shortly' });
+    }
+    if (resetState === 'ACTIVE' && !resetIsCurrent) {
+      return res.status(401).json({ message: 'Temporary PIN has expired; contact an administrator' });
+    }
+    if (resetIsCurrent && !isTemporaryResetPin) {
+      await rpc(serviceConfig, 'record_auth_login_failure', { national_id_param: nationalId });
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+    if (isSecurePin && !isTemporaryResetPin && getPermanentPinError(nationalId, pin)) {
       return res.status(400).json({ message: 'PIN does not meet security requirements' });
     }
     if (!isSecurePin && (pinVersion >= 2 || pin !== nationalId.slice(-4))) {
@@ -116,7 +126,7 @@ export default async function handler(req, res) {
 
     const email = `${nationalId}@safetypass.com`;
     const passwords = isSecurePin
-      ? [createSecurePassword(nationalId, pin, pinPepper)]
+      ? [createSecurePinPassword(nationalId, pin, pinPepper)]
       : [`SafetyPass-${nationalId}-${pin}`, nationalId];
     let login = null;
     for (const password of passwords) {
@@ -154,7 +164,7 @@ export default async function handler(req, res) {
     return res.status(200).json({
       accessToken: login.access_token,
       refreshToken: login.refresh_token,
-      requiresPinUpgrade: !isSecurePin && isPinV2Enforced(),
+      requiresPinUpgrade: isTemporaryResetPin || (!isSecurePin && isPinV2Enforced()),
     });
   } catch {
     return res.status(503).json({ message: 'Authentication service is unavailable' });

@@ -16,7 +16,11 @@ describe('PIN security compatibility', () => {
     expect(getSecurePinError(nationalId, '246801')).toBeNull();
   });
 
-  it.each(['123456', '654321', '111111', '890123'])('rejects weak PIN %s', (pin) => {
+  it.each(['654321', '111111', '121212'])('accepts a memorable PIN %s', (pin) => {
+    expect(getSecurePinError(nationalId, pin)).toBeNull();
+  });
+
+  it.each(['000000', '123456', '890123'])('rejects reserved PIN %s', (pin) => {
     expect(getSecurePinError(nationalId, pin)).toContain('PIN');
   });
 });
