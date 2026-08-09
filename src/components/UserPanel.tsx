@@ -42,6 +42,7 @@ import liff from '@line/liff'; // ✅ นำเข้า LINE LIFF
 import { useDialogFocus } from '../hooks/useDialogFocus';
 import UserReadinessSummary from './UserReadinessSummary';
 import { getUserReadiness } from '../services/userReadiness';
+import { getExpiryLabel, getExpiryStatus } from '../services/expiryStatus';
 
 const maskNationalID = (id: string) => {
   if (!id || id.length < 13) return id;
@@ -321,6 +322,9 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
   const supplierPassActive = Boolean(supplierStatus?.expires_at && new Date(supplierStatus.expires_at) > new Date());
   const supplierPassNearExpiry = Boolean(supplierStatus?.expires_at
     && (new Date(supplierStatus.expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24) < 30);
+  const permitExpiryStatus = getExpiryStatus(activePermit?.expire_date);
+  const permitNearExpiry = permitExpiryStatus.state === 'EXPIRING' || permitExpiryStatus.state === 'URGENT';
+  const supplierExpiryStatus = getExpiryStatus(supplierStatus?.expires_at);
   const readiness = getUserReadiness({
     isActive: !isBanned,
     hasInduction: Boolean(hasInduction),
@@ -738,6 +742,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
             <StageCard
               title={t('user.stage2')} 
               isActive={!!activePermit}
+              isNearExpiry={permitNearExpiry}
               expiryDate={activePermit?.expire_date}
               icon={!hasInduction ? <Lock size={24} /> : <Ticket size={24} />}
               onClick={() => { if (activePermit) { setCardType('WORK_PERMIT'); setShowCard(true); } else if (hasInduction) setActiveStage('WORK_PERMIT'); }}
@@ -768,7 +773,8 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
                         <div className="mt-2 flex flex-wrap gap-2 text-[9px] font-bold text-slate-500">
                           <span>คะแนน {supplierStatus.last_score ?? '-'} / {supplierStatus.total_questions ?? '-'}</span>
                           <span>•</span>
-                          <span>หมดอายุ {supplierStatus.expires_at ? new Date(supplierStatus.expires_at).toLocaleDateString('th-TH') : '-'}</span>
+                          <span>หมดอายุ {supplierStatus.expires_at ? new Date(supplierStatus.expires_at).toLocaleDateString(language === 'th' ? 'th-TH' : 'en-US') : '-'}</span>
+                          {supplierStatus.expires_at && <><span>•</span><span className={supplierExpiryStatus.state === 'URGENT' || supplierExpiryStatus.state === 'EXPIRING' ? 'text-amber-700' : supplierExpiryStatus.state === 'EXPIRED' ? 'text-red-700' : ''}>{getExpiryLabel(supplierExpiryStatus, language)}</span></>}
                         </div>
                       )}
                     </div>
@@ -1018,6 +1024,8 @@ const ResourceCard = ({ icon, title, desc, onClick }: any) => (
 // ✅ StageCard ฉบับแก้ไข: รองรับสถานะถูกแบน (BANNED) อย่างสมบูรณ์แบบ
 const StageCard = ({ title, isActive, isNearExpiry, expiryDate, icon, onClick, onRetake, disabled, permitNo, buttonText, color = 'blue', isBanned }: any) => {
     const { language } = useTranslation();
+    const expiryStatus = getExpiryStatus(expiryDate);
+    const expiryLabel = getExpiryLabel(expiryStatus, language);
     
     // คำนวณสถานะของการ์ด
     const statusType = isBanned ? 'BANNED' : disabled ? 'LOCKED' : isActive && !isNearExpiry ? 'PASSED' : isNearExpiry ? 'WARNING' : 'READY';
@@ -1090,7 +1098,8 @@ const StageCard = ({ title, isActive, isNearExpiry, expiryDate, icon, onClick, o
                         ) : expiryDate ? (
                             <div className="flex flex-col">
                                 <span className="text-[8px] font-black text-slate-600 uppercase tracking-widest">Valid Until</span>
-                                <span className={`text-[10px] font-bold ${isNearExpiry ? 'text-amber-700' : 'text-slate-600'}`}>{new Date(expiryDate).toLocaleDateString(language === 'th' ? 'th-TH' : 'en-US')}</span>
+                                <span className={`text-[10px] font-bold ${expiryStatus.state === 'EXPIRED' ? 'text-red-700' : isNearExpiry ? 'text-amber-700' : 'text-slate-600'}`}>{new Date(expiryDate).toLocaleDateString(language === 'th' ? 'th-TH' : 'en-US')}</span>
+                                <span className={`mt-0.5 text-[9px] font-black ${expiryStatus.state === 'EXPIRED' ? 'text-red-700' : expiryStatus.state === 'URGENT' || expiryStatus.state === 'EXPIRING' ? 'text-amber-700' : 'text-slate-500'}`}>{expiryLabel}</span>
                             </div>
                         ) : (
                             <div className="flex flex-col">
