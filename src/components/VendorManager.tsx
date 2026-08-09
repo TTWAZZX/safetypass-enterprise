@@ -6,7 +6,6 @@ import { Vendor, VendorNameMatch, VendorStatus } from '../types';
 import { useToastContext } from './ToastProvider';
 import { downloadWorkbook } from '../services/excelExport';
 import { readFirstWorksheetRows } from '../services/excelImport';
-import { processExcelDate } from '../utils/excelDates';
 import { 
   Users, Building2, Search, Plus, RotateCcw, CheckCircle, Loader2,
   Trash2, Edit3, UserPlus, Upload, Download, History, ShieldCheck,
@@ -16,6 +15,14 @@ import {
 import AsyncState from './AsyncState';
 import { useDialogFocus } from '../hooks/useDialogFocus';
 import { buildDirectoryFilterSummary } from '../services/directoryFilterSummary';
+import ImportPreviewDialog from './ImportPreviewDialog';
+import {
+  getImportSummary,
+  prepareUserImportRows,
+  prepareVendorImportRows,
+  PreparedUserImportRow,
+  PreparedVendorImportRow,
+} from '../services/importValidation';
 
 const maskNationalID = (id: string | null | undefined) => {
   if (!id || id.length < 13) return '-------------';
@@ -51,6 +58,11 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
   
   const [importingUsers, setImportingUsers] = useState(false);
   const [importingVendors, setImportingVendors] = useState(false);
+  const [pendingImport, setPendingImport] = useState<
+    | { kind: 'USERS'; fileName: string; rows: PreparedUserImportRow[] }
+    | { kind: 'VENDORS'; fileName: string; rows: PreparedVendorImportRow[] }
+    | null
+  >(null);
   
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
@@ -417,100 +429,102 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = '';
-    setImportingUsers(true); 
-
+    setImportingUsers(true);
     try {
-        const data = await readFirstWorksheetRows(file);
-        
-        let success = 0; let fail = 0;
-
-        for (const row of data) {
-          const name = (row['Name'] || row['Full Name'] || '').toString().trim();
-          let nid = (row['National ID'] || row['ID Card'] || '').toString().trim();
-          
-          if (nid.includes('E+') || nid.includes('e+')) nid = Number(nid).toLocaleString('fullwide', {useGrouping:false});
-          
-          const vName = (row['Vendor'] || row['Company'] || '').toString().trim();
-          const role = (row['Role'] || 'USER').toString().trim();
-          const age = row['Age'] ? Number(row['Age']) : null;
-          const nationality = (row['Nationality'] || 'ไทย (Thai)').toString().trim();
-          const rawExpiry = row['Induction Expiry'] || row['Expiry Date'];
-          const processedExpiry = processExcelDate(rawExpiry);
-
-          if (name && nid) {
-            const vendor = allVendors.find(v => v.name.toLowerCase() === vName.toLowerCase());
-            const { error } = await supabase.rpc('admin_upsert_staged_user', {
-              national_id_param: nid,
-              name_param: name,
-              vendor_id_param: vendor?.id || null,
-              role_param: role,
-              age_param: age,
-              nationality_param: nationality,
-              induction_expiry_param: processedExpiry,
-            });
-            if (!error) success++; else { console.error(`❌ Error for ${nid}:`, error.message); fail++; }
-          }
-        }
-        showToast(`นำเข้าพนักงานสำเร็จ ${success} รายการ`, fail > 0 ? 'error' : 'success');
-        loadData();
-      } catch (err) {
-        console.error("❌ Import Error:", err); 
-        showToast('รูปแบบไฟล์ไม่ถูกต้อง', 'error'); 
-      } finally {
-        setImportingUsers(false); 
-      }
+      const rows = prepareUserImportRows(await readFirstWorksheetRows(file), allVendors);
+      if (rows.length === 0) return showToast('ไม่พบข้อมูลที่จะนำเข้า', 'error');
+      setPendingImport({ kind: 'USERS', fileName: file.name, rows });
+    } catch (err) {
+      console.error('User import preview error:', err);
+      showToast('ไม่สามารถอ่านไฟล์ได้ กรุณาตรวจสอบว่าเป็นไฟล์ .xlsx ที่ถูกต้อง', 'error');
+    } finally {
+      setImportingUsers(false);
+    }
   };
 
   const handleVendorImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = '';
-    setImportingVendors(true); 
+    setImportingVendors(true);
     setVendorImportReview([]);
-
     try {
-        const data = await readFirstWorksheetRows(file);
-        
-        let successCount = 0;
-        let duplicateCount = 0;
-        let similarCount = 0;
-        const reviewItems: Array<{ inputName: string; reason: 'EXACT' | 'SIMILAR'; matches: string[] }> = [];
+      const rows = prepareVendorImportRows(await readFirstWorksheetRows(file));
+      if (rows.length === 0) return showToast('ไม่พบข้อมูลที่จะนำเข้า', 'error');
+      setPendingImport({ kind: 'VENDORS', fileName: file.name, rows });
+    } catch (err) {
+      console.error('Vendor import preview error:', err);
+      showToast('ไม่สามารถอ่านไฟล์ได้ กรุณาตรวจสอบว่าเป็นไฟล์ .xlsx ที่ถูกต้อง', 'error');
+    } finally {
+      setImportingVendors(false);
+    }
+  };
 
-        for (const row of data) {
-          const rawName = row['Company Name'] || row['Vendor'] || row['Name'];
-          if (rawName && rawName.toString().trim() !== '') {
-            const trimmedName = rawName.toString().trim();
-            const result = await api.adminSaveVendor({
-              name: trimmedName,
-              status: VendorStatus.APPROVED,
-              allowSimilar: false,
-            });
-            if (result.saved) successCount++;
-            else if (result.reason === 'EXACT') {
-              duplicateCount++;
-              reviewItems.push({ inputName: trimmedName, reason: 'EXACT', matches: result.vendor ? [result.vendor.name] : [] });
-            }
-            else {
-              similarCount++;
-              reviewItems.push({ inputName: trimmedName, reason: 'SIMILAR', matches: result.matches.map((match) => match.name) });
-            }
-          }
+  const confirmPendingImport = async () => {
+    if (!pendingImport) return;
+    if (pendingImport.kind === 'USERS') {
+      setImportingUsers(true);
+      let success = 0;
+      let fail = 0;
+      try {
+        for (const row of pendingImport.rows) {
+          if (row.issues.some((issue) => issue.level === 'error')) continue;
+          const { error } = await supabase.rpc('admin_upsert_staged_user', {
+            national_id_param: row.nationalId,
+            name_param: row.name,
+            vendor_id_param: row.vendorId,
+            role_param: row.role,
+            age_param: row.age,
+            nationality_param: row.nationality,
+            induction_expiry_param: row.inductionExpiry,
+          });
+          if (error) { console.error(`User import row ${row.rowNumber}:`, error.message); fail++; }
+          else success++;
         }
-        setVendorImportReview(reviewItems);
-        if (successCount > 0) {
-          showToast(`นำเข้าสำเร็จ ${successCount} บริษัท · ซ้ำ ${duplicateCount} · ชื่อคล้ายรอตรวจ ${similarCount}`, 'success');
-          await Promise.all([loadData(), loadVendorDuplicateGroups()]);
-        }
-        else if (duplicateCount > 0 || similarCount > 0) {
-          showToast(`ไม่มีรายการใหม่: ซ้ำ ${duplicateCount} · ชื่อคล้ายรอตรวจ ${similarCount}`, 'info');
-        }
-        else { showToast('ไม่พบข้อมูลที่จะนำเข้า', 'error'); }
-      } catch (err) {
-        console.error("❌ Error:", err); 
-        showToast('รูปแบบไฟล์ไม่ถูกต้อง', 'error'); 
+        setPendingImport(null);
+        showToast(`นำเข้าพนักงานสำเร็จ ${success} รายการ${fail ? ` · ไม่สำเร็จ ${fail}` : ''}`, fail > 0 ? 'error' : 'success');
+        await loadData();
+      } catch (error: any) {
+        console.error('User import failed:', error);
+        showToast(error?.message || 'นำเข้าพนักงานไม่สำเร็จ กรุณาลองใหม่', 'error');
       } finally {
-        setImportingVendors(false); 
+        setImportingUsers(false);
       }
+      return;
+    }
+
+    setImportingVendors(true);
+    let successCount = 0;
+    let duplicateCount = 0;
+    let similarCount = 0;
+    const reviewItems: Array<{ inputName: string; reason: 'EXACT' | 'SIMILAR'; matches: string[] }> = [];
+    try {
+      for (const row of pendingImport.rows) {
+        if (row.issues.some((issue) => issue.level === 'error')) continue;
+        const result = await api.adminSaveVendor({ name: row.name, status: VendorStatus.APPROVED, allowSimilar: false });
+        if (result.saved) successCount++;
+        else if (result.reason === 'EXACT') {
+          duplicateCount++;
+          reviewItems.push({ inputName: row.name, reason: 'EXACT', matches: result.vendor ? [result.vendor.name] : [] });
+        } else {
+          similarCount++;
+          reviewItems.push({ inputName: row.name, reason: 'SIMILAR', matches: result.matches.map((match) => match.name) });
+        }
+      }
+      setPendingImport(null);
+      setVendorImportReview(reviewItems);
+      if (successCount > 0) {
+        showToast(`นำเข้าสำเร็จ ${successCount} บริษัท · ซ้ำ ${duplicateCount} · ชื่อคล้ายรอตรวจ ${similarCount}`, 'success');
+        await Promise.all([loadData(), loadVendorDuplicateGroups()]);
+      } else if (duplicateCount > 0 || similarCount > 0) {
+        showToast(`ไม่มีรายการใหม่: ซ้ำ ${duplicateCount} · ชื่อคล้ายรอตรวจ ${similarCount}`, 'info');
+      } else showToast('ไม่พบข้อมูลที่จะนำเข้า', 'error');
+    } catch (error: any) {
+      console.error('Vendor import failed:', error);
+      showToast(error?.message || 'นำเข้าบริษัทไม่สำเร็จ กรุณาลองใหม่', 'error');
+    } finally {
+      setImportingVendors(false);
+    }
   };
 
   const handleAddVendor = () => {
@@ -733,6 +747,20 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     setCertFilter('');
     setCurrentPage(1);
   };
+  const pendingImportSummary = pendingImport ? getImportSummary(pendingImport.rows) : null;
+  const pendingImportDisplayRows = pendingImport?.rows.map((row) => pendingImport.kind === 'USERS'
+    ? {
+        rowNumber: row.rowNumber,
+        primary: row.name,
+        secondary: `${row.nationalId || 'ไม่มีเลขประจำตัว'}${row.vendorName ? ` · ${row.vendorName}` : ''}`,
+        issues: row.issues,
+      }
+    : {
+        rowNumber: row.rowNumber,
+        primary: row.name,
+        secondary: 'บริษัท / Vendor',
+        issues: row.issues,
+      });
 
   return (
     <div className="space-y-4 md:space-y-6 text-left animate-in fade-in duration-500 pb-10 relative px-2 md:px-0">
@@ -1318,6 +1346,19 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
             </div>
           </div>
         </div>,
+        document.body,
+      )}
+
+      {pendingImport && pendingImportSummary && pendingImportDisplayRows && createPortal(
+        <ImportPreviewDialog
+          fileName={pendingImport.fileName}
+          kindLabel={pendingImport.kind === 'USERS' ? 'Personnel' : 'Vendors'}
+          rows={pendingImportDisplayRows}
+          summary={pendingImportSummary}
+          busy={pendingImport.kind === 'USERS' ? importingUsers : importingVendors}
+          onCancel={() => setPendingImport(null)}
+          onConfirm={confirmPendingImport}
+        />,
         document.body,
       )}
 
