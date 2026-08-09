@@ -8,7 +8,7 @@ import { useTranslation } from '../context/LanguageContext';
 import { 
   UserPlus, LogIn, ChevronRight, AlertCircle, Loader2, 
   ShieldCheck, Globe2, BookOpen, HelpCircle,
-  Search, CheckCircle
+  Search, CheckCircle, Eye, EyeOff
 } from 'lucide-react';
 import PrivacyPolicyModal from './PrivacyPolicyModal';
 import { addOneYearIsoDate } from '../utils/accessDates';
@@ -17,10 +17,27 @@ import { getRegistrationDisabledReason, getRegistrationStepIndex } from '../serv
 import {
   RegistrationAccountState, StagedRegistrationProfile,
 } from '../services/registrationAccountState';
+import { getPinConfirmationState } from '../services/pinUx';
 
 interface AuthProps {
   onLogin: (user: User) => void;
 }
+
+const PinVisibilityButton: React.FC<{
+  visible: boolean;
+  onToggle: () => void;
+  label: string;
+}> = ({ visible, onToggle, label }) => (
+  <button
+    type="button"
+    onClick={onToggle}
+    aria-label={`${visible ? 'ซ่อน' : 'แสดง'}${label}`}
+    aria-pressed={visible}
+    className="absolute inset-y-0 right-0 flex min-h-11 min-w-11 items-center justify-center rounded-r-2xl text-slate-500 transition-colors hover:text-blue-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"
+  >
+    {visible ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
+  </button>
+);
 
 const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const { t } = useTranslation();
@@ -32,6 +49,9 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [pendingPinUpgradeUser, setPendingPinUpgradeUser] = useState<User | null>(null);
   const [newPin, setNewPin] = useState('');
   const [newPinConfirmation, setNewPinConfirmation] = useState('');
+  const [showLoginPin, setShowLoginPin] = useState(false);
+  const [showUpgradePin, setShowUpgradePin] = useState(false);
+  const [showRegistrationPin, setShowRegistrationPin] = useState(false);
 
   // Register State
   const [regId, setRegId] = useState('');
@@ -67,6 +87,9 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [infoMsg, setInfoMsg] = useState(''); 
   const [registrationAccountState, setRegistrationAccountState] = useState<RegistrationAccountState | null>(null);
   const [stagedProfile, setStagedProfile] = useState<StagedRegistrationProfile | null>(null);
+
+  const upgradePinConfirmationState = getPinConfirmationState(newPin, newPinConfirmation);
+  const registrationPinConfirmationState = getPinConfirmationState(registrationPin, registrationPinConfirmation);
 
   // Support Links State
   const [manualUrl, setManualUrl] = useState<string>('');
@@ -428,12 +451,20 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             </div>
             <label className="block space-y-1.5 text-left text-[9px] font-black uppercase tracking-widest text-slate-600">
               PIN ใหม่ 6 หลัก
-              <input required type="password" inputMode="numeric" autoComplete="new-password" maxLength={6} value={newPin} onChange={(e) => setNewPin(e.target.value.replace(/\D/g, '').slice(0, 6))} className="w-full rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3.5 text-base font-bold outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" />
+              <div className="relative">
+                <input required type={showUpgradePin ? 'text' : 'password'} inputMode="numeric" autoComplete="new-password" maxLength={6} value={newPin} onChange={(e) => setNewPin(e.target.value.replace(/\D/g, '').slice(0, 6))} className="w-full rounded-2xl border border-slate-100 bg-slate-50 py-3.5 pl-4 pr-12 text-base font-bold outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" />
+                <PinVisibilityButton visible={showUpgradePin} onToggle={() => setShowUpgradePin((value) => !value)} label=" PIN ใหม่" />
+              </div>
             </label>
             <label className="block space-y-1.5 text-left text-[9px] font-black uppercase tracking-widest text-slate-600">
               ยืนยัน PIN ใหม่
-              <input required type="password" inputMode="numeric" autoComplete="new-password" maxLength={6} value={newPinConfirmation} onChange={(e) => setNewPinConfirmation(e.target.value.replace(/\D/g, '').slice(0, 6))} className="w-full rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3.5 text-base font-bold outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" />
+              <input required type={showUpgradePin ? 'text' : 'password'} inputMode="numeric" autoComplete="new-password" maxLength={6} value={newPinConfirmation} onChange={(e) => setNewPinConfirmation(e.target.value.replace(/\D/g, '').slice(0, 6))} className="w-full rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3.5 text-base font-bold outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20" />
             </label>
+            <p aria-live="polite" className={`text-left text-[10px] font-bold ${upgradePinConfirmationState === 'MATCH' ? 'text-emerald-600' : upgradePinConfirmationState === 'MISMATCH' ? 'text-rose-600' : 'text-slate-500'}`}>
+              {upgradePinConfirmationState === 'MATCH' && 'PIN ทั้งสองช่องตรงกัน'}
+              {upgradePinConfirmationState === 'MISMATCH' && 'PIN ทั้งสองช่องไม่ตรงกัน กรุณาตรวจสอบอีกครั้ง'}
+              {upgradePinConfirmationState === 'INCOMPLETE' && 'กรอก PIN และยืนยันให้ครบช่องละ 6 หลัก'}
+            </p>
             <button disabled={loading || newPin.length !== 6 || newPinConfirmation.length !== 6} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 py-4 text-xs font-black uppercase tracking-widest text-white disabled:opacity-50">
               {loading ? <Loader2 size={18} className="animate-spin" /> : <><ShieldCheck size={17} /> บันทึก PIN และเข้าใช้งาน</>}
             </button>
@@ -470,17 +501,20 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
             <div className="space-y-1.5 text-left">
               <label className="block text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">PIN ใหม่ 6 หลัก หรือ PIN เดิม 4 หลัก</label>
-              <input
-                required
-                inputMode="numeric"
-                autoComplete="current-password"
-                maxLength={6}
-                type="password"
-                className="w-full px-4 py-3.5 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-sm text-slate-700 transition-all shadow-inner"
-                value={loginPin}
-                onChange={e => setLoginPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                placeholder="กรอก PIN 4 หรือ 6 หลัก"
-              />
+              <div className="relative">
+                <input
+                  required
+                  inputMode="numeric"
+                  autoComplete="current-password"
+                  maxLength={6}
+                  type={showLoginPin ? 'text' : 'password'}
+                  className="w-full rounded-2xl border border-slate-100 bg-slate-50 py-3.5 pl-4 pr-12 text-base font-bold text-slate-700 shadow-inner outline-none transition-all focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/20 md:text-sm"
+                  value={loginPin}
+                  onChange={e => setLoginPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="กรอก PIN 4 หรือ 6 หลัก"
+                />
+                <PinVisibilityButton visible={showLoginPin} onToggle={() => setShowLoginPin((value) => !value)} label=" PIN" />
+              </div>
               <p className="text-[8px] font-bold text-slate-600 ml-1">ผู้ใช้เดิมใช้เลข 4 หลักท้ายบัตรประชาชนเพื่อย้ายบัญชีครั้งแรก</p>
             </div>
             
@@ -774,22 +808,25 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="space-y-1 text-[9px] font-black uppercase tracking-widest text-slate-600">
                 PIN ส่วนตัว 6 หลัก
-                <input
-                  required
-                  type="password"
-                  inputMode="numeric"
-                  autoComplete="new-password"
-                  maxLength={6}
-                  value={registrationPin}
-                  onChange={(event) => setRegistrationPin(event.target.value.replace(/\D/g, '').slice(0, 6))}
-                  className="w-full rounded-xl border border-slate-200 bg-white p-3 text-base font-bold normal-case text-slate-700"
-                />
+                <div className="relative">
+                  <input
+                    required
+                    type={showRegistrationPin ? 'text' : 'password'}
+                    inputMode="numeric"
+                    autoComplete="new-password"
+                    maxLength={6}
+                    value={registrationPin}
+                    onChange={(event) => setRegistrationPin(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                    className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-3 pr-12 text-base font-bold normal-case text-slate-700"
+                  />
+                  <PinVisibilityButton visible={showRegistrationPin} onToggle={() => setShowRegistrationPin((value) => !value)} label=" PIN ส่วนตัว" />
+                </div>
               </label>
               <label className="space-y-1 text-[9px] font-black uppercase tracking-widest text-slate-600">
                 ยืนยัน PIN ส่วนตัว
                 <input
                   required
-                  type="password"
+                  type={showRegistrationPin ? 'text' : 'password'}
                   inputMode="numeric"
                   autoComplete="new-password"
                   maxLength={6}
@@ -799,7 +836,12 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 />
               </label>
               <p className="text-[9px] font-bold text-slate-500 sm:col-span-2">
-                ห้ามใช้เลข 6 หลักท้ายบัตร เลขซ้ำ หรือเลขเรียงที่คาดเดาง่าย
+                ห้ามใช้เลข 6 หลักท้ายบัตร, 000000 หรือ 123456
+              </p>
+              <p aria-live="polite" className={`text-[9px] font-bold sm:col-span-2 ${registrationPinConfirmationState === 'MATCH' ? 'text-emerald-600' : registrationPinConfirmationState === 'MISMATCH' ? 'text-rose-600' : 'text-slate-500'}`}>
+                {registrationPinConfirmationState === 'MATCH' && 'PIN ทั้งสองช่องตรงกัน'}
+                {registrationPinConfirmationState === 'MISMATCH' && 'PIN ทั้งสองช่องไม่ตรงกัน กรุณาตรวจสอบอีกครั้ง'}
+                {registrationPinConfirmationState === 'INCOMPLETE' && 'กรอก PIN และยืนยันให้ครบช่องละ 6 หลัก'}
               </p>
             </div>
 
