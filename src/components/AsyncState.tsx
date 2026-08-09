@@ -22,6 +22,9 @@ const AsyncState: React.FC<AsyncStateProps> = ({
   variant, title, description, onRetry, compact = false, className = '',
 }) => {
   const content = defaults[variant];
+  const offlineDescription = variant === 'error' && typeof navigator !== 'undefined' && !navigator.onLine
+    ? 'อุปกรณ์ออฟไลน์ กรุณาเชื่อมต่ออินเทอร์เน็ตแล้วกดลองอีกครั้ง'
+    : null;
   const iconBox = variant === 'error'
     ? 'bg-red-50 text-red-500'
     : variant === 'empty'
@@ -41,7 +44,7 @@ const AsyncState: React.FC<AsyncStateProps> = ({
       </div>
       <h3 className="text-sm font-black text-slate-800">{title || content.title}</h3>
       <p className="mt-2 max-w-md text-[11px] font-bold leading-relaxed text-slate-600">
-        {description || content.description}
+        {description || offlineDescription || content.description}
       </p>
       {variant === 'error' && onRetry && (
         <button

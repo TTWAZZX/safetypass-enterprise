@@ -59,11 +59,11 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 
             <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100 mb-8">
                 <p className="text-sm text-slate-600 font-bold leading-relaxed">
-                  ขออภัย ระบบขัดข้องชั่วคราว ข้อมูลบางส่วนอาจไม่สามารถแสดงผลได้ในขณะนี้
+                  ขออภัย หน้านี้ทำงานไม่สำเร็จ ข้อมูลเดิมของคุณยังไม่ถูกลบ กรุณาโหลดระบบใหม่แล้วลองอีกครั้ง
                 </p>
                 <div className="mt-4 pt-4 border-t border-slate-200/50">
-                    <p className="text-[9px] font-mono text-slate-400 truncate uppercase">
-                      Code: {this.state.error?.name || 'ERR_RECOVERY_MODE'}
+                    <p className="text-[9px] font-mono text-slate-500 uppercase">
+                      Reference: UI-RECOVERY
                     </p>
                 </div>
             </div>
@@ -73,7 +73,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
               className="w-full bg-slate-900 hover:bg-black text-white font-black py-4 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-3 active:scale-95 uppercase text-[10px] tracking-[0.2em]"
             >
               <RefreshCw size={14} />
-              Restore System
+              โหลดระบบใหม่
             </button>
 
             <p className="mt-6 text-center text-[9px] font-bold text-slate-400 uppercase tracking-widest opacity-60">

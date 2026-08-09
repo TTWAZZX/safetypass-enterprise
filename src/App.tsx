@@ -25,6 +25,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider } from './components/ToastProvider';
 import { PageSkeleton } from './components/Skeleton'; 
 import MotionPreferenceToggle from './components/MotionPreferenceToggle';
+import ConnectivityBanner from './components/ConnectivityBanner';
 import { MotionPreferenceProvider, useMotionPreference } from './context/MotionPreferenceContext';
 
 const Auth = lazy(() => import('./components/Auth'));
@@ -186,6 +187,8 @@ const AppContent: React.FC = () => {
           </div>
         </div>
       </header>
+
+      <ConnectivityBanner />
 
       {/* Main Content */}
       <main id="main-content" tabIndex={-1} className="flex-grow relative z-0 focus:outline-none">
