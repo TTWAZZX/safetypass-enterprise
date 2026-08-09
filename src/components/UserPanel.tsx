@@ -6,6 +6,7 @@ import {
 import { api as mockApi } from '../services/supabaseApi';
 import { supabase } from '../services/supabaseClient'; 
 import { addOneYearIsoDate, getTodayIsoDate } from '../utils/accessDates';
+import { getLiffProfileSyncRedirectUri, LIFF_ID } from '../utils/liffProfileSync';
 import { useTranslation } from '../context/LanguageContext';
 import ExamSystem from './ExamSystem';
 import DigitalCard from './DigitalCard'; 
@@ -112,28 +113,33 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
   
   // ✅ 1. State สำหรับสถานะปุ่มโหลด LINE
   const [isSyncingLine, setIsSyncingLine] = useState(false);
+  const liffInitPromiseRef = useRef<Promise<void> | null>(null);
 
-  // ✅ 2. เริ่มต้นการทำงานของ LIFF เมื่อเปิดหน้าเว็บ
-  useEffect(() => {
-    const initLiff = async () => {
-      try {
-        // ⚠️ เอา LIFF ID ที่คุณเพิ่งก๊อปปี้มา ใส่แทนคำว่า YOUR_LIFF_ID ด้านล่างนี้เลยครับ
-        await liff.init({ liffId: '2009323437-35Fcl1JT' }); 
-      } catch (err) {
-        console.error('LIFF Init Error:', err);
-      }
-    };
-    initLiff();
-  }, []);
-
-  // ✅ 3. ฟังก์ชันดึงรูปจาก LINE และบันทึกลง Database
+  // ดึงรูปจาก LINE และบันทึกลง Database เมื่อผู้ใช้เลือกทำเองเท่านั้น
   const handleSyncLineProfile = async () => {
-    if (isBanned) return;
+    if (isBanned || isSyncingLine) return;
+
+    const redirectUri = getLiffProfileSyncRedirectUri(window.location);
+    if (!redirectUri) {
+      showToast('การ Sync รูป LINE ใช้ได้บนเว็บไซต์หลักเท่านั้น', 'info');
+      return;
+    }
+
     setIsSyncingLine(true);
     try {
+      // LIFF is optional: initialise it only after the user explicitly asks
+      // to sync a LINE profile picture, never while the dashboard loads.
+      if (!liffInitPromiseRef.current) {
+        liffInitPromiseRef.current = liff.init({ liffId: LIFF_ID }).catch((error) => {
+          liffInitPromiseRef.current = null;
+          throw error;
+        });
+      }
+      await liffInitPromiseRef.current;
+
       if (!liff.isLoggedIn()) {
         // ถ้าผู้ใช้เปิดผ่านเบราว์เซอร์ปกติ(Chrome/Safari) จะเด้งไปล็อกอิน LINE
-        liff.login({ redirectUri: window.location.href });
+        liff.login({ redirectUri });
         return;
       }
 
@@ -476,7 +482,13 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
         <div className={`relative ${!isBanned ? 'pt-4' : 'pt-2'}`}>
           <div className="absolute top-20 left-1/2 -translate-x-1/2 w-3/4 h-20 bg-blue-500/20 blur-[60px] rounded-full pointer-events-none"></div>
           <div className={`absolute top-0 left-0 right-0 h-36 rounded-[2.5rem] shadow-sm overflow-hidden ${isBanned ? 'bg-gradient-to-r from-red-600 to-rose-900' : 'bg-gradient-to-r from-blue-600 to-indigo-800'}`}>
-               <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]"></div>
+               <div
+                 className="absolute inset-0 opacity-20"
+                 style={{
+                   backgroundImage: 'linear-gradient(135deg, rgba(255, 255, 255, 0.18) 25%, transparent 25%, transparent 50%, rgba(255, 255, 255, 0.18) 50%, rgba(255, 255, 255, 0.18) 75%, transparent 75%, transparent)',
+                   backgroundSize: '8px 8px',
+                 }}
+               />
           </div>
 
           <div className={`relative z-10 mx-2 md:mx-6 bg-white rounded-[2rem] p-5 md:p-6 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.1)] border mt-16 flex flex-col md:flex-row gap-5 items-start md:items-center ${isBanned ? 'border-red-200' : 'border-slate-100'}`}>
@@ -496,6 +508,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
                               <button 
                                   onClick={handleSyncLineProfile} 
                                   disabled={isSyncingLine}
+                                  aria-label="ซิงค์รูปโปรไฟล์จาก LINE"
                                   className="absolute inset-0 bg-slate-900/60 backdrop-blur-[2px] flex flex-col items-center justify-center text-white opacity-0 md:group-hover:opacity-100 transition-opacity duration-300"
                               >
                                   {isSyncingLine ? <Loader2 size={24} className="animate-spin" /> : <RefreshCw size={24} className="mb-1" />}
@@ -509,6 +522,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
                           <button 
                               onClick={handleSyncLineProfile}
                               disabled={isSyncingLine}
+                              aria-label="ซิงค์รูปโปรไฟล์จาก LINE"
                               className="absolute -top-2 -right-2 bg-[#06C755] text-white p-1.5 rounded-full shadow-lg border-2 border-white hover:scale-110 active:scale-95 transition-all z-30" 
                               title="ซิงค์รูปโปรไฟล์จาก LINE"
                           >

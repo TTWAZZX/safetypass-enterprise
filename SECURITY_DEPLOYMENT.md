@@ -17,9 +17,16 @@ LINE LIFF requires only these CSP exceptions:
 
 - `https://static.line-scdn.net` in `script-src`
 - `https://api.line.me` in `connect-src`
+- `https://liffsdk.line-scdn.net` in `connect-src`
 - `https://profile.line-scdn.net` in `img-src`
 
 Do not replace the allowlists with wildcards or weaken the remaining CSP directives.
+
+LINE profile sync is optional. The LIFF SDK is initialized only after a user
+chooses to sync their profile picture, and only on the configured production
+LIFF endpoint (`https://safetypass-enterprise.vercel.app`). Vercel Preview and
+local URLs do not initiate LIFF, because LINE rejects redirect URLs outside
+that endpoint.
 
 ## Browser session privacy
 

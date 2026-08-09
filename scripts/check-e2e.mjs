@@ -84,6 +84,9 @@ async function installMocks(page, options = {}) {
     archiveVendorRequests: 0,
     archiveUserRequests: 0,
     directHighIntegrityWrites: 0,
+    liffManifestRequests: 0,
+    lineApiRequests: 0,
+    lineLoginRequests: 0,
   };
   let managedQuestions = examQuestions('INDUCTION');
   managedQuestions[7] = { ...managedQuestions[7], choices_json: managedQuestions[7].choices_json.slice(0, 3) };
@@ -467,7 +470,18 @@ async function installMocks(page, options = {}) {
       refreshToken: 'test-refresh-token-v2',
     });
   });
-  await page.route('https://api.line.me/**', (route) => json(route, {}));
+  await page.route('https://liffsdk.line-scdn.net/**', (route) => {
+    authDiagnostics.liffManifestRequests += 1;
+    return json(route, {});
+  });
+  await page.route('https://api.line.me/**', (route) => {
+    authDiagnostics.lineApiRequests += 1;
+    return json(route, {});
+  });
+  await page.route('https://access.line.me/**', (route) => {
+    authDiagnostics.lineLoginRequests += 1;
+    return json(route, {});
+  });
   return authDiagnostics;
 }
 
@@ -572,6 +586,18 @@ try {
   if (await userPage.evaluate(() => sessionStorage.getItem('safety_pass_auth_session') === null)) {
     throw new Error('Auth session was not stored in sessionStorage');
   }
+  const assertNoAutomaticLiffRequests = () => {
+    const requestCount = userAuthDiagnostics.liffManifestRequests
+      + userAuthDiagnostics.lineApiRequests
+      + userAuthDiagnostics.lineLoginRequests;
+    if (requestCount !== 0) {
+      throw new Error('LIFF initialized before the user explicitly requested a LINE profile sync');
+    }
+  };
+  assertNoAutomaticLiffRequests();
+  await userPage.getByRole('button', { name: 'ซิงค์รูปโปรไฟล์จาก LINE' }).last().click();
+  await userPage.getByText('การ Sync รูป LINE ใช้ได้บนเว็บไซต์หลักเท่านั้น', { exact: true }).waitFor();
+  assertNoAutomaticLiffRequests();
   await assertA11y(userPage, 'mobile user dashboard');
 
   await userPage.getByRole('button', { name: /สอบใหม่ \/ Retake/i }).click();
@@ -581,6 +607,7 @@ try {
   await userPage.getByText(/^คำถามทดสอบ \d+$/, { exact: true }).first().waitFor();
   await userPage.getByText('คำตอบ ก', { exact: true }).first().click();
   await userPage.reload({ waitUntil: 'domcontentloaded' });
+  assertNoAutomaticLiffRequests();
   await userPage.getByRole('button', { name: /สอบใหม่ \/ Retake/i }).click();
   await userPage.getByText('พบข้อสอบที่ยังทำไม่เสร็จ', { exact: true }).waitFor();
   await userPage.getByRole('button', { name: /กลับไปทำต่อ/ }).click();
