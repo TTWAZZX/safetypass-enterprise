@@ -277,11 +277,13 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    const normalizedLoginId = loginId.replace(/\D/g, '').slice(0, 13);
+    setLoginId(normalizedLoginId);
     setLoading(true);
     setError("");
     setInfoMsg("");
     try {
-      const result = await api.login(loginId, loginPin || undefined);
+      const result = await api.login(normalizedLoginId, loginPin || undefined);
       const user = result.user;
 
       if (result.requiresPinUpgrade) {
@@ -301,12 +303,12 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       
       // 🔥 ดักจับถ้ายังไม่ได้ลงทะเบียน ให้สลับหน้าและโยนเลขบัตรไปช่อง Register
       if (errorMsg.includes('REQUIRE_REGISTER')) {
-         setRegId(loginId); // ส่งเลขบัตรที่พิมพ์ค้างไว้ไปหน้าลงทะเบียน
+         setRegId(normalizedLoginId); // ส่งเลขบัตรที่พิมพ์ค้างไว้ไปหน้าลงทะเบียน
          setMode('REGISTER'); // สลับไปหน้าลงทะเบียนอัตโนมัติ
          setInfoMsg('กรุณาตรวจสอบข้อมูลและยอมรับเงื่อนไข (PDPA) ก่อนเข้าใช้งานครั้งแรก');
          setTimeout(() => setInfoMsg(''), 6000);
          // สั่งให้ระบบวิ่งไปดึงข้อมูลแอดมินอัตโนมัติเลย
-         handleCheckID(loginId); 
+         handleCheckID(normalizedLoginId);
       } else {
          setError(errorMsg);
       }
@@ -447,7 +449,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         {pendingPinUpgradeUser && (
           <form onSubmit={handlePinUpgrade} className="space-y-4 relative z-10">
             <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-xs font-bold leading-relaxed text-blue-800">
-              บัญชีและประวัติเดิมของคุณยังอยู่ครบ กรุณาตั้ง PIN ส่วนตัว 6 หลัก โดยห้ามใช้เลข 6 หลักท้ายบัตร, 000000 หรือ 123456
+              บัญชีและประวัติเดิมของคุณยังอยู่ครบ กรุณาตั้ง PIN ส่วนตัวเป็นตัวเลข 6 หลัก
             </div>
             <label className="block space-y-1.5 text-left text-[9px] font-black uppercase tracking-widest text-slate-600">
               PIN ใหม่ 6 หลัก
@@ -488,7 +490,10 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 required 
                 className="w-full px-4 py-3.5 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-sm text-slate-700 transition-all shadow-inner"
                 value={loginId}
-                onChange={e => setLoginId(e.target.value)}
+                onChange={e => setLoginId(e.target.value.replace(/\D/g, '').slice(0, 13))}
+                inputMode="numeric"
+                maxLength={13}
+                autoComplete="username"
                 placeholder="13-digit National ID"
               />
               <div className="flex items-center gap-1.5 mt-1.5 ml-1">
@@ -836,7 +841,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 />
               </label>
               <p className="text-[9px] font-bold text-slate-500 sm:col-span-2">
-                ห้ามใช้เลข 6 หลักท้ายบัตร, 000000 หรือ 123456
+                ใช้ตัวเลข 6 หลักที่คุณจดจำได้
               </p>
               <p aria-live="polite" className={`text-[9px] font-bold sm:col-span-2 ${registrationPinConfirmationState === 'MATCH' ? 'text-emerald-700' : registrationPinConfirmationState === 'MISMATCH' ? 'text-rose-600' : 'text-slate-500'}`}>
                 {registrationPinConfirmationState === 'MATCH' && 'PIN ทั้งสองช่องตรงกัน'}

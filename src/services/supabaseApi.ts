@@ -200,7 +200,7 @@ export const api = {
       // ดักจับคนแปลกหน้าที่ไม่เคยมีในระบบเลย พยายามจะมาล็อกอิน
       if (/Invalid (?:login )?credentials/i.test(authError.message)) {
         if (registrationStatus.state === 'REGISTERED') {
-          throw new Error('บัญชีมีข้อมูลในระบบแต่ไม่สามารถยืนยันตัวตนได้ กรุณาติดต่อเจ้าหน้าที่ Safety');
+          throw new Error('PIN ไม่ถูกต้อง กรุณาตรวจสอบ PIN 6 หลัก หรือ PIN เดิม 4 หลัก หากเพิ่งรีเซต PIN ให้ใช้เลข 6 หลักท้ายบัตรภายใน 30 นาที');
         }
           throw new Error('ไม่พบข้อมูล: กรุณาลงทะเบียนและยอมรับเงื่อนไขก่อนเข้าใช้งาน');
       }

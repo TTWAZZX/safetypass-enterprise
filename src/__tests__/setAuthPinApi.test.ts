@@ -113,14 +113,22 @@ describe('set-auth-pin API', () => {
     expect((await invoke({ nationalId, pin: '111111' }, '192.0.2.23')).status).toBe(200);
   });
 
-  it.each(['000000', '123456', '890123'])('rejects reserved permanent PIN %s', async (pin) => {
+  it.each([
+    ['000000', '192.0.2.24'],
+    ['123456', '192.0.2.25'],
+    ['890123', '192.0.2.26'],
+  ])('accepts any six-digit permanent PIN %s', async (pin, ip) => {
     configure();
-    const upstream = vi.fn().mockResolvedValueOnce(jsonResponse({
-      id: userId, email: `${nationalId}@safetypass.com`, user_metadata: {},
-    }));
+    const upstream = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        id: userId, email: `${nationalId}@safetypass.com`, user_metadata: {},
+      }))
+      .mockResolvedValueOnce(jsonResponse({ id: userId }))
+      .mockResolvedValueOnce(jsonResponse(null))
+      .mockResolvedValueOnce(jsonResponse({ access_token: 'access', refresh_token: 'refresh' }));
     vi.stubGlobal('fetch', upstream);
 
-    expect((await invoke({ nationalId, pin }, `192.0.2.${24 + Number(pin === '123456')}`)).status).toBe(400);
-    expect(upstream).toHaveBeenCalledTimes(1);
+    expect((await invoke({ nationalId, pin }, ip)).status).toBe(200);
+    expect(upstream).toHaveBeenCalledTimes(4);
   });
 });

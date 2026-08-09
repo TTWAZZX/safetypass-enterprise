@@ -2,7 +2,7 @@ import {
   cleanText, getAuthPinPepper, getSupabaseConfig, getSupabaseServiceConfig, isPinV2Enforced,
   isRateLimited,
 } from './_auth.js';
-import { createSecurePinPassword, getPermanentPinError } from './_pin.js';
+import { createSecurePinPassword } from './_pin.js';
 
 const safeJson = async (response) => response.json().catch(() => null);
 
@@ -115,9 +115,6 @@ export default async function handler(req, res) {
     if (resetIsCurrent && !isTemporaryResetPin) {
       await rpc(serviceConfig, 'record_auth_login_failure', { national_id_param: nationalId });
       return res.status(401).json({ message: 'Invalid credentials' });
-    }
-    if (isSecurePin && !isTemporaryResetPin && getPermanentPinError(nationalId, pin)) {
-      return res.status(400).json({ message: 'PIN does not meet security requirements' });
     }
     if (!isSecurePin && (pinVersion >= 2 || pin !== nationalId.slice(-4))) {
       await rpc(serviceConfig, 'record_auth_login_failure', { national_id_param: nationalId });

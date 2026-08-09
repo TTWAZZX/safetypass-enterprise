@@ -74,6 +74,21 @@ describe('auth-login API', () => {
     expect(password).not.toContain('246801');
   });
 
+  it('authenticates an existing easy PIN instead of applying creation rules during login', async () => {
+    configure();
+    const upstream = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ user_exists: true, is_active: true, pin_version: 2 }))
+      .mockResolvedValueOnce(jsonResponse({ access_token: 'easy-access', refresh_token: 'easy-refresh' }))
+      .mockResolvedValueOnce(jsonResponse(null));
+    vi.stubGlobal('fetch', upstream);
+
+    const result = await invoke('890123', '192.0.2.24');
+
+    expect(result.status).toBe(200);
+    expect(result.body.requiresPinUpgrade).toBe(false);
+    expect(upstream).toHaveBeenCalledTimes(3);
+  });
+
   it('blocks the old four-digit PIN after an account reaches PIN v2', async () => {
     configure();
     const upstream = vi.fn()
