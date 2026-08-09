@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "check:text": "node scripts/check-text-encoding.mjs",
+    "check:api-budget": "node scripts/check-api-budget.mjs",
     "prebuild": "npm run check:text",
     "dev": "vite",
     "build": "vite build",
