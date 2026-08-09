@@ -11,6 +11,8 @@ import { downloadSupplierOutsourceWorkbook, downloadWorkbook } from '../services
 import { SupplierOutsourceReportRow } from '../types';
 import AsyncState from './AsyncState';
 import { calculateSupplierDashboardMetrics } from '../services/dashboardMetrics';
+import { buildAdminActionItems } from '../services/adminActionCenter';
+import AdminActionCenter from './AdminActionCenter';
 
 const DashboardCharts = lazy(() => import('./DashboardCharts'));
 
@@ -31,6 +33,7 @@ const AdminDashboard: React.FC<{
   const [supplierLoadError, setSupplierLoadError] = useState('');
   const [totalItems, setTotalItems] = useState(0);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [chartData, setChartData] = useState<{ pieData: any[]; barData: any[]; trendData: any[]; vendorData: any[] }>({
     pieData: [], barData: [], trendData: [], vendorData: [],
   });
@@ -120,6 +123,7 @@ const AdminDashboard: React.FC<{
         })),
         vendorData: summary.vendorData,
       });
+      setLastUpdatedAt(new Date());
       initialLoadCompleteRef.current = true;
     } catch (err: any) {
       console.error("Dashboard fetch error:", err);
@@ -156,6 +160,14 @@ const AdminDashboard: React.FC<{
     () => calculateSupplierDashboardMetrics(supplierRows),
     [supplierRows],
   );
+  const adminActionItems = useMemo(() => buildAdminActionItems({
+    failedExams: stats.failed,
+    suspendedUsers: stats.suspended,
+    noCertificate: complianceStats?.noCert || 0,
+    expiredCertificates: complianceStats?.expired || 0,
+    expiringCertificates: complianceStats?.expiring || 0,
+    supplierActions: supplierMetrics.actionRequired,
+  }), [stats.failed, stats.suspended, complianceStats, supplierMetrics.actionRequired]);
 
   const matchesHistoryFilters = (item: any) => {
     const matchesSearch = 
@@ -394,6 +406,13 @@ const AdminDashboard: React.FC<{
           glow="glow-red"
         />
       </div>
+
+      <AdminActionCenter
+        items={adminActionItems}
+        lastUpdatedAt={lastUpdatedAt}
+        onNavigateToUsers={onNavigateToUsers}
+        onNavigateToSupplier={onNavigateToSupplier}
+      />
 
       {/* Supplier & Outsource snapshot */}
       <section className="rounded-[2rem] border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-cyan-50 p-4 shadow-sm sm:p-6" aria-labelledby="supplier-dashboard-title">
