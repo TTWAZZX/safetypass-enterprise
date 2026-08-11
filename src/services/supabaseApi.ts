@@ -266,6 +266,9 @@ export const api = {
       if (error.message.includes('suspended')) {
         throw new Error('บัญชีของคุณถูกระงับสิทธิ์ชั่วคราว โปรดติดต่อเจ้าหน้าที่ Safety');
       }
+      if (error.message.includes('Privileged profiles')) {
+        throw new Error('บัญชีผู้ดูแลระบบต้องเปิดใช้งานโดยผู้ดูแลระบบที่ได้รับอนุญาต');
+      }
       throw new Error('ไม่สามารถดึงข้อมูลที่บริษัทเตรียมไว้ได้');
     }
     if (!data) throw new Error('ไม่พบข้อมูลที่รอเปิดบัญชี กรุณาตรวจสอบเลขบัตรอีกครั้ง');
@@ -312,18 +315,43 @@ export const api = {
 
     if (registrationError) {
       if (registrationError.message.includes('already registered')) {
-        await supabase.auth.signOut();
-        throw new Error('already registered');
+        // A previous attempt may have committed the profile immediately before
+        // its PIN request was interrupted. Finish that same authenticated
+        // identity idempotently instead of sending the user back to login.
+        try {
+          const existingUser = await loadAuthenticatedUserProfile(authUser.id);
+          await api.upgradeMyPin(nationalId, securePin);
+          return { ...existingUser, national_id: nationalId };
+        } catch {
+          await supabase.auth.signOut();
+          throw new Error('already registered');
+        }
       }
       if (registrationError.message.includes('suspended')) {
         throw new Error('บัญชีของคุณถูกระงับสิทธิ์ชั่วคราว โปรดติดต่อเจ้าหน้าที่ Safety');
       }
+      if (registrationError.message.includes('Privileged profiles')) {
+        throw new Error('บัญชีผู้ดูแลระบบต้องเปิดใช้งานโดยผู้ดูแลระบบที่ได้รับอนุญาต');
+      }
       throw new Error('ลงทะเบียนไม่สำเร็จ: ' + registrationError.message);
     }
 
-    await api.upgradeMyPin(nationalId, securePin);
+    let pinSetupPending = false;
+    try {
+      await api.upgradeMyPin(nationalId, securePin);
+    } catch (pinSetupError) {
+      // The profile transaction has already committed. Keep the authenticated
+      // bootstrap session and move the UI to the retryable PIN-completion step
+      // rather than incorrectly reporting that registration failed.
+      console.error('Registration profile committed; PIN completion is pending:', pinSetupError);
+      pinSetupPending = true;
+    }
 
-    return { ...registeredUser, national_id: nationalId } as unknown as User;
+    return {
+      ...registeredUser,
+      national_id: nationalId,
+      pin_setup_pending: pinSetupPending,
+    } as unknown as User;
   },
 
   /* =====================================================

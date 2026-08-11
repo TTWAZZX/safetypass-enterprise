@@ -120,6 +120,7 @@ export interface User {
   };
   vendor_request_created?: boolean;
   vendor_resolution?: 'SELECTED' | 'EXISTING_APPROVED' | 'EXISTING_PENDING' | 'CREATED_PENDING';
+  pin_setup_pending?: boolean;
 }
 
 export interface ExamLog {

@@ -85,6 +85,35 @@ const recoverStagedBootstrapIdentity = async (
   ));
 };
 
+const createBootstrapIdentity = async (
+  url,
+  anonKey,
+  serviceKey,
+  email,
+  bootstrapPassword,
+) => {
+  const created = await serviceRequest(
+    url,
+    serviceKey,
+    '/auth/v1/admin/users',
+    'POST',
+    {
+      email,
+      password: bootstrapPassword,
+      email_confirm: true,
+      user_metadata: { password_scheme: 'bootstrap-v2', must_change_pin: true },
+    },
+  );
+  if (!created.ok) return null;
+
+  return sessionResult(await authRequest(
+    url,
+    anonKey,
+    '/auth/v1/token?grant_type=password',
+    { email, password: bootstrapPassword },
+  ));
+};
+
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'POST') return res.status(200).json({ ok: false });
@@ -168,12 +197,13 @@ export default async function handler(req, res) {
     }
 
     if (!session) {
-      const signUp = await authRequest(url, anonKey, '/auth/v1/signup', {
+      session = await createBootstrapIdentity(
+        url,
+        anonKey,
+        serviceKey,
         email,
-        password: bootstrapPassword,
-        data: { password_scheme: 'bootstrap-v2', must_change_pin: true },
-      });
-      session = sessionResult(signUp);
+        bootstrapPassword,
+      );
     }
 
     if (!session) {

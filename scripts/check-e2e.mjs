@@ -80,6 +80,7 @@ async function installMocks(page, options = {}) {
     stagedPrepareRequests: 0,
     stagedSignupRequests: 0,
     stagedTokenRequests: 0,
+    completedRegistrationRequests: 0,
     pinUpgradeRequests: 0,
     adminPinResetRequests: 0,
     archiveVendorRequests: 0,
@@ -207,6 +208,7 @@ async function installMocks(page, options = {}) {
       const rpc = rpcMatch[1];
       const payload = request.postDataJSON?.() || {};
       if (rpc === 'check_user_exists') authDiagnostics.directIdentityRpcRequests += 1;
+      if (rpc === 'complete_registration_v4') authDiagnostics.completedRegistrationRequests += 1;
       const rpcResponses = {
         get_my_staged_registration_profile: {
           name: 'ผู้ใช้ที่บริษัทเตรียมไว้',
@@ -220,6 +222,16 @@ async function installMocks(page, options = {}) {
         admin_get_vendor_duplicate_groups: [],
         get_public_support_links: [{ manual_url: 'https://example.com/manual', support_url: 'https://line.me/' }],
         get_public_feature_flags: [{ supplier_outsource_enabled: true }],
+        complete_registration_v4: {
+          ...profile('USER'),
+          name: 'ผู้ใช้ที่บริษัทเตรียมไว้',
+          age: 42,
+          nationality: 'ไทย (Thai)',
+          vendor_id: vendorId,
+          vendors: { name: 'บริษัททดสอบ', status: 'APPROVED' },
+          vendor_request_created: false,
+          vendor_resolution: 'SELECTED',
+        },
         get_runtime_system_settings: [
           { key: 'PASSING_SCORE_INDUCTION', value: '80' },
           { key: 'PASSING_SCORE_WORK_PERMIT', value: '80' },
@@ -477,6 +489,9 @@ async function installMocks(page, options = {}) {
       });
     }
     authDiagnostics.pinUpgradeRequests += 1;
+    if (options.failFirstPinUpgrade === true && authDiagnostics.pinUpgradeRequests === 1) {
+      return json(route, { message: 'Temporary PIN service failure' }, 503);
+    }
     return json(route, {
       ok: true,
       accessToken: createAccessToken(userId, 'USER'),
@@ -503,6 +518,22 @@ async function login(page, nationalId) {
   await page.locator('form input').nth(0).fill(nationalId);
   await page.locator('form input').nth(1).fill(nationalId.slice(-4));
   await page.getByRole('button', { name: /^Login/i }).click();
+}
+
+async function submitStagedRegistration(page) {
+  await page.goto(appUrl, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'ลงทะเบียน', exact: true }).click();
+  const registrationIdInput = page.getByPlaceholder('เลขบัตรประจำตัวประชาชน 13 หลัก');
+  await registrationIdInput.fill(stagedNationalId);
+  await page.getByText('พบข้อมูลที่บริษัทเตรียมไว้ เติมข้อมูลสำเร็จ', { exact: true }).waitFor();
+  const pinInputs = page.locator('input[autocomplete="new-password"]');
+  await pinInputs.nth(0).fill('246801');
+  await pinInputs.nth(1).fill('246801');
+  await page.locator('#pdpa').check();
+  const registerButton = page.getByRole('button', { name: 'Register Account', exact: true });
+  await registerButton.waitFor();
+  if (!(await registerButton.isEnabled())) throw new Error('Completed staged registration form did not enable');
+  await registerButton.click();
 }
 
 async function assertA11y(page, label, scope) {
@@ -632,6 +663,42 @@ try {
   await userPage.getByText(/^คำถามทดสอบ \d+$/, { exact: true }).first().waitFor();
   await assertA11y(userPage, 'mobile resumed exam');
   await userContext.close();
+
+  const registrationContext = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
+  const registrationPage = await registrationContext.newPage();
+  const registrationDiagnostics = await installMocks(registrationPage);
+  await submitStagedRegistration(registrationPage);
+  await registrationPage.getByRole('heading', { name: 'ผู้ใช้ที่บริษัทเตรียมไว้', exact: true }).waitFor();
+  if (registrationDiagnostics.completedRegistrationRequests !== 1) {
+    throw new Error('Staged registration did not commit exactly once');
+  }
+  if (registrationDiagnostics.pinUpgradeRequests !== 1) {
+    throw new Error('Staged registration did not finalize its PIN exactly once');
+  }
+  await registrationContext.close();
+
+  const registrationRetryContext = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
+  const registrationRetryPage = await registrationRetryContext.newPage();
+  const registrationRetryDiagnostics = await installMocks(registrationRetryPage, { failFirstPinUpgrade: true });
+  await submitStagedRegistration(registrationRetryPage);
+  await registrationRetryPage.getByRole('heading', { name: 'Secure Your Account', exact: true }).waitFor();
+  await registrationRetryPage.getByText(
+    'ลงทะเบียนข้อมูลสำเร็จแล้ว แต่ยังตั้ง PIN ไม่สำเร็จ กรุณาตั้ง PIN อีกครั้งเพื่อเข้าใช้งาน',
+    { exact: true },
+  ).waitFor();
+  if (registrationRetryDiagnostics.completedRegistrationRequests !== 1
+      || registrationRetryDiagnostics.pinUpgradeRequests !== 1) {
+    throw new Error('Interrupted registration did not preserve its committed profile for PIN retry');
+  }
+  const retryPinInputs = registrationRetryPage.locator('input[autocomplete="new-password"]');
+  await retryPinInputs.nth(0).fill('246801');
+  await retryPinInputs.nth(1).fill('246801');
+  await registrationRetryPage.getByRole('button', { name: /บันทึก PIN และเข้าใช้งาน/ }).click();
+  await registrationRetryPage.getByRole('heading', { name: 'ผู้ใช้ที่บริษัทเตรียมไว้', exact: true }).waitFor();
+  if (registrationRetryDiagnostics.pinUpgradeRequests !== 2) {
+    throw new Error('Interrupted registration PIN was not retryable');
+  }
+  await registrationRetryContext.close();
 
   const legacyContext = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
   const legacyPage = await legacyContext.newPage();

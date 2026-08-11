@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { getRegistrationDisabledReason, getRegistrationStepIndex } from '../services/registrationProgress';
+import {
+  getRegistrationDisabledReason, getRegistrationStepIndex, isValidRegistrationAge,
+} from '../services/registrationProgress';
 
 const complete = {
   loading: false,
@@ -33,4 +35,17 @@ describe('registration progress', () => {
     expect(getRegistrationDisabledReason({ ...complete, securePinConfirmation: '135790' })).toContain('PIN');
     expect(getRegistrationDisabledReason(complete)).toBeNull();
   });
+
+  it.each(['', '0', '-1', '25.5', '121', 'not-a-number'])(
+    'rejects an invalid registration age %s',
+    (age) => {
+      expect(isValidRegistrationAge(age)).toBe(false);
+      expect(getRegistrationDisabledReason({ ...complete, age })).toContain('1–120');
+    },
+  );
+
+  it.each(['1', '25', '120'])(
+    'accepts a valid registration age %s',
+    (age) => expect(isValidRegistrationAge(age)).toBe(true),
+  );
 });

@@ -18,11 +18,19 @@ interface RegistrationProgressInput {
   securePinConfirmation: string;
 }
 
+export const isValidRegistrationAge = (
+  value: string | number | null | undefined,
+): boolean => {
+  if (value === '' || value == null) return false;
+  const numericAge = Number(value);
+  return Number.isInteger(numericAge) && numericAge >= 1 && numericAge <= 120;
+};
+
 export const getRegistrationDisabledReason = (input: RegistrationProgressInput): string | null => {
   if (input.loading) return 'กำลังสร้างบัญชี กรุณารอสักครู่';
   if (input.regId.length !== 13) return 'กรอกเลขบัตรประจำตัวให้ครบ 13 หลัก';
   if (!input.name.trim()) return 'กรอกชื่อและนามสกุล';
-  if (!input.age || Number(input.age) <= 0) return 'กรอกอายุให้ถูกต้อง';
+  if (!isValidRegistrationAge(input.age)) return 'กรอกอายุเป็นจำนวนเต็มระหว่าง 1–120 ปี';
   if (!input.nationality.trim()) return 'ระบุสัญชาติ';
   const pinError = getSecurePinError(input.regId, input.securePin);
   if (pinError) return pinError;
@@ -38,7 +46,7 @@ export const getRegistrationDisabledReason = (input: RegistrationProgressInput):
 export const getRegistrationStepIndex = (input: Omit<RegistrationProgressInput, 'loading' | 'pdpaAccepted'>): number => {
   const identityComplete = input.regId.length === 13
     && Boolean(input.name.trim())
-    && Boolean(input.age && Number(input.age) > 0)
+    && isValidRegistrationAge(input.age)
     && Boolean(input.nationality.trim())
     && !getSecurePinError(input.regId, input.securePin)
     && input.securePin === input.securePinConfirmation;

@@ -13,7 +13,9 @@ import {
 import PrivacyPolicyModal from './PrivacyPolicyModal';
 import { addOneYearIsoDate } from '../utils/accessDates';
 import ProgressSteps from './ProgressSteps';
-import { getRegistrationDisabledReason, getRegistrationStepIndex } from '../services/registrationProgress';
+import {
+  getRegistrationDisabledReason, getRegistrationStepIndex, isValidRegistrationAge,
+} from '../services/registrationProgress';
 import {
   RegistrationAccountState, StagedRegistrationProfile,
 } from '../services/registrationAccountState';
@@ -98,7 +100,13 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const filteredVendors = vendors.filter((vendor) =>
     vendor.name.toLocaleLowerCase().includes(vendorSearch.trim().toLocaleLowerCase())
   );
-  const registrationAge = stagedProfile?.age != null ? String(stagedProfile.age) : age;
+  const stagedAgeIsValid = isValidRegistrationAge(stagedProfile?.age);
+  const stagedVendorIsUsable = Boolean(
+    stagedProfile?.vendor_id
+    && stagedProfile.vendor
+    && (stagedProfile.vendor.status === 'APPROVED' || stagedProfile.vendor.status === 'PENDING'),
+  );
+  const registrationAge = stagedAgeIsValid ? String(stagedProfile?.age) : age;
 
   const registrationState = {
     loading,
@@ -242,10 +250,14 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         const profile = await api.prepareStagedRegistration(idToCheck);
         setStagedProfile(profile);
         setName(profile.name || '');
-        setAge(profile.age ? String(profile.age) : '');
-        if (profile.vendor_id) {
+        setAge(profile.age != null ? String(profile.age) : '');
+        if (profile.vendor_id && profile.vendor
+            && (profile.vendor.status === 'APPROVED' || profile.vendor.status === 'PENDING')) {
           setVendorId(profile.vendor_id);
           setVendorSearch(profile.vendor?.name || '');
+        } else {
+          setVendorId('');
+          setVendorSearch('');
         }
         if (profile.nationality) {
           const commonNationalities = ['ไทย (Thai)', 'พม่า (Myanmar)', 'กัมพูชา (Cambodian)', 'ลาว (Lao)'];
@@ -387,6 +399,14 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         }
       }
 
+      if (user.pin_setup_pending) {
+        setPendingPinUpgradeUser(user);
+        setNewPin('');
+        setNewPinConfirmation('');
+        setInfoMsg('ลงทะเบียนข้อมูลสำเร็จแล้ว แต่ยังตั้ง PIN ไม่สำเร็จ กรุณาตั้ง PIN อีกครั้งเพื่อเข้าใช้งาน');
+        return;
+      }
+
       // แสตมป์เวลาเข้าสู่ระบบล่าสุด (fire-and-forget ไม่ block login flow)
       supabase.from('users').update({ last_login: new Date().toISOString() }).eq('id', user.id);
 
@@ -449,6 +469,11 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
         {pendingPinUpgradeUser && (
           <form onSubmit={handlePinUpgrade} className="space-y-4 relative z-10">
+            {infoMsg && (
+              <div role="status" className="rounded-2xl border border-blue-200 bg-blue-50 p-3 text-xs font-bold leading-relaxed text-blue-800">
+                {infoMsg}
+              </div>
+            )}
             <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-xs font-bold leading-relaxed text-blue-800">
               บัญชีและประวัติเดิมของคุณยังอยู่ครบ กรุณาตั้ง PIN ส่วนตัวเป็นตัวเลข 6 หลัก
             </div>
@@ -620,7 +645,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 </div>
                 <div className="space-y-1">
                     <label className="block text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">Age / อายุ</label>
-                    <input required readOnly={stagedProfile?.age != null} type="number" value={registrationAge} onChange={e => setAge(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs shadow-inner read-only:text-slate-500 read-only:cursor-not-allowed" placeholder="25" />
+                    <input required readOnly={stagedAgeIsValid} type="number" min={1} max={120} step={1} value={registrationAge} onChange={e => setAge(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs shadow-inner read-only:text-slate-500 read-only:cursor-not-allowed" placeholder="25" />
                 </div>
                 <div className="space-y-1">
                     <label htmlFor="registration-nationality" className="block text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">Nationality / สัญชาติ</label>
@@ -663,7 +688,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                 <input
                   type="search"
-                  disabled={Boolean(stagedProfile?.vendor_id)}
+                  disabled={stagedVendorIsUsable}
                   value={vendorSearch}
                   onChange={(e) => setVendorSearch(e.target.value)}
                   className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs shadow-inner"
@@ -671,7 +696,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                   aria-label="ค้นหาชื่อบริษัท"
                 />
               </div>
-              <select id="registration-vendor" required disabled={Boolean(stagedProfile?.vendor_id)} value={vendorId} onChange={e => setVendorId(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs appearance-none cursor-pointer shadow-inner disabled:text-slate-500 disabled:cursor-not-allowed">
+              <select id="registration-vendor" required disabled={stagedVendorIsUsable} value={vendorId} onChange={e => setVendorId(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs appearance-none cursor-pointer shadow-inner disabled:text-slate-500 disabled:cursor-not-allowed">
                 <option value="">{vendorsLoading ? 'กำลังโหลดรายชื่อบริษัท...' : '-- Select Company --'}</option>
                 {stagedProfile?.vendor && !filteredVendors.some((vendor) => vendor.id === stagedProfile.vendor?.id) && (
                   <option value={stagedProfile.vendor.id}>{stagedProfile.vendor.name}</option>
