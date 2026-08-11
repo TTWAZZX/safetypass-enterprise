@@ -91,8 +91,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ status: safeStatus });
     }
     if (!statusResponse.ok
-      || status?.user_exists !== true
-      || status?.is_active !== true) {
+      || status?.is_active === false) {
       return res.status(200).json({ ok: false });
     }
 

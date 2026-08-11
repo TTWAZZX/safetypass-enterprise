@@ -120,8 +120,32 @@ describe('prepare-staged-auth API', () => {
     expect(String(upstream.mock.calls[1][0])).toContain('/auth/v1/signup');
     const signupBody = JSON.parse(String(upstream.mock.calls[1][1]?.body));
     expect(signupBody.password).toMatch(/^SafetyPass-bootstrap-v2-/);
+    expect(signupBody.password.length).toBeLessThanOrEqual(72);
     expect(signupBody.password).not.toContain(nationalId);
     expect(signupBody.data).toEqual({ password_scheme: 'bootstrap-v2', must_change_pin: true });
+  });
+
+  it('prepares a server-created Auth session for a new self-registration identity', async () => {
+    process.env.SUPABASE_URL = 'https://project.supabase.co';
+    process.env.SUPABASE_PUBLISHABLE_KEY = 'publishable-test-key';
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-test-key';
+    const upstream = vi.fn()
+      .mockResolvedValueOnce(jsonResponse([]))
+      .mockResolvedValueOnce(jsonResponse({
+        access_token: 'new-self-access', refresh_token: 'new-self-refresh',
+      }));
+    vi.stubGlobal('fetch', upstream);
+
+    const result = await invoke('192.0.2.13');
+
+    expect(result).toEqual({
+      status: 200,
+      body: { ok: true, accessToken: 'new-self-access', refreshToken: 'new-self-refresh' },
+    });
+    expect(String(upstream.mock.calls[1][0])).toContain('/auth/v1/signup');
+    const signupBody = JSON.parse(String(upstream.mock.calls[1][1]?.body));
+    expect(signupBody.email).toBe(`${nationalId}@safetypass.com`);
+    expect(signupBody.password.length).toBeLessThanOrEqual(72);
   });
 
   it('keeps expected existing-account failures server-side', async () => {

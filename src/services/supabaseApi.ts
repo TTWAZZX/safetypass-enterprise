@@ -43,6 +43,11 @@ const ensureRegistrationIdentity = async (
   const email = `${nationalId}@safetypass.com`;
   const pinError = getSecurePinError(nationalId, securePin);
   if (pinError) throw new Error(pinError);
+  try {
+    return await ensureStagedRegistrationIdentity(nationalId);
+  } catch (serverAuthError) {
+    console.error('Server-prepared registration identity failed:', serverAuthError);
+  }
   const { data: sessionData } = await supabase.auth.getSession();
   const currentSession = sessionData.session;
 
@@ -56,7 +61,7 @@ const ensureRegistrationIdentity = async (
   const bootstrapPassword = `SafetyPass-bootstrap-v2-${Array.from(
     bootstrapBytes,
     (value) => value.toString(16).padStart(2, '0'),
-  ).join('')}`;
+  ).join('').slice(0, 43)}`;
   const signUp = await supabase.auth.signUp({
     email,
     password: bootstrapPassword,
