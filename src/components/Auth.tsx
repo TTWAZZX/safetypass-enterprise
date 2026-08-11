@@ -98,12 +98,13 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const filteredVendors = vendors.filter((vendor) =>
     vendor.name.toLocaleLowerCase().includes(vendorSearch.trim().toLocaleLowerCase())
   );
+  const registrationAge = stagedProfile?.age != null ? String(stagedProfile.age) : age;
 
   const registrationState = {
     loading,
     regId,
     name,
-    age,
+    age: registrationAge,
     nationality,
     vendorId,
     otherVendor,
@@ -352,7 +353,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         registrationPin,
         name, 
         vendorId === 'OTHER' ? '' : vendorId, 
-        Number(age), 
+        Number(registrationAge),
         nationality, 
         vendorId === 'OTHER' ? otherVendor : undefined,
         supplierOutsourceEnabled ? {
@@ -619,7 +620,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 </div>
                 <div className="space-y-1">
                     <label className="block text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">Age / อายุ</label>
-                    <input required readOnly={stagedProfile?.age != null} type="number" value={age} onChange={e => setAge(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs shadow-inner read-only:text-slate-500 read-only:cursor-not-allowed" placeholder="25" />
+                    <input required readOnly={stagedProfile?.age != null} type="number" value={registrationAge} onChange={e => setAge(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs shadow-inner read-only:text-slate-500 read-only:cursor-not-allowed" placeholder="25" />
                 </div>
                 <div className="space-y-1">
                     <label htmlFor="registration-nationality" className="block text-[9px] font-black text-slate-600 uppercase tracking-widest ml-1">Nationality / สัญชาติ</label>
