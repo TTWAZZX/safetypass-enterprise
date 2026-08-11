@@ -33,6 +33,58 @@ const sessionResult = (result) => {
     : null;
 };
 
+const serviceRequest = async (url, serviceKey, path, method = 'POST', body = {}) => {
+  const response = await fetch(`${url}${path}`, {
+    method,
+    headers: {
+      apikey: serviceKey,
+      Authorization: `Bearer ${serviceKey}`,
+      'Content-Type': 'application/json',
+    },
+    ...(method === 'GET' ? {} : { body: JSON.stringify(body) }),
+  });
+  return { ok: response.ok, status: response.status, data: await safeJson(response) };
+};
+
+const recoverStagedBootstrapIdentity = async (
+  url,
+  anonKey,
+  serviceKey,
+  nationalId,
+  email,
+  bootstrapPassword,
+) => {
+  const lookup = await serviceRequest(
+    url,
+    serviceKey,
+    '/rest/v1/rpc/get_staged_auth_bootstrap_identity',
+    'POST',
+    { search_id: nationalId },
+  );
+  const identity = Array.isArray(lookup.data) ? lookup.data[0] : lookup.data;
+  if (!lookup.ok || identity?.recoverable !== true
+      || !/^[0-9a-f-]{36}$/i.test(String(identity?.user_id || ''))) return null;
+
+  const updated = await serviceRequest(
+    url,
+    serviceKey,
+    `/auth/v1/admin/users/${identity.user_id}`,
+    'PUT',
+    {
+      password: bootstrapPassword,
+      user_metadata: { password_scheme: 'bootstrap-v2', must_change_pin: true },
+    },
+  );
+  if (!updated.ok) return null;
+
+  return sessionResult(await authRequest(
+    url,
+    anonKey,
+    '/auth/v1/token?grant_type=password',
+    { email, password: bootstrapPassword },
+  ));
+};
+
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'POST') return res.status(200).json({ ok: false });
@@ -99,12 +151,30 @@ export default async function handler(req, res) {
     const bootstrapPassword = `SafetyPass-bootstrap-v2-${randomBytes(32).toString('base64url')}`;
     const legacyPinPassword = `SafetyPass-${nationalId}-${nationalId.slice(-4)}`;
 
-    const signUp = await authRequest(url, anonKey, '/auth/v1/signup', {
-      email,
-      password: bootstrapPassword,
-      data: { password_scheme: 'bootstrap-v2', must_change_pin: true },
-    });
-    let session = sessionResult(signUp);
+    // Supabase returns no session when this synthetic email already belongs to
+    // an interrupted bootstrap attempt. Recover only an explicitly staged
+    // bootstrap identity; completed accounts and permanent PINs are excluded
+    // by the service-role-only database function.
+    let session = null;
+    if (status?.requires_registration === true || !status?.user_exists) {
+      session = await recoverStagedBootstrapIdentity(
+        url,
+        anonKey,
+        serviceKey,
+        nationalId,
+        email,
+        bootstrapPassword,
+      );
+    }
+
+    if (!session) {
+      const signUp = await authRequest(url, anonKey, '/auth/v1/signup', {
+        email,
+        password: bootstrapPassword,
+        data: { password_scheme: 'bootstrap-v2', must_change_pin: true },
+      });
+      session = sessionResult(signUp);
+    }
 
     if (!session) {
       const pinLogin = await authRequest(

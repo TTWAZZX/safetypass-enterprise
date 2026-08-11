@@ -101,6 +101,7 @@ describe('prepare-staged-auth API', () => {
       .mockResolvedValueOnce(jsonResponse([{
         user_exists: true, requires_registration: true, is_active: true,
       }]))
+      .mockResolvedValueOnce(jsonResponse([]))
       .mockResolvedValueOnce(jsonResponse({
         access_token: 'new-access', refresh_token: 'new-refresh',
       }));
@@ -112,13 +113,14 @@ describe('prepare-staged-auth API', () => {
       status: 200,
       body: { ok: true, accessToken: 'new-access', refreshToken: 'new-refresh' },
     });
-    expect(upstream).toHaveBeenCalledTimes(2);
+    expect(upstream).toHaveBeenCalledTimes(3);
     expect(upstream.mock.calls[0][1]?.headers).toMatchObject({
       apikey: 'service-role-test-key',
       Authorization: 'Bearer service-role-test-key',
     });
-    expect(String(upstream.mock.calls[1][0])).toContain('/auth/v1/signup');
-    const signupBody = JSON.parse(String(upstream.mock.calls[1][1]?.body));
+    expect(String(upstream.mock.calls[1][0])).toContain('/rpc/get_staged_auth_bootstrap_identity');
+    expect(String(upstream.mock.calls[2][0])).toContain('/auth/v1/signup');
+    const signupBody = JSON.parse(String(upstream.mock.calls[2][1]?.body));
     expect(signupBody.password).toMatch(/^SafetyPass-bootstrap-v2-/);
     expect(signupBody.password.length).toBeLessThanOrEqual(72);
     expect(signupBody.password).not.toContain(nationalId);
@@ -131,6 +133,7 @@ describe('prepare-staged-auth API', () => {
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-test-key';
     const upstream = vi.fn()
       .mockResolvedValueOnce(jsonResponse([]))
+      .mockResolvedValueOnce(jsonResponse([]))
       .mockResolvedValueOnce(jsonResponse({
         access_token: 'new-self-access', refresh_token: 'new-self-refresh',
       }));
@@ -142,8 +145,9 @@ describe('prepare-staged-auth API', () => {
       status: 200,
       body: { ok: true, accessToken: 'new-self-access', refreshToken: 'new-self-refresh' },
     });
-    expect(String(upstream.mock.calls[1][0])).toContain('/auth/v1/signup');
-    const signupBody = JSON.parse(String(upstream.mock.calls[1][1]?.body));
+    expect(String(upstream.mock.calls[1][0])).toContain('/rpc/get_staged_auth_bootstrap_identity');
+    expect(String(upstream.mock.calls[2][0])).toContain('/auth/v1/signup');
+    const signupBody = JSON.parse(String(upstream.mock.calls[2][1]?.body));
     expect(signupBody.email).toBe(`${nationalId}@safetypass.com`);
     expect(signupBody.password.length).toBeLessThanOrEqual(72);
   });
@@ -156,6 +160,7 @@ describe('prepare-staged-auth API', () => {
       .mockResolvedValueOnce(jsonResponse([{
         user_exists: true, requires_registration: true, is_active: true,
       }]))
+      .mockResolvedValueOnce(jsonResponse([]))
       .mockResolvedValueOnce(jsonResponse({ message: 'User already registered' }, 422))
       .mockResolvedValueOnce(jsonResponse({
         access_token: 'existing-access', refresh_token: 'existing-refresh',
@@ -168,8 +173,48 @@ describe('prepare-staged-auth API', () => {
       status: 200,
       body: { ok: true, accessToken: 'existing-access', refreshToken: 'existing-refresh' },
     });
-    expect(upstream).toHaveBeenCalledTimes(3);
-    expect(String(upstream.mock.calls[2][0])).toContain('/auth/v1/token?grant_type=password');
+    expect(upstream).toHaveBeenCalledTimes(4);
+    expect(String(upstream.mock.calls[1][0])).toContain('/rpc/get_staged_auth_bootstrap_identity');
+    expect(String(upstream.mock.calls[2][0])).toContain('/auth/v1/signup');
+    expect(String(upstream.mock.calls[3][0])).toContain('/auth/v1/token?grant_type=password');
+  });
+
+  it('recovers an interrupted staged bootstrap identity and returns a session', async () => {
+    process.env.SUPABASE_URL = 'https://project.supabase.co';
+    process.env.SUPABASE_PUBLISHABLE_KEY = 'publishable-test-key';
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-test-key';
+    const userId = '77777777-7777-4777-8777-777777777777';
+    const upstream = vi.fn()
+      .mockResolvedValueOnce(jsonResponse([{
+        user_exists: true, requires_registration: true, is_active: true,
+      }]))
+      .mockResolvedValueOnce(jsonResponse([{ user_id: userId, recoverable: true }]))
+      .mockResolvedValueOnce(jsonResponse({ id: userId }))
+      .mockResolvedValueOnce(jsonResponse({
+        access_token: 'recovered-access', refresh_token: 'recovered-refresh',
+      }));
+    vi.stubGlobal('fetch', upstream);
+
+    const result = await invoke('192.0.2.14');
+
+    expect(result).toEqual({
+      status: 200,
+      body: { ok: true, accessToken: 'recovered-access', refreshToken: 'recovered-refresh' },
+    });
+    expect(upstream).toHaveBeenCalledTimes(4);
+    expect(String(upstream.mock.calls[1][0])).toContain('/rpc/get_staged_auth_bootstrap_identity');
+    expect(upstream.mock.calls[1][1]?.headers).toMatchObject({
+      apikey: 'service-role-test-key',
+      Authorization: 'Bearer service-role-test-key',
+    });
+    expect(String(upstream.mock.calls[2][0])).toContain(`/auth/v1/admin/users/${userId}`);
+    const updateBody = JSON.parse(String(upstream.mock.calls[2][1]?.body));
+    expect(updateBody.password).toMatch(/^SafetyPass-bootstrap-v2-/);
+    expect(updateBody.user_metadata).toEqual({
+      password_scheme: 'bootstrap-v2', must_change_pin: true,
+    });
+    expect(String(upstream.mock.calls[3][0])).toContain('/auth/v1/token?grant_type=password');
+    expect(upstream.mock.calls.some(([url]) => String(url).includes('/auth/v1/signup'))).toBe(false);
   });
 
   it('prepares a replacement Auth identity for an active registered orphan', async () => {

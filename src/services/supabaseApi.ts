@@ -37,41 +37,11 @@ const getRegistrationStatus = async (nationalId: string): Promise<RegistrationSt
 
 const ensureRegistrationIdentity = async (
   nationalId: string,
-  name = '',
   securePin: string,
 ) => {
-  const email = `${nationalId}@safetypass.com`;
   const pinError = getSecurePinError(nationalId, securePin);
   if (pinError) throw new Error(pinError);
-  try {
-    return await ensureStagedRegistrationIdentity(nationalId);
-  } catch (serverAuthError) {
-    console.error('Server-prepared registration identity failed:', serverAuthError);
-  }
-  const { data: sessionData } = await supabase.auth.getSession();
-  const currentSession = sessionData.session;
-
-  if (currentSession?.user.email?.toLowerCase() === email.toLowerCase()) {
-    return currentSession.user;
-  }
-  if (currentSession) await supabase.auth.signOut();
-
-  const bootstrapBytes = new Uint8Array(32);
-  crypto.getRandomValues(bootstrapBytes);
-  const bootstrapPassword = `SafetyPass-bootstrap-v2-${Array.from(
-    bootstrapBytes,
-    (value) => value.toString(16).padStart(2, '0'),
-  ).join('').slice(0, 43)}`;
-  const signUp = await supabase.auth.signUp({
-    email,
-    password: bootstrapPassword,
-    options: { data: { name, password_scheme: 'bootstrap-v2', must_change_pin: true } },
-  });
-  if (!signUp.error && signUp.data.session?.user) return signUp.data.session.user;
-  if (signUp.error && /already registered|already exists|user exists/i.test(signUp.error.message)) {
-    throw new Error('บัญชีนี้มีอยู่แล้ว กรุณาเข้าสู่ระบบก่อนดำเนินการลงทะเบียน');
-  }
-  throw signUp.error || new Error('ไม่สามารถเปิดบัญชีสำหรับการลงทะเบียนได้');
+  return ensureStagedRegistrationIdentity(nationalId);
 };
 
 const ensureStagedRegistrationIdentity = async (nationalId: string) => {
@@ -318,7 +288,7 @@ export const api = {
       accessEndDate?: string;
     }
   ): Promise<User> => {
-    const authUser = await ensureRegistrationIdentity(nationalId, name, securePin);
+    const authUser = await ensureRegistrationIdentity(nationalId, securePin);
 
     if (!authUser) throw new Error('ไม่สามารถเชื่อมต่อระบบยืนยันตัวตนได้');
 
