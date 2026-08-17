@@ -16,6 +16,7 @@ import AsyncState from './AsyncState';
 import { useDialogFocus } from '../hooks/useDialogFocus';
 import { buildDirectoryFilterSummary } from '../services/directoryFilterSummary';
 import ImportPreviewDialog from './ImportPreviewDialog';
+import VendorImportReviewDialog, { VendorImportReviewItem } from './VendorImportReviewDialog';
 import {
   getImportSummary,
   prepareUserImportRows,
@@ -85,11 +86,9 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     vendor_count: number;
     vendors: Array<Pick<Vendor, 'id' | 'name' | 'status' | 'created_at'>>;
   }>>([]);
-  const [vendorImportReview, setVendorImportReview] = useState<Array<{
-    inputName: string;
-    reason: 'EXACT' | 'SIMILAR';
-    matches: string[];
-  }>>([]);
+  const [vendorImportReview, setVendorImportReview] = useState<VendorImportReviewItem[]>([]);
+  const [vendorImportReviewOpen, setVendorImportReviewOpen] = useState(false);
+  const [resolvingVendorImportId, setResolvingVendorImportId] = useState<string | null>(null);
 
   const userFileInputRef = useRef<HTMLInputElement>(null);
   const vendorFileInputRef = useRef<HTMLInputElement>(null);
@@ -497,7 +496,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     let successCount = 0;
     let duplicateCount = 0;
     let similarCount = 0;
-    const reviewItems: Array<{ inputName: string; reason: 'EXACT' | 'SIMILAR'; matches: string[] }> = [];
+    const reviewItems: VendorImportReviewItem[] = [];
     try {
       for (const row of pendingImport.rows) {
         if (row.issues.some((issue) => issue.level === 'error')) continue;
@@ -505,14 +504,21 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
         if (result.saved) successCount++;
         else if (result.reason === 'EXACT') {
           duplicateCount++;
-          reviewItems.push({ inputName: row.name, reason: 'EXACT', matches: result.vendor ? [result.vendor.name] : [] });
+          reviewItems.push({
+            id: `row-${row.rowNumber}`,
+            inputName: row.name,
+            reason: 'EXACT',
+            matches: result.vendor ? [{ ...result.vendor, match_type: 'EXACT', match_score: 1 }] : [],
+            resolution: { kind: 'EXACT_SKIPPED', vendorName: result.vendor?.name },
+          });
         } else {
           similarCount++;
-          reviewItems.push({ inputName: row.name, reason: 'SIMILAR', matches: result.matches.map((match) => match.name) });
+          reviewItems.push({ id: `row-${row.rowNumber}`, inputName: row.name, reason: 'SIMILAR', matches: result.matches });
         }
       }
       setPendingImport(null);
       setVendorImportReview(reviewItems);
+      setVendorImportReviewOpen(reviewItems.length > 0);
       if (successCount > 0) {
         showToast(`นำเข้าสำเร็จ ${successCount} บริษัท · ซ้ำ ${duplicateCount} · ชื่อคล้ายรอตรวจ ${similarCount}`, 'success');
         await Promise.all([loadData(), loadVendorDuplicateGroups()]);
@@ -524,6 +530,46 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
       showToast(error?.message || 'นำเข้าบริษัทไม่สำเร็จ กรุณาลองใหม่', 'error');
     } finally {
       setImportingVendors(false);
+    }
+  };
+
+  const handleUseExistingImportedVendor = (itemId: string, match: VendorNameMatch) => {
+    setVendorImportReview((items) => items.map((item) => item.id === itemId
+      ? { ...item, resolution: { kind: 'USED_EXISTING', vendorName: match.name } }
+      : item));
+    showToast(`ใช้บริษัทเดิม ${match.name} และไม่เพิ่มรายการใหม่`, 'success');
+  };
+
+  const handleCreateImportedVendor = async (itemId: string) => {
+    const item = vendorImportReview.find((candidate) => candidate.id === itemId);
+    if (!item || item.reason !== 'SIMILAR' || item.resolution) return;
+    setResolvingVendorImportId(itemId);
+    try {
+      const result = await api.adminSaveVendor({ name: item.inputName, status: VendorStatus.APPROVED, allowSimilar: true });
+      if (!result.saved) {
+        if (result.reason === 'EXACT' && result.vendor) {
+          setVendorImportReview((items) => items.map((candidate) => candidate.id === itemId
+            ? {
+              ...candidate,
+              reason: 'EXACT',
+              matches: [{ ...result.vendor!, match_type: 'EXACT', match_score: 1 }],
+              resolution: { kind: 'EXACT_SKIPPED', vendorName: result.vendor!.name },
+            }
+            : candidate));
+          showToast(`พบ ${result.vendor.name} ในระบบแล้ว จึงไม่ได้เพิ่มซ้ำ`, 'info');
+          return;
+        }
+        throw new Error('ระบบยังไม่สามารถยืนยันการเพิ่มบริษัทนี้ได้');
+      }
+      setVendorImportReview((items) => items.map((candidate) => candidate.id === itemId
+        ? { ...candidate, resolution: { kind: 'CREATED_NEW', vendorName: result.vendor?.name || item.inputName } }
+        : candidate));
+      showToast(`เพิ่มบริษัทใหม่ ${result.vendor?.name || item.inputName} แล้ว`, 'success');
+      await Promise.all([loadData(), loadVendorDuplicateGroups()]);
+    } catch (error: any) {
+      showToast(error?.message || 'เพิ่มบริษัทไม่สำเร็จ กรุณาลองใหม่', 'error');
+    } finally {
+      setResolvingVendorImportId(null);
     }
   };
 
@@ -900,19 +946,22 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
 
         {activeTab === 'VENDORS' && vendorImportReview.length > 0 && (
           <div role="status" className="mx-4 mt-3 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 md:mx-6">
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-start">
               <div>
                 <p className="text-[10px] font-black text-blue-800">รายการจากไฟล์ Import ที่ไม่ได้เพิ่ม {vendorImportReview.length} รายการ</p>
-                <p className="mt-1 text-[9px] font-bold text-blue-700">ตรวจชื่อเดิมหรือชื่อใกล้เคียงด้านล่าง แล้วแก้ไฟล์หรือเพิ่มผ่านปุ่ม New Entry</p>
+                <p className="mt-1 text-[9px] font-bold text-blue-700">รายการซ้ำถูกข้ามแล้ว · เปิดดูทั้งหมดเพื่อตัดสินใจรายการชื่อใกล้เคียง</p>
               </div>
-              <button type="button" onClick={() => setVendorImportReview([])} aria-label="ปิดผลตรวจ Import" className="min-h-11 min-w-11 shrink-0 rounded-xl bg-white p-3 text-blue-700"><X size={15} /></button>
+              <div className="flex shrink-0 items-center gap-2">
+                <button type="button" onClick={() => setVendorImportReviewOpen(true)} className="min-h-11 rounded-xl bg-blue-600 px-4 text-[9px] font-black text-white">ดูทั้งหมดและตัดสินใจ</button>
+                <button type="button" onClick={() => { setVendorImportReview([]); setVendorImportReviewOpen(false); }} aria-label="ปิดผลตรวจ Import" className="min-h-11 min-w-11 rounded-xl bg-white p-3 text-blue-700"><X size={15} /></button>
+              </div>
             </div>
             <ul className="mt-3 space-y-2">
               {vendorImportReview.slice(0, 5).map((item, index) => (
                 <li key={`${item.inputName}-${index}`} className="rounded-xl bg-white/90 px-3 py-2 text-[9px] font-bold text-slate-700">
                   <span className="font-black">{item.inputName}</span>
                   <span className="mx-2 text-blue-400">→</span>
-                  {item.reason === 'EXACT' ? 'ซ้ำกับ' : 'ใกล้เคียง'} {item.matches.join(', ') || 'รายการในระบบ'}
+                  {item.reason === 'EXACT' ? 'ซ้ำกับ' : 'ใกล้เคียง'} {item.matches.map((match) => match.name).join(', ') || 'รายการในระบบ'}
                 </li>
               ))}
             </ul>
@@ -1316,7 +1365,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                             <p className="truncate text-[10px] font-bold text-slate-800">{match.name}</p>
                             <p className="text-[8px] font-bold text-slate-500">{match.status} · ใกล้เคียง {Math.round(Number(match.match_score) * 100)}%</p>
                           </div>
-                          <button type="button" onClick={() => handleUseExistingVendor(match)} className="min-h-11 shrink-0 rounded-lg border border-slate-200 px-3 text-[8px] font-black text-slate-700">ดูรายการเดิม</button>
+                          <button type="button" onClick={() => handleUseExistingVendor(match)} className="min-h-11 shrink-0 rounded-lg border border-slate-200 px-3 text-[8px] font-black text-slate-700">ใช้บริษัทนี้ (ไม่สร้างใหม่)</button>
                         </div>
                       ))}
                     </div>
@@ -1358,6 +1407,17 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
           busy={pendingImport.kind === 'USERS' ? importingUsers : importingVendors}
           onCancel={() => setPendingImport(null)}
           onConfirm={confirmPendingImport}
+        />,
+        document.body,
+      )}
+
+      {vendorImportReviewOpen && vendorImportReview.length > 0 && typeof document !== 'undefined' && createPortal(
+        <VendorImportReviewDialog
+          items={vendorImportReview}
+          resolvingId={resolvingVendorImportId}
+          onClose={() => { if (!resolvingVendorImportId) setVendorImportReviewOpen(false); }}
+          onUseExisting={handleUseExistingImportedVendor}
+          onCreateNew={handleCreateImportedVendor}
         />,
         document.body,
       )}
