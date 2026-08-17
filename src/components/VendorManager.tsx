@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../services/supabaseClient';
 import { api } from '../services/supabaseApi';
-import { Vendor, VendorNameMatch, VendorStatus } from '../types';
+import { AuditLog, Vendor, VendorNameMatch, VendorStatus } from '../types';
 import { useToastContext } from './ToastProvider';
 import { downloadWorkbook } from '../services/excelExport';
 import { readFirstWorksheetRows } from '../services/excelImport';
@@ -17,6 +17,8 @@ import { useDialogFocus } from '../hooks/useDialogFocus';
 import { buildDirectoryFilterSummary } from '../services/directoryFilterSummary';
 import ImportPreviewDialog from './ImportPreviewDialog';
 import VendorImportReviewDialog, { VendorImportReviewItem } from './VendorImportReviewDialog';
+import UserRoleDialog from './UserRoleDialog';
+import { presentAuditLog } from '../services/auditPresentation';
 import {
   getImportSummary,
   prepareUserImportRows,
@@ -35,6 +37,15 @@ const normalizeVendorNameForComparison = (name: string) => name
   .toLocaleLowerCase()
   .replace(/[\s\p{P}\p{S}]+/gu, '');
 
+const auditToneClasses = {
+  blue: 'bg-blue-50 text-blue-700 border-blue-100',
+  emerald: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+  amber: 'bg-amber-50 text-amber-800 border-amber-100',
+  red: 'bg-red-50 text-red-700 border-red-100',
+  violet: 'bg-violet-50 text-violet-700 border-violet-100',
+  slate: 'bg-slate-100 text-slate-700 border-slate-200',
+};
+
 const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSearch }) => {
   const { showToast } = useToastContext();
   
@@ -45,6 +56,9 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
   const [resettingPinUserId, setResettingPinUserId] = useState<string | null>(null);
+  const [currentAdminId, setCurrentAdminId] = useState<string | null>(null);
+  const [roleDialogUser, setRoleDialogUser] = useState<any | null>(null);
+  const [savingUserRole, setSavingUserRole] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -101,6 +115,10 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     setCurrentPage(1);
     setSelectedIds(new Set());
   }, [activeTab, searchQuery, selectedVendorFilter, certFilter, itemsPerPage]);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setCurrentAdminId(data.user?.id || null));
+  }, []);
 
   const loadData = async (silent = false) => {
     if (!silent) {
@@ -649,6 +667,28 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     if (error) showToast(error.message, 'error'); else { showToast('Reset Complete', 'success'); loadData(); }
   };
 
+  const handleConfirmUserRole = async (role: 'ADMIN' | 'USER') => {
+    if (!roleDialogUser) return;
+    setSavingUserRole(true);
+    try {
+      const result = await api.adminSetUserRole(roleDialogUser.id, role);
+      showToast(result.changed
+        ? `เปลี่ยนสิทธิ์ ${roleDialogUser.name} เป็น ${role === 'ADMIN' ? 'ผู้ดูแลระบบ' : 'ผู้ใช้งานทั่วไป'} แล้ว`
+        : 'สิทธิ์ผู้ใช้งานไม่มีการเปลี่ยนแปลง', 'success');
+      setRoleDialogUser(null);
+      await loadData();
+    } catch (error: any) {
+      const messages: Record<string, string> = {
+        'You cannot change your own role': 'ไม่สามารถเปลี่ยนสิทธิ์บัญชีที่กำลังใช้งานอยู่ได้',
+        'The last active admin cannot be demoted': 'ไม่สามารถลดสิทธิ์แอดมินที่ Active คนสุดท้ายได้',
+        'Only active, fully registered users can become admins': 'เลื่อนเป็นแอดมินได้เฉพาะผู้ใช้ที่ลงทะเบียนสำเร็จและบัญชี Active แล้ว',
+      };
+      showToast(messages[error?.message] || error?.message || 'เปลี่ยนสิทธิ์ผู้ใช้ไม่สำเร็จ', 'error');
+    } finally {
+      setSavingUserRole(false);
+    }
+  };
+
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => {
       const n = new Set(prev);
@@ -822,7 +862,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
         <div className="flex w-full lg:w-auto bg-slate-100 p-1 rounded-2xl border border-slate-200 shadow-inner overflow-x-auto no-scrollbar">
           <TabButton active={activeTab === 'VENDORS'} onClick={() => {setActiveTab('VENDORS'); setCurrentPage(1); setSearchQuery(''); setSelectedVendorFilter(''); setCertFilter('');}} icon={<Building2 size={14}/>} label="Vendors" />
           <TabButton active={activeTab === 'USERS'} onClick={() => {setActiveTab('USERS'); setCurrentPage(1); setSearchQuery(''); setSelectedVendorFilter(''); setCertFilter('');}} icon={<Users size={14}/>} label="Personnel" />
-          <TabButton active={activeTab === 'LOGS'} onClick={() => {setActiveTab('LOGS'); setCurrentPage(1); setSearchQuery(''); setSelectedVendorFilter(''); setCertFilter('');}} icon={<History size={14}/>} label="Audit" />
+          <TabButton active={activeTab === 'LOGS'} onClick={() => {setActiveTab('LOGS'); setCurrentPage(1); setSearchQuery(''); setSelectedVendorFilter(''); setCertFilter('');}} icon={<History size={14}/>} label="ประวัติ" />
         </div>
       </div>
 
@@ -892,7 +932,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                 </div>
               )}
             </div>
-          ) : <div className="text-slate-400 font-black text-[10px] uppercase px-2 flex items-center gap-2 w-full"><ShieldCheck size={14} /> System Access History</div>}
+          ) : <div className="w-full px-2 text-[10px] font-black text-slate-500 flex items-center gap-2"><ShieldCheck size={14} /> ประวัติการจัดการระบบ</div>}
           
           <div className="flex flex-wrap gap-2 w-full md:w-auto md:ml-auto">
             {activeTab !== 'LOGS' && (
@@ -1019,21 +1059,44 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                           />
                         </th>
                       )}
-                      <th className="px-8 py-5 text-left whitespace-nowrap">Profile / Identity</th>
-                      <th className="px-8 py-5 text-left whitespace-nowrap">Compliance / Status</th>
-                      <th className="px-8 py-5 text-center whitespace-nowrap">Protocol Actions</th>
+                      {activeTab === 'LOGS' ? (
+                        <>
+                          <th className="px-8 py-5 text-left whitespace-nowrap">วันและเวลา</th>
+                          <th className="px-8 py-5 text-left whitespace-nowrap">ผู้ดำเนินการ</th>
+                          <th className="px-8 py-5 text-left whitespace-nowrap">กิจกรรม</th>
+                          <th className="px-8 py-5 text-left whitespace-nowrap">รายการที่เกี่ยวข้อง</th>
+                        </>
+                      ) : (
+                        <>
+                          <th className="px-8 py-5 text-left whitespace-nowrap">Profile / Identity</th>
+                          <th className="px-8 py-5 text-left whitespace-nowrap">Compliance / Status</th>
+                          <th className="px-8 py-5 text-center whitespace-nowrap">Protocol Actions</th>
+                        </>
+                      )}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50 bg-white">
                     {activeTab === 'LOGS' ? (
-                      paginatedData.map((log: any) => (
-                        <tr key={log.id} className="hover:bg-slate-50/30 transition-colors">
-                          <td className="px-8 py-5 text-[11px] font-black text-slate-500 font-mono tracking-tighter whitespace-nowrap">{new Date(log.created_at).toLocaleString('th-TH')}</td>
-                          <td className="px-8 py-5 text-xs font-bold text-slate-700">{log.admin_email}</td>
-                          <td className="px-8 py-5 text-xs font-black text-slate-600 uppercase whitespace-nowrap">{log.action}</td>
-                          <td className="px-8 py-5 text-xs text-slate-600 font-bold uppercase">{log.target}</td>
-                        </tr>
-                      ))
+                      paginatedData.map((log: AuditLog) => {
+                        const audit = presentAuditLog(log);
+                        return (
+                          <tr key={log.id} className="align-top transition-colors hover:bg-slate-50/50">
+                            <td className="px-8 py-5 text-[11px] font-bold text-slate-500 whitespace-nowrap">{new Date(log.created_at).toLocaleString('th-TH')}</td>
+                            <td className="px-8 py-5 text-xs font-bold text-slate-700 break-all">{audit.actorLabel}</td>
+                            <td className="px-8 py-5">
+                              <span className={`inline-flex rounded-full border px-2.5 py-1 text-[9px] font-black ${auditToneClasses[audit.tone]}`}>{audit.actionLabel}</span>
+                              <p className="mt-2 max-w-sm text-[10px] font-bold leading-relaxed text-slate-600">{audit.summary}</p>
+                            </td>
+                            <td className="px-8 py-5">
+                              <p className="text-xs font-black text-slate-700">{audit.targetLabel}</p>
+                              <details className="mt-2 text-[9px] font-bold text-slate-400">
+                                <summary className="cursor-pointer select-none hover:text-blue-600">รายละเอียดทางเทคนิค</summary>
+                                <p className="mt-1 max-w-xs break-all font-mono font-medium">{audit.technicalReference}</p>
+                              </details>
+                            </td>
+                          </tr>
+                        );
+                      })
                     ) : (
                       paginatedData.map(item => {
                         const itemCs = activeTab === 'USERS' ? getCertStatus(item) : '';
@@ -1065,6 +1128,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                                  <div className="font-black text-slate-800 uppercase text-xs truncate max-w-[200px] flex items-center gap-2">
                                     {item.name}
                                     {item.is_active === false && <span className="bg-red-500 text-white px-1.5 py-0.5 rounded text-[8px] tracking-widest shrink-0">BANNED</span>}
+                                    {activeTab === 'USERS' && item.role === 'ADMIN' && <span className="bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded text-[8px] tracking-widest shrink-0">ADMIN</span>}
                                  </div>
                                  {activeTab === 'USERS' && (
                                     <div className="flex items-center gap-2">
@@ -1124,6 +1188,14 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                               <button onClick={() => activeTab === 'VENDORS' ? handleEditVendor(item as Vendor) : handleEditUser(item)} aria-label={`แก้ไข ${item.name}`} className="p-2.5 rounded-xl border border-slate-100 text-slate-600 hover:text-blue-700 hover:bg-blue-50 active:scale-90 transition-all shadow-sm"><Edit3 size={16} /></button>
                               {activeTab === 'USERS' && (
                                 <>
+                                  <button
+                                    onClick={() => setRoleDialogUser(item)}
+                                    aria-label={`กำหนดสิทธิ์ของ ${item.name}`}
+                                    title="กำหนดสิทธิ์ Admin / User"
+                                    className="p-2.5 rounded-xl border border-violet-100 text-violet-600 hover:bg-violet-50 transition-all active:scale-90 shadow-sm"
+                                  >
+                                    <ShieldCheck size={16} />
+                                  </button>
                                   {item.role === 'USER' && item.is_active !== false && (
                                     <button
                                       onClick={() => handleResetUserPin(item.id, item.name)}
@@ -1159,22 +1231,20 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
               {/* 📱 MOBILE VIEW (CARDS) */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 xl:hidden flex-1 pb-4 pt-3">
                  {activeTab === 'LOGS' ? (
-                    paginatedData.map((log: any) => (
-                      <div key={log.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-                         <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-                            <span className="text-[10px] font-mono text-slate-400">{new Date(log.created_at).toLocaleString('th-TH')}</span>
-                            <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-lg uppercase">{log.action}</span>
-                         </div>
-                         <div>
-                            <p className="text-[9px] font-black text-slate-400 uppercase">Admin</p>
-                            <p className="text-xs font-bold text-slate-700 truncate">{log.admin_email}</p>
-                         </div>
-                         <div>
-                            <p className="text-[9px] font-black text-slate-400 uppercase">Target</p>
-                            <p className="text-xs font-bold text-slate-700 truncate">{log.target}</p>
-                         </div>
-                      </div>
-                    ))
+                    paginatedData.map((log: AuditLog) => {
+                      const audit = presentAuditLog(log);
+                      return (
+                        <div key={log.id} className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                            <span className="text-[10px] font-bold text-slate-400">{new Date(log.created_at).toLocaleString('th-TH')}</span>
+                            <span className={`rounded-full border px-2.5 py-1 text-[9px] font-black ${auditToneClasses[audit.tone]}`}>{audit.actionLabel}</span>
+                          </div>
+                          <div><p className="text-[9px] font-black text-slate-400">ผู้ดำเนินการ</p><p className="mt-1 break-all text-xs font-bold text-slate-700">{audit.actorLabel}</p></div>
+                          <div><p className="text-[9px] font-black text-slate-400">รายการที่เกี่ยวข้อง</p><p className="mt-1 text-xs font-black text-slate-700">{audit.targetLabel}</p><p className="mt-1 text-[10px] font-bold leading-relaxed text-slate-500">{audit.summary}</p></div>
+                          <details className="rounded-xl bg-slate-50 p-3 text-[9px] font-bold text-slate-400"><summary className="cursor-pointer select-none">รายละเอียดทางเทคนิค</summary><p className="mt-2 break-all font-mono font-medium">{audit.technicalReference}</p></details>
+                        </div>
+                      );
+                    })
                  ) : (
                     paginatedData.map((item: any) => {
                       const cardCs = activeTab === 'USERS' ? getCertStatus(item) : '';
@@ -1195,6 +1265,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                                <div className="flex items-center gap-2">
                                  <h4 className="font-black text-slate-800 uppercase text-sm truncate">{item.name}</h4>
                                  {item.is_active === false && <span className="bg-red-500 text-white px-1.5 py-0.5 rounded text-[8px] tracking-widest shrink-0">BANNED</span>}
+                                 {activeTab === 'USERS' && item.role === 'ADMIN' && <span className="bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded text-[8px] tracking-widest shrink-0">ADMIN</span>}
                                </div>
                                {activeTab === 'USERS' && (
                                    <div className="flex items-center justify-between mt-1">
@@ -1267,6 +1338,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                             <button onClick={() => activeTab === 'VENDORS' ? handleEditVendor(item as Vendor) : handleEditUser(item)} aria-label={`แก้ไข ${item.name}`} className="min-h-11 min-w-11 p-2.5 rounded-xl border border-slate-200 text-slate-500 bg-white active:scale-90 transition-all"><Edit3 size={14} /></button>
                             {activeTab === 'USERS' && (
                               <>
+                                <button onClick={() => setRoleDialogUser(item)} aria-label={`กำหนดสิทธิ์ของ ${item.name}`} className="min-h-11 min-w-11 p-2.5 rounded-xl border border-violet-200 text-violet-600 bg-violet-50 active:scale-90 transition-all"><ShieldCheck size={14} /></button>
                                 {item.role === 'USER' && item.is_active !== false && (
                                   <button
                                     onClick={() => handleResetUserPin(item.id, item.name)}
@@ -1418,6 +1490,17 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
           onClose={() => { if (!resolvingVendorImportId) setVendorImportReviewOpen(false); }}
           onUseExisting={handleUseExistingImportedVendor}
           onCreateNew={handleCreateImportedVendor}
+        />,
+        document.body,
+      )}
+
+      {roleDialogUser && typeof document !== 'undefined' && createPortal(
+        <UserRoleDialog
+          user={roleDialogUser}
+          isCurrentAdmin={roleDialogUser.id === currentAdminId}
+          busy={savingUserRole}
+          onClose={() => { if (!savingUserRole) setRoleDialogUser(null); }}
+          onConfirm={handleConfirmUserRole}
         />,
         document.body,
       )}

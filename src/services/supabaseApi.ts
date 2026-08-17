@@ -416,6 +416,20 @@ export const api = {
     return data as { archived: boolean; history_preserved: boolean; already_inactive: boolean };
   },
 
+  adminSetUserRole: async (id: string, role: 'ADMIN' | 'USER') => {
+    const { data, error } = await supabase.rpc('admin_set_user_role', {
+      user_id_param: id,
+      role_param: role,
+    });
+    if (error) throw error;
+    return data as {
+      changed: boolean;
+      user_id: string;
+      previous_role?: 'ADMIN' | 'USER';
+      role: 'ADMIN' | 'USER';
+    };
+  },
+
   adminResetUserPin: async (id: string): Promise<{ expiresAt: string }> => {
     const { data: sessionData } = await supabase.auth.getSession();
     const accessToken = sessionData.session?.access_token;
