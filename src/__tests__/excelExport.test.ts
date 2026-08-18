@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createSupplierOutsourceWorkbook } from '../services/excelExport';
 
 describe('Supplier & Outsource Excel export', () => {
-  it('matches the original workbook cell types and formats', async () => {
+  it('exports date cells in DD/MM/YYYY format', async () => {
     const workbook = await createSupplierOutsourceWorkbook([{
       company: 'Supplier Company',
       name: 'Supplier User',
@@ -19,8 +19,8 @@ describe('Supplier & Outsource Excel export', () => {
     expect(worksheet!.getCell('F3').numFmt).toBe('0');
     expect(worksheet!.getCell('G3').value).toBeInstanceOf(Date);
     expect(worksheet!.getCell('H3').value).toBeInstanceOf(Date);
-    expect(worksheet!.getCell('G3').numFmt).toBe('mm-dd-yy');
-    expect(worksheet!.getCell('H3').numFmt).toBe('mm-dd-yy');
+    expect(worksheet!.getCell('G3').numFmt).toBe('dd/mm/yyyy');
+    expect(worksheet!.getCell('H3').numFmt).toBe('dd/mm/yyyy');
     expect(worksheet!.getCell('A1').alignment).toEqual({ horizontal: 'center' });
     expect(worksheet!.getRow(2).font).toMatchObject({ name: 'Calibri', size: 11, bold: true });
   }, 15_000);

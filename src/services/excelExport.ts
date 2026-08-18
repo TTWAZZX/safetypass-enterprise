@@ -92,8 +92,8 @@ export async function createSupplierOutsourceWorkbook(rows: SupplierOutsourceExc
     ]);
     excelRow.getCell(1).numFmt = '0';
     excelRow.getCell(6).numFmt = '0';
-    excelRow.getCell(7).numFmt = 'mm-dd-yy';
-    excelRow.getCell(8).numFmt = 'mm-dd-yy';
+    excelRow.getCell(7).numFmt = 'dd/mm/yyyy';
+    excelRow.getCell(8).numFmt = 'dd/mm/yyyy';
   });
   [6, 54, 54, 12.15, 12.15, 17.55, 13.5, 20.25].forEach((width, index) => {
     worksheet.getColumn(index + 1).width = width;
