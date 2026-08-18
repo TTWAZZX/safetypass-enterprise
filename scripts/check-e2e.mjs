@@ -616,6 +616,7 @@ async function submitStagedRegistration(page) {
   await page.locator('#pdpa').check();
   const registerButton = page.getByRole('button', { name: 'Register Account', exact: true });
   await registerButton.waitFor();
+  await page.getByText('ข้อมูลครบถ้วน พร้อมลงทะเบียนบัญชี', { exact: true }).waitFor();
   if (!(await registerButton.isEnabled())) throw new Error('Completed staged registration form did not enable');
   await registerButton.click();
 }
@@ -694,6 +695,9 @@ try {
   await userPage.getByRole('heading', { name: 'Create Account', exact: false }).waitFor();
   await registrationIdInput.fill('');
   const registrationVendorSelect = userPage.locator('select[required]').filter({ has: userPage.locator('option[value="OTHER"]') });
+  const registrationVendorSearch = userPage.getByLabel('ค้นหาชื่อบริษัท');
+  await registrationVendorSearch.fill('บริษัท');
+  await userPage.getByText('พิมพ์ค้นหาแล้ว กรุณาเลือกบริษัทจากรายการด้านบนอีกครั้ง', { exact: true }).waitFor();
   await registrationVendorSelect.selectOption('OTHER');
   await userPage.locator('input[autocomplete="organization"]').fill('บริษัททดสอบ');
   await userPage.getByText('พบบริษัทนี้ในระบบแล้ว', { exact: true }).waitFor();

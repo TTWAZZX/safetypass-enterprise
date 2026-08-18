@@ -26,21 +26,26 @@ export const isValidRegistrationAge = (
   return Number.isInteger(numericAge) && numericAge >= 1 && numericAge <= 120;
 };
 
-export const getRegistrationDisabledReason = (input: RegistrationProgressInput): string | null => {
-  if (input.loading) return 'กำลังสร้างบัญชี กรุณารอสักครู่';
-  if (input.regId.length !== 13) return 'กรอกเลขบัตรประจำตัวให้ครบ 13 หลัก';
-  if (!input.name.trim()) return 'กรอกชื่อและนามสกุล';
-  if (!isValidRegistrationAge(input.age)) return 'กรอกอายุเป็นจำนวนเต็มระหว่าง 1–120 ปี';
-  if (!input.nationality.trim()) return 'ระบุสัญชาติ';
+export const getRegistrationDisabledReasons = (input: RegistrationProgressInput): string[] => {
+  const reasons: string[] = [];
+  if (input.loading) reasons.push('กำลังสร้างบัญชี กรุณารอสักครู่');
+  if (input.regId.length !== 13) reasons.push('กรอกเลขบัตรประจำตัวให้ครบ 13 หลัก');
+  if (!input.name.trim()) reasons.push('กรอกชื่อและนามสกุล');
+  if (!isValidRegistrationAge(input.age)) reasons.push('กรอกอายุเป็นจำนวนเต็มระหว่าง 1–120 ปี');
+  if (!input.nationality.trim()) reasons.push('ระบุสัญชาติ');
+  if (!input.vendorId) reasons.push('ค้นหาแล้วเลือกบริษัทจากรายการด้านล่าง');
+  if (input.vendorId === 'OTHER' && !input.otherVendor.trim()) reasons.push('ระบุชื่อบริษัทใหม่');
+  if (input.supplierOutsourceEnabled && input.selectedPrograms.length === 0) reasons.push('เลือกหลักสูตรอย่างน้อย 1 รายการ');
+  if (input.accessStartDate && input.accessEndDate && input.accessEndDate < input.accessStartDate) reasons.push('วันที่สิ้นสุดต้องไม่น้อยกว่าวันที่เริ่มต้น');
   const pinError = getSecurePinError(input.regId, input.securePin);
-  if (pinError) return pinError;
-  if (input.securePin !== input.securePinConfirmation) return 'PIN ใหม่และการยืนยัน PIN ไม่ตรงกัน';
-  if (!input.vendorId) return 'เลือกบริษัทก่อน';
-  if (input.vendorId === 'OTHER' && !input.otherVendor.trim()) return 'ระบุชื่อบริษัทใหม่';
-  if (input.supplierOutsourceEnabled && input.selectedPrograms.length === 0) return 'เลือกหลักสูตรอย่างน้อย 1 รายการ';
-  if (input.accessStartDate && input.accessEndDate && input.accessEndDate < input.accessStartDate) return 'วันที่สิ้นสุดต้องไม่น้อยกว่าวันที่เริ่มต้น';
-  if (!input.pdpaAccepted) return 'ยอมรับนโยบายความเป็นส่วนตัวก่อนลงทะเบียน';
-  return null;
+  if (pinError) reasons.push(pinError);
+  else if (input.securePin !== input.securePinConfirmation) reasons.push('PIN ใหม่และการยืนยัน PIN ไม่ตรงกัน');
+  if (!input.pdpaAccepted) reasons.push('ยอมรับนโยบายความเป็นส่วนตัวก่อนลงทะเบียน');
+  return reasons;
+};
+
+export const getRegistrationDisabledReason = (input: RegistrationProgressInput): string | null => {
+  return getRegistrationDisabledReasons(input)[0] || null;
 };
 
 export const getRegistrationStepIndex = (input: Omit<RegistrationProgressInput, 'loading' | 'pdpaAccepted'>): number => {

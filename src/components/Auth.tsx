@@ -14,7 +14,8 @@ import PrivacyPolicyModal from './PrivacyPolicyModal';
 import { addOneYearIsoDate } from '../utils/accessDates';
 import ProgressSteps from './ProgressSteps';
 import {
-  getRegistrationDisabledReason, getRegistrationStepIndex, isValidRegistrationAge,
+  getRegistrationDisabledReason, getRegistrationDisabledReasons,
+  getRegistrationStepIndex, isValidRegistrationAge,
 } from '../services/registrationProgress';
 import {
   RegistrationAccountState, StagedRegistrationProfile,
@@ -131,7 +132,14 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       ? 'ชื่อบริษัทนี้ไม่พร้อมใช้งาน กรุณาติดต่อแอดมิน'
       : '';
   const registrationDisabledReason = vendorDuplicateDisabledReason || getRegistrationDisabledReason(registrationState);
+  const registrationDisabledReasons = vendorDuplicateDisabledReason
+    ? [vendorDuplicateDisabledReason]
+    : getRegistrationDisabledReasons(registrationState);
   const registrationStep = getRegistrationStepIndex(registrationState);
+  const selectedVendorName = vendorId && vendorId !== 'OTHER'
+    ? (vendors.find((vendor) => vendor.id === vendorId)?.name
+      || (stagedProfile?.vendor_id === vendorId ? stagedProfile.vendor?.name : ''))
+    : '';
 
   const loadRegistrationVendors = async () => {
     setVendorsLoading(true);
@@ -690,13 +698,29 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                   type="search"
                   disabled={stagedVendorIsUsable}
                   value={vendorSearch}
-                  onChange={(e) => setVendorSearch(e.target.value)}
+                  onChange={(e) => {
+                    const nextSearch = e.target.value;
+                    setVendorSearch(nextSearch);
+                    if (!stagedVendorIsUsable && vendorId && vendorId !== 'OTHER'
+                        && nextSearch.trim().toLocaleLowerCase() !== selectedVendorName.trim().toLocaleLowerCase()) {
+                      setVendorId('');
+                    }
+                  }}
                   className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs shadow-inner"
                   placeholder="ค้นหาชื่อบริษัท"
                   aria-label="ค้นหาชื่อบริษัท"
                 />
               </div>
-              <select id="registration-vendor" required disabled={stagedVendorIsUsable} value={vendorId} onChange={e => setVendorId(e.target.value)} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs appearance-none cursor-pointer shadow-inner disabled:text-slate-500 disabled:cursor-not-allowed">
+              <select id="registration-vendor" required disabled={stagedVendorIsUsable} value={vendorId} onChange={(event) => {
+                const nextVendorId = event.target.value;
+                setVendorId(nextVendorId);
+                if (nextVendorId === 'OTHER') setVendorSearch('');
+                else if (nextVendorId) {
+                  const nextVendor = vendors.find((vendor) => vendor.id === nextVendorId)
+                    || (stagedProfile?.vendor_id === nextVendorId ? stagedProfile.vendor : null);
+                  if (nextVendor?.name) setVendorSearch(nextVendor.name);
+                }
+              }} className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-bold text-base md:text-xs appearance-none cursor-pointer shadow-inner disabled:text-slate-500 disabled:cursor-not-allowed">
                 <option value="">{vendorsLoading ? 'กำลังโหลดรายชื่อบริษัท...' : '-- Select Company --'}</option>
                 {stagedProfile?.vendor && !filteredVendors.some((vendor) => vendor.id === stagedProfile.vendor?.id) && (
                   <option value={stagedProfile.vendor.id}>{stagedProfile.vendor.name}</option>
@@ -715,6 +739,15 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               {!vendorsLoading && !vendorsError && vendorSearch.trim() && filteredVendors.length === 0 && (
                 <p className="px-1 text-[9px] font-bold text-amber-600">ไม่พบบริษัทที่ตรงกับคำค้นหา สามารถเลือก Other เพื่อระบุบริษัทใหม่ได้</p>
               )}
+              {selectedVendorName ? (
+                <p className="flex items-center gap-1.5 px-1 text-[9px] font-bold text-emerald-700" role="status">
+                  <CheckCircle size={12} aria-hidden="true" /> เลือกบริษัทแล้ว: {selectedVendorName}
+                </p>
+              ) : vendorSearch.trim() ? (
+                <p className="flex items-center gap-1.5 px-1 text-[9px] font-bold text-amber-700" role="status">
+                  <AlertCircle size={12} aria-hidden="true" /> พิมพ์ค้นหาแล้ว กรุณาเลือกบริษัทจากรายการด้านบนอีกครั้ง
+                </p>
+              ) : null}
             </div>
             
             {vendorId === 'OTHER' && (
@@ -899,18 +932,26 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               </label>
             </div>
 
+            {registrationDisabledReasons.length > 0 ? (
+              <div id="registration-readiness" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-800" role="status" aria-live="polite">
+                <p className="text-[10px] font-black">ยังลงทะเบียนไม่ได้ กรุณาตรวจสอบ:</p>
+                <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[9px] font-bold">
+                  {registrationDisabledReasons.map((reason) => <li key={reason}>{reason}</li>)}
+                </ul>
+              </div>
+            ) : (
+              <div id="registration-readiness" className="flex items-center justify-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-[10px] font-black text-emerald-700" role="status" aria-live="polite">
+                <CheckCircle size={14} aria-hidden="true" /> ข้อมูลครบถ้วน พร้อมลงทะเบียนบัญชี
+              </div>
+            )}
+
             <button 
                 disabled={Boolean(registrationDisabledReason)}
-                aria-describedby={registrationDisabledReason ? 'registration-disabled-reason' : undefined}
+                aria-describedby="registration-readiness"
                 className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-black py-4 rounded-2xl shadow-lg shadow-blue-100 transition-all flex items-center justify-center gap-2 mt-4 active:scale-95 text-xs uppercase tracking-widest"
             >
               {loading ? <Loader2 size={18} className="animate-spin" /> : <>Register Account</>}
             </button>
-            {registrationDisabledReason && (
-              <p id="registration-disabled-reason" className="flex items-center justify-center gap-1.5 text-center text-[9px] font-bold text-amber-700" role="status">
-                <AlertCircle size={12} aria-hidden="true" /> {registrationDisabledReason}
-              </p>
-            )}
           </form>
         )}
 

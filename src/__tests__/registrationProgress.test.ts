@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  getRegistrationDisabledReason, getRegistrationStepIndex, isValidRegistrationAge,
+  getRegistrationDisabledReason, getRegistrationDisabledReasons,
+  getRegistrationStepIndex, isValidRegistrationAge,
 } from '../services/registrationProgress';
 
 const complete = {
@@ -28,12 +29,29 @@ describe('registration progress', () => {
   });
 
   it('explains why registration is disabled', () => {
-    expect(getRegistrationDisabledReason({ ...complete, vendorId: '' })).toBe('เลือกบริษัทก่อน');
+    expect(getRegistrationDisabledReason({ ...complete, vendorId: '' })).toContain('เลือกบริษัท');
     expect(getRegistrationDisabledReason({ ...complete, pdpaAccepted: false })).toContain('นโยบายความเป็นส่วนตัว');
     expect(getRegistrationDisabledReason({ ...complete, selectedPrograms: [] })).toContain('หลักสูตร');
     expect(getRegistrationDisabledReason({ ...complete, securePin: '123456' })).toContain('PIN');
     expect(getRegistrationDisabledReason({ ...complete, securePinConfirmation: '135790' })).toContain('PIN');
     expect(getRegistrationDisabledReason(complete)).toBeNull();
+  });
+
+  it('shows every remaining requirement instead of hiding all but the first one', () => {
+    const reasons = getRegistrationDisabledReasons({
+      ...complete,
+      vendorId: '',
+      selectedPrograms: [],
+      securePin: '123',
+      securePinConfirmation: '',
+      pdpaAccepted: false,
+    });
+
+    expect(reasons).toHaveLength(4);
+    expect(reasons.join(' ')).toContain('เลือกบริษัท');
+    expect(reasons.join(' ')).toContain('หลักสูตร');
+    expect(reasons.join(' ')).toContain('PIN');
+    expect(reasons.join(' ')).toContain('นโยบายความเป็นส่วนตัว');
   });
 
   it.each(['', '0', '-1', '25.5', '121', 'not-a-number'])(
