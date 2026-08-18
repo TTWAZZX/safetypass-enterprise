@@ -58,7 +58,7 @@ export const getUserReadiness = ({
   supplierNearExpiry = false,
 }: {
   isActive: boolean;
-  programs: TrainingProgram[];
+  programs: readonly TrainingProgram[];
   hasInduction: boolean;
   hasActivePermit: boolean;
   contractorNearExpiry?: boolean;

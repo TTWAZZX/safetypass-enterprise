@@ -146,6 +146,7 @@ export interface WorkPermitSession {
 // ✅ เพิ่ม Audit Log Type สำหรับหน้า VendorManager
 export interface AuditLog {
   id: string;
+  actor_user_id?: string | null;
   admin_email: string;
   action: string;
   target: string;
@@ -174,6 +175,77 @@ export interface TrainingAccess {
   access_end_date?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface AdminUser360Profile {
+  id: string;
+  masked_national_id: string;
+  name: string;
+  age: number | null;
+  date_of_birth: string | null;
+  nationality: string | null;
+  vendor_id: string | null;
+  vendor: Pick<Vendor, 'id' | 'name' | 'status'> | null;
+  role: 'ADMIN' | 'USER' | string;
+  is_active: boolean;
+  pdpa_agreed: boolean;
+  induction_expiry: string | null;
+  avatar_url: string | null;
+  line_connected: boolean;
+  created_at: string;
+  last_login: string | null;
+}
+
+export interface AdminUser360Exam {
+  id: string;
+  exam_type: ExamType;
+  score: number;
+  total_questions: number;
+  status: 'PASSED' | 'FAILED';
+  created_at: string;
+}
+
+export interface AdminUser360SupplierPass {
+  id: string;
+  issued_at: string;
+  expires_at: string;
+  status: 'ACTIVE' | 'REVOKED';
+  created_at: string;
+}
+
+export interface AdminUser360AuthSecurity {
+  pin_version: number;
+  failed_attempts: number;
+  locked_until: string | null;
+  pin_changed_at: string | null;
+  pin_reset_state: 'NONE' | 'PENDING' | 'ACTIVE' | null;
+  pin_reset_expires_at: string | null;
+}
+
+export interface AdminUser360 {
+  profile: AdminUser360Profile;
+  programs: Array<Omit<TrainingAccess, 'user_id'>>;
+  recent_exams: AdminUser360Exam[];
+  recent_work_permits: Array<Omit<WorkPermitSession, 'user_id'>>;
+  supplier_passes: AdminUser360SupplierPass[];
+  auth_security: AdminUser360AuthSecurity | null;
+  recent_audit: AuditLog[];
+}
+
+export interface AdminUser360UpdateInput {
+  userId: string;
+  name: string;
+  age: number | null;
+  dateOfBirth: string | null;
+  nationality: string;
+  vendorId: string | null;
+  inductionExpiry: string | null;
+  programs: TrainingProgram[];
+  participantType?: SupplierOutsourceType | null;
+  workType?: SupplierOutsourceWorkType | null;
+  accessStartDate?: string | null;
+  accessEndDate?: string | null;
+  reason: string;
 }
 
 export interface SupplierOutsourceStatus {

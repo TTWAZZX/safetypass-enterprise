@@ -4,7 +4,7 @@ import { join, extname } from 'node:path';
 const textExtensions = new Set([
   '.css', '.html', '.js', '.json', '.md', '.mjs', '.prisma', '.sql', '.ts', '.tsx', '.txt', '.yaml', '.yml',
 ]);
-const ignoredDirectories = new Set(['.git', 'dist', 'node_modules']);
+const ignoredDirectories = new Set(['.git', '.vercel', 'dist', 'node_modules']);
 const violations = [];
 const mojibakePattern = new RegExp([
   '\\u00C3.',

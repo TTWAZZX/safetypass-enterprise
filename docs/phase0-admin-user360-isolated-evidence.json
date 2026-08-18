@@ -1,0 +1,49 @@
+{
+  "createdAt": "2026-08-18T09:59:48.9210471+07:00",
+  "status": "PASS_ISOLATED_SQL_ROLLED_BACK",
+  "target": {
+    "container": "safetypass-phase5-dr-uat-20260805",
+    "database": "postgres",
+    "postgresVersion": "17.6",
+    "localOnly": true
+  },
+  "baselineContainerChanged": false,
+  "productionChanged": false,
+  "deploymentTriggered": false,
+  "migration": {
+    "file": "supabase/migrations/20260818103000_admin_training_access_guards.sql",
+    "syntaxAndApply": "PASS_ISOLATED_UAT_ONLY"
+  },
+  "regression": {
+    "file": "supabase/tests/admin_training_access_guards_test.sql",
+    "result": "PASS_ROLLED_BACK",
+    "lastProgramGuard": true,
+    "dualProgramTransition": true,
+    "activeWorkPermitGuard": true,
+    "workPermitHistoryPreserved": true,
+    "deferredDirectSqlGuard": true,
+    "activationGuard": true
+  },
+  "rowCountsBefore": {
+    "users": 446,
+    "trainingAccess": 447,
+    "examHistory": 1009,
+    "workPermits": 361,
+    "supplierPasses": 1,
+    "auditLogs": 204
+  },
+  "rowCountsAfter": {
+    "users": 446,
+    "trainingAccess": 447,
+    "examHistory": 1009,
+    "workPermits": 361,
+    "supplierPasses": 1,
+    "auditLogs": 204,
+    "testUsersRemaining": 0
+  },
+  "notes": [
+    "The forward-only migration remains installed only in the disposable isolated UAT container.",
+    "All regression fixtures and mutations were wrapped in a transaction and rolled back.",
+    "The separate baseline container was not modified."
+  ]
+}

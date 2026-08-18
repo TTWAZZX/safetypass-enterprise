@@ -2,7 +2,16 @@ import React, { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../services/supabaseClient';
 import { api } from '../services/supabaseApi';
-import { AuditLog, Vendor, VendorNameMatch, VendorStatus } from '../types';
+import {
+  AdminUser360,
+  AuditLog,
+  SupplierOutsourceType,
+  SupplierOutsourceWorkType,
+  TrainingProgram,
+  Vendor,
+  VendorNameMatch,
+  VendorStatus,
+} from '../types';
 import { useToastContext } from './ToastProvider';
 import { downloadWorkbook } from '../services/excelExport';
 import { readFirstWorksheetRows } from '../services/excelImport';
@@ -18,6 +27,7 @@ import { buildDirectoryFilterSummary } from '../services/directoryFilterSummary'
 import ImportPreviewDialog from './ImportPreviewDialog';
 import VendorImportReviewDialog, { VendorImportReviewItem } from './VendorImportReviewDialog';
 import UserRoleDialog from './UserRoleDialog';
+import AdminIdentityControls from './AdminIdentityControls';
 import { presentAuditLog } from '../services/auditPresentation';
 import {
   getImportSummary,
@@ -45,6 +55,36 @@ const auditToneClasses = {
   violet: 'bg-violet-50 text-violet-700 border-violet-100',
   slate: 'bg-slate-100 text-slate-700 border-slate-200',
 };
+
+type UserEditForm = {
+  name: string;
+  age: string;
+  date_of_birth: string;
+  nationality: string;
+  induction_expiry: string;
+  vendor_id: string;
+  programs: TrainingProgram[];
+  participant_type: SupplierOutsourceType;
+  work_type: SupplierOutsourceWorkType;
+  access_start_date: string;
+  access_end_date: string;
+  reason: string;
+};
+
+const emptyUserEditForm = (): UserEditForm => ({
+  name: '',
+  age: '',
+  date_of_birth: '',
+  nationality: '',
+  induction_expiry: '',
+  vendor_id: '',
+  programs: [],
+  participant_type: 'supplier',
+  work_type: 'Driver',
+  access_start_date: '',
+  access_end_date: '',
+  reason: '',
+});
 
 const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSearch }) => {
   const { showToast } = useToastContext();
@@ -81,9 +121,12 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
   
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
-  const [editForm, setEditForm] = useState({ 
-    name: '', age: '', nationality: '', induction_expiry: '', vendor_id: '' 
-  });
+  const [editForm, setEditForm] = useState<UserEditForm>(emptyUserEditForm);
+  const [user360Enabled, setUser360Enabled] = useState(false);
+  const [user360FlagReady, setUser360FlagReady] = useState(false);
+  const [user360, setUser360] = useState<AdminUser360 | null>(null);
+  const [user360Loading, setUser360Loading] = useState(false);
+  const [user360Error, setUser360Error] = useState('');
   const [isOtherNationality, setIsOtherNationality] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [vendorDialogOpen, setVendorDialogOpen] = useState(false);
@@ -107,6 +150,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
   const userFileInputRef = useRef<HTMLInputElement>(null);
   const vendorFileInputRef = useRef<HTMLInputElement>(null);
   const editDialogRef = useRef<HTMLDivElement>(null);
+  const editRequestRef = useRef(0);
   const vendorDialogRef = useRef<HTMLDivElement>(null);
   useDialogFocus(isEditModalOpen, editDialogRef, () => setIsEditModalOpen(false));
   useDialogFocus(vendorDialogOpen, vendorDialogRef, () => setVendorDialogOpen(false));
@@ -118,6 +162,15 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setCurrentAdminId(data.user?.id || null));
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    api.getAdminUser360FeatureEnabled()
+      .then((enabled) => { if (active) setUser360Enabled(enabled); })
+      .catch(() => { if (active) setUser360Enabled(false); })
+      .finally(() => { if (active) setUser360FlagReady(true); });
+    return () => { active = false; };
   }, []);
 
   const loadData = async (silent = false) => {
@@ -346,20 +399,86 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     }
   };
 
-  const handleEditUser = (user: any) => {
+  const closeUserEdit = () => {
+    editRequestRef.current += 1;
+    setIsEditModalOpen(false);
+    setEditingUser(null);
+    setUser360(null);
+    setUser360Error('');
+    setUser360Loading(false);
+    setEditForm(emptyUserEditForm());
+  };
+
+  const populateUser360Form = (detail: AdminUser360) => {
+    const supplierAccess = detail.programs.find((program) => program.program_code === 'SUPPLIER_OUTSOURCE');
+    setEditForm({
+      name: detail.profile.name || '',
+      age: detail.profile.age == null ? '' : String(detail.profile.age),
+      date_of_birth: detail.profile.date_of_birth || '',
+      nationality: detail.profile.nationality || 'ไทย (Thai)',
+      induction_expiry: detail.profile.induction_expiry
+        ? new Date(detail.profile.induction_expiry).toISOString().split('T')[0]
+        : '',
+      vendor_id: detail.profile.vendor_id || '',
+      programs: detail.programs.map((program) => program.program_code),
+      participant_type: supplierAccess?.participant_type || 'supplier',
+      work_type: supplierAccess?.work_type || 'Driver',
+      access_start_date: supplierAccess?.access_start_date || '',
+      access_end_date: supplierAccess?.access_end_date || '',
+      reason: '',
+    });
+    const nationalities = ['ไทย (Thai)', 'พม่า (Myanmar)', 'กัมพูชา (Cambodian)', 'ลาว (Lao)'];
+    setIsOtherNationality(Boolean(detail.profile.nationality && !nationalities.includes(detail.profile.nationality)));
+  };
+
+  const handleEditUser = async (user: any) => {
+    let featureEnabled = user360Enabled;
+    if (!user360FlagReady) {
+      try {
+        featureEnabled = await api.getAdminUser360FeatureEnabled();
+      } catch {
+        featureEnabled = false;
+      }
+      setUser360Enabled(featureEnabled);
+      setUser360FlagReady(true);
+    }
     setEditingUser(user);
     const nationalities = ['ไทย (Thai)', 'พม่า (Myanmar)', 'กัมพูชา (Cambodian)', 'ลาว (Lao)'];
     const isOther = user.nationality && !nationalities.includes(user.nationality);
-    
     setEditForm({
       name: user.name || '',
-      age: user.age || '',
+      age: user.age == null ? '' : String(user.age),
+      date_of_birth: user.date_of_birth || '',
       nationality: user.nationality || 'ไทย (Thai)',
       induction_expiry: user.induction_expiry ? new Date(user.induction_expiry).toISOString().split('T')[0] : '',
-      vendor_id: user.vendor_id || '' 
+      vendor_id: user.vendor_id || '',
+      programs: [],
+      participant_type: 'supplier',
+      work_type: 'Driver',
+      access_start_date: '',
+      access_end_date: '',
+      reason: '',
     });
     setIsOtherNationality(isOther);
+    setUser360(null);
+    setUser360Error('');
     setIsEditModalOpen(true);
+
+    if (!featureEnabled) return;
+    const requestId = editRequestRef.current + 1;
+    editRequestRef.current = requestId;
+    setUser360Loading(true);
+    try {
+      const detail = await api.getAdminUser360(user.id);
+      if (editRequestRef.current !== requestId) return;
+      setUser360(detail);
+      populateUser360Form(detail);
+    } catch (error: any) {
+      if (editRequestRef.current !== requestId) return;
+      setUser360Error(error?.message || 'ไม่สามารถโหลดข้อมูล User 360 ได้');
+    } finally {
+      if (editRequestRef.current === requestId) setUser360Loading(false);
+    }
   };
 
   const saveUserEdit = async () => {
@@ -367,21 +486,58 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     setSubmitting(true);
     try {
       const expiryVal = editForm.induction_expiry ? new Date(editForm.induction_expiry).toISOString() : null;
-      const { error } = await supabase.rpc('admin_update_user_profile', {
-        user_id_param: editingUser.id,
-        name_param: editForm.name,
-        age_param: Number(editForm.age),
-        nationality_param: editForm.nationality,
-        vendor_id_param: editForm.vendor_id || null,
-        induction_expiry_param: expiryVal,
-      });
-
-      if (error) throw error;
+      if (user360Enabled) {
+        if (!user360 || user360Loading) throw new Error('ข้อมูล User 360 ยังไม่พร้อม กรุณาลองใหม่');
+        if (user360.profile.is_active && editForm.programs.length === 0) throw new Error('ผู้ใช้ที่ Active ต้องมีอย่างน้อยหนึ่ง Training Program');
+        if (!editForm.reason.trim()) throw new Error('กรุณาระบุเหตุผลประกอบการแก้ไข');
+        const removingContractor = user360.programs.some((program) => program.program_code === 'CONTRACTOR')
+          && !editForm.programs.includes('CONTRACTOR');
+        const hasActivePermit = user360.recent_work_permits.some((permit) => (
+          permit.status === 'ACTIVE' && new Date(permit.expire_date).getTime() > Date.now()
+        ));
+        if (removingContractor && hasActivePermit) {
+          throw new Error('ไม่สามารถถอด Contractor ได้ เนื่องจากยังมี Work Permit ที่ Active');
+        }
+        const updated = await api.updateAdminUser360({
+          userId: editingUser.id,
+          name: editForm.name,
+          age: editForm.age === '' ? null : Number(editForm.age),
+          dateOfBirth: editForm.date_of_birth || null,
+          nationality: editForm.nationality,
+          vendorId: editForm.vendor_id || null,
+          inductionExpiry: expiryVal,
+          programs: editForm.programs,
+          participantType: editForm.programs.includes('SUPPLIER_OUTSOURCE') ? editForm.participant_type : null,
+          workType: editForm.programs.includes('SUPPLIER_OUTSOURCE') ? editForm.work_type : null,
+          accessStartDate: editForm.programs.includes('SUPPLIER_OUTSOURCE') ? editForm.access_start_date || null : null,
+          accessEndDate: editForm.programs.includes('SUPPLIER_OUTSOURCE') ? editForm.access_end_date || null : null,
+          reason: editForm.reason.trim(),
+        });
+        setUser360(updated);
+      } else {
+        const { error } = await supabase.rpc('admin_update_user_profile', {
+          user_id_param: editingUser.id,
+          name_param: editForm.name,
+          age_param: Number(editForm.age),
+          nationality_param: editForm.nationality,
+          vendor_id_param: editForm.vendor_id || null,
+          induction_expiry_param: expiryVal,
+        });
+        if (error) throw error;
+      }
       showToast('อัปเดตข้อมูลพนักงานสำเร็จ', 'success');
-      setIsEditModalOpen(false);
-      loadData();
+      closeUserEdit();
+      await loadData();
     } catch (err: any) { showToast(err.message, 'error'); } 
     finally { setSubmitting(false); }
+  };
+
+  const reloadEditingUser360 = async () => {
+    if (!editingUser?.id) return;
+    const detail = await api.getAdminUser360(editingUser.id);
+    setUser360(detail);
+    populateUser360Form(detail);
+    await loadData(true);
   };
 
   const handleToggleUserBan = async (id: string, name: string, currentStatus: boolean) => {
@@ -1508,28 +1664,38 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
       {/* 📝 EDIT USER MODAL */}
       {isEditModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div aria-hidden="true" className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setIsEditModalOpen(false)} />
-          <div ref={editDialogRef} role="dialog" aria-modal="true" aria-labelledby="edit-profile-dialog-title" tabIndex={-1} className="bg-white w-full max-w-lg rounded-[2rem] md:rounded-[2.5rem] shadow-2xl border relative z-10 p-6 md:p-8 text-left animate-in zoom-in-95 duration-300 max-h-[95vh] overflow-y-auto mx-4 md:mx-0 focus:outline-none">
+          <div aria-hidden="true" className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={closeUserEdit} />
+          <div ref={editDialogRef} role="dialog" aria-modal="true" aria-labelledby="edit-profile-dialog-title" tabIndex={-1} className={`bg-white w-full ${user360Enabled ? 'max-w-4xl' : 'max-w-lg'} rounded-[2rem] md:rounded-[2.5rem] shadow-2xl border relative z-10 p-6 md:p-8 text-left animate-in zoom-in-95 duration-300 max-h-[95vh] overflow-y-auto mx-4 md:mx-0 focus:outline-none`}>
               <div className="flex justify-between items-center mb-6 border-b pb-4 sticky top-0 bg-white z-20">
                   <div>
-                    <h3 id="edit-profile-dialog-title" className="text-lg md:text-xl font-black text-slate-900 uppercase">Edit Profile</h3>
-                    <p className="text-[10px] text-blue-500 font-bold uppercase tracking-widest mt-1">ID: {maskNationalID(editingUser?.national_id)}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 id="edit-profile-dialog-title" className="text-lg md:text-xl font-black text-slate-900 uppercase">{user360Enabled ? 'User 360 Profile' : 'Edit Profile'}</h3>
+                      {user360Enabled && <span className="rounded-full bg-blue-50 px-2 py-1 text-[9px] font-black uppercase text-blue-700">Atomic Update</span>}
+                    </div>
+                    <p className="text-[10px] text-blue-700 font-bold uppercase tracking-widest mt-1">ID: {user360?.profile.masked_national_id || maskNationalID(editingUser?.national_id)}</p>
                   </div>
-                  <button onClick={() => setIsEditModalOpen(false)} aria-label="ปิดหน้าต่างแก้ไขผู้ใช้" className="min-h-11 min-w-11 text-slate-600 hover:text-red-600 transition-colors bg-slate-50 p-3 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500"><X size={20}/></button>
+                  <button onClick={closeUserEdit} aria-label="ปิดหน้าต่างแก้ไขผู้ใช้" className="min-h-11 min-w-11 text-slate-600 hover:text-red-600 transition-colors bg-slate-50 p-3 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500"><X size={20}/></button>
               </div>
+              {user360Enabled && user360Loading && (
+                <div className="flex min-h-48 items-center justify-center gap-3 text-sm font-bold text-slate-500"><Loader2 className="animate-spin" size={20}/> กำลังโหลดข้อมูล User 360</div>
+              )}
+              {user360Enabled && user360Error && !user360Loading && (
+                <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">{user360Error}</div>
+              )}
+              {(!user360Enabled || (user360 && !user360Loading && !user360Error)) && <>
               <div className="space-y-4">
                   <div className="space-y-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Full Name</label>
-                      <input className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold text-base shadow-inner outline-none focus:border-blue-500" value={editForm.name} onChange={e=>setEditForm({...editForm, name: e.target.value})}/>
+                      <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Full Name</label>
+                      <input aria-label="ชื่อผู้ใช้" className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold text-base shadow-inner outline-none focus:border-blue-500" value={editForm.name} onChange={e=>setEditForm({...editForm, name: e.target.value})}/>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-1">
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Age / อายุ</label>
-                          <input type="number" className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold text-base shadow-inner outline-none focus:border-blue-500" value={editForm.age} onChange={e=>setEditForm({...editForm, age: e.target.value})}/>
+                          <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Age / อายุ</label>
+                          <input aria-label="อายุผู้ใช้" type="number" className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold text-base shadow-inner outline-none focus:border-blue-500 disabled:text-slate-400" value={editForm.age} disabled={user360Enabled && Boolean(editForm.date_of_birth)} onChange={e=>setEditForm({...editForm, age: e.target.value})}/>
                       </div>
                       <div className="space-y-1">
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nationality</label>
-                          <select className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold text-base shadow-inner outline-none focus:border-blue-500" value={isOtherNationality ? 'OTHER' : editForm.nationality} onChange={(e) => {
+                          <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Nationality</label>
+                          <select aria-label="สัญชาติผู้ใช้" className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold text-base shadow-inner outline-none focus:border-blue-500" value={isOtherNationality ? 'OTHER' : editForm.nationality} onChange={(e) => {
                               const val = e.target.value;
                               if (val === 'OTHER') { setIsOtherNationality(true); setEditForm({...editForm, nationality: ''}); } 
                               else { setIsOtherNationality(false); setEditForm({...editForm, nationality: val}); }
@@ -1542,9 +1708,17 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                           </select>
                       </div>
                   </div>
+                  {user360Enabled && (
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Date of Birth / วันเกิด</label>
+                      <input aria-label="วันเกิดผู้ใช้" type="date" className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold text-base shadow-inner outline-none focus:border-blue-500" value={editForm.date_of_birth} onChange={e=>setEditForm({...editForm, date_of_birth: e.target.value})}/>
+                      <p className="text-[9px] font-bold text-slate-600">เมื่อระบุวันเกิด ระบบจะคำนวณอายุใหม่โดยอัตโนมัติ</p>
+                    </div>
+                  )}
                   <div className="space-y-1 mt-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2"><Building2 size={12}/> Company / Vendor</label>
+                      <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1 flex items-center gap-2"><Building2 size={12}/> Company / Vendor</label>
                       <select 
+                          aria-label="บริษัทของผู้ใช้"
                           className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold shadow-inner outline-none focus:border-blue-500 cursor-pointer text-base truncate" 
                           value={editForm.vendor_id} 
                           onChange={(e) => setEditForm({...editForm, vendor_id: e.target.value})}
@@ -1556,21 +1730,145 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                       </select>
                   </div>
                   <div className="bg-amber-50 p-4 md:p-5 rounded-3xl border border-amber-100 shadow-sm mt-4 text-left">
-                      <label className="text-[10px] font-black text-amber-600 uppercase flex items-center gap-2 mb-3"><CalendarClock size={16}/> Induction Expiry (Override)</label>
-                      <input type="date" className="w-full bg-white border border-amber-200 p-3 rounded-xl font-bold text-base outline-none focus:border-amber-500 transition-all" value={editForm.induction_expiry} onChange={e=>setEditForm({...editForm, induction_expiry: e.target.value})}/>
+                      <label className="text-[10px] font-black text-amber-800 uppercase flex items-center gap-2 mb-3"><CalendarClock size={16}/> Induction Expiry (Override)</label>
+                      <input aria-label="วันหมดอายุ Induction" type="date" className="w-full bg-white border border-amber-200 p-3 rounded-xl font-bold text-base outline-none focus:border-amber-500 transition-all" value={editForm.induction_expiry} onChange={e=>setEditForm({...editForm, induction_expiry: e.target.value})}/>
                   </div>
+                  {user360Enabled && <User360AccessEditor form={editForm} setForm={setEditForm} detail={user360} />}
+                  {user360Enabled && <AdminIdentityControls
+                    userId={user360.profile.id}
+                    maskedNationalId={user360.profile.masked_national_id}
+                    targetRole={user360.profile.role}
+                    isCurrentAdmin={user360.profile.id === currentAdminId}
+                    onIdentityChanged={reloadEditingUser360}
+                  />}
               </div>
               <div className="flex gap-3 mt-6 md:mt-8">
-                  <button onClick={()=>setIsEditModalOpen(false)} className="flex-1 py-4 bg-slate-50 text-slate-400 font-black rounded-2xl text-[10px] uppercase border border-slate-200 hover:bg-slate-100 transition-all active:scale-95">Cancel</button>
-                  <button onClick={saveUserEdit} disabled={submitting} className="flex-1 py-4 bg-blue-600 text-white font-black rounded-2xl text-[10px] uppercase shadow-lg shadow-blue-200 hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+                  <button onClick={closeUserEdit} className="flex-1 py-4 bg-slate-50 text-slate-600 font-black rounded-2xl text-[10px] uppercase border border-slate-200 hover:bg-slate-100 transition-all active:scale-95">Cancel</button>
+                  <button onClick={saveUserEdit} disabled={submitting || (user360Enabled && (!user360 || user360Loading || Boolean(user360Error)))} className="flex-1 py-4 bg-blue-600 text-white font-black rounded-2xl text-[10px] uppercase shadow-lg shadow-blue-200 hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
                     {submitting ? <Loader2 className="animate-spin" size={16} /> : 'Save Protocol'}
                   </button>
               </div>
+              </>}
           </div>
         </div>
       )}
     </div>
   );
+};
+
+const User360AccessEditor: React.FC<{
+  form: UserEditForm;
+  setForm: React.Dispatch<React.SetStateAction<UserEditForm>>;
+  detail: AdminUser360;
+}> = ({ form, setForm, detail }) => {
+  const toggleProgram = (program: TrainingProgram) => {
+    setForm((current) => ({
+      ...current,
+      programs: current.programs.includes(program)
+        ? current.programs.filter((item) => item !== program)
+        : [...current.programs, program],
+    }));
+  };
+  const removingContractor = detail.programs.some((program) => program.program_code === 'CONTRACTOR')
+    && !form.programs.includes('CONTRACTOR');
+  const activePermits = detail.recent_work_permits.filter((permit) => (
+    permit.status === 'ACTIVE' && new Date(permit.expire_date).getTime() > Date.now()
+  ));
+  const activePasses = detail.supplier_passes.filter((pass) => pass.status === 'ACTIVE');
+  const formatDate = (value: string | null | undefined) => value
+    ? new Date(value).toLocaleDateString('th-TH')
+    : '-';
+
+  return <>
+    <section aria-labelledby="training-programs-title" className="rounded-3xl border border-blue-100 bg-blue-50/50 p-4 md:p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h4 id="training-programs-title" className="text-xs font-black uppercase text-slate-800">Training Programs</h4>
+          <p className="mt-1 text-[9px] font-bold text-slate-500">Active User ต้องมีอย่างน้อยหนึ่งโปรแกรม</p>
+        </div>
+        <span className={`rounded-full px-2 py-1 text-[9px] font-black ${detail.profile.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
+          {detail.profile.is_active ? 'ACTIVE USER' : 'INACTIVE USER'}
+        </span>
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <label className={`flex min-h-14 cursor-pointer items-center gap-3 rounded-2xl border p-3 text-xs font-black ${form.programs.includes('CONTRACTOR') ? 'border-blue-400 bg-white text-blue-800' : 'border-slate-200 bg-slate-50 text-slate-500'}`}>
+          <input aria-label="Contractor program" type="checkbox" checked={form.programs.includes('CONTRACTOR')} onChange={() => toggleProgram('CONTRACTOR')} />
+          Contractor
+        </label>
+        <label className={`flex min-h-14 cursor-pointer items-center gap-3 rounded-2xl border p-3 text-xs font-black ${form.programs.includes('SUPPLIER_OUTSOURCE') ? 'border-emerald-400 bg-white text-emerald-800' : 'border-slate-200 bg-slate-50 text-slate-500'}`}>
+          <input aria-label="Supplier and Outsource program" type="checkbox" checked={form.programs.includes('SUPPLIER_OUTSOURCE')} onChange={() => toggleProgram('SUPPLIER_OUTSOURCE')} />
+          Supplier &amp; Outsource
+        </label>
+      </div>
+      {form.programs.length === 0 && detail.profile.is_active && (
+        <p role="alert" className="mt-3 rounded-xl bg-red-50 p-3 text-[10px] font-bold text-red-700">ต้องเลือกอย่างน้อยหนึ่ง Training Program</p>
+      )}
+      {removingContractor && activePermits.length > 0 && (
+        <p role="alert" className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-[10px] font-bold text-amber-800">
+          ไม่สามารถถอด Contractor ได้: มี Work Permit ที่ Active {activePermits.length} รายการ
+        </p>
+      )}
+    </section>
+
+    {form.programs.includes('SUPPLIER_OUTSOURCE') && (
+      <section aria-labelledby="supplier-access-title" className="rounded-3xl border border-emerald-100 bg-emerald-50/50 p-4 md:p-5">
+        <h4 id="supplier-access-title" className="text-xs font-black uppercase text-slate-800">Supplier / Outsource Access</h4>
+        <p className="mt-1 text-[9px] font-bold text-amber-700">การเปลี่ยนประเภทงานหรือช่วงวันที่จะ revoke Supplier Pass เดิมและต้องสอบใหม่</p>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <label className="space-y-1 text-[10px] font-black text-slate-500">Participant Type
+            <select aria-label="Supplier participant type" value={form.participant_type} onChange={(event) => setForm({ ...form, participant_type: event.target.value as SupplierOutsourceType })} className="mt-1 w-full rounded-xl border border-emerald-200 bg-white p-3 text-sm font-bold text-slate-800">
+              <option value="supplier">Supplier</option>
+              <option value="outsource">Outsource</option>
+            </select>
+          </label>
+          <label className="space-y-1 text-[10px] font-black text-slate-500">Work Type
+            <select aria-label="Supplier work type" value={form.work_type} onChange={(event) => setForm({ ...form, work_type: event.target.value as SupplierOutsourceWorkType })} className="mt-1 w-full rounded-xl border border-emerald-200 bg-white p-3 text-sm font-bold text-slate-800">
+              <option value="Driver">Driver</option>
+              <option value="Passenger">Passenger</option>
+              <option value="Trainee">Trainee</option>
+            </select>
+          </label>
+          <label className="space-y-1 text-[10px] font-black text-slate-500">Access Start
+            <input aria-label="Supplier access start date" type="date" value={form.access_start_date} onChange={(event) => setForm({ ...form, access_start_date: event.target.value })} className="mt-1 w-full rounded-xl border border-emerald-200 bg-white p-3 text-sm font-bold text-slate-800" />
+          </label>
+          <label className="space-y-1 text-[10px] font-black text-slate-500">Access End
+            <input aria-label="Supplier access end date" type="date" value={form.access_end_date} onChange={(event) => setForm({ ...form, access_end_date: event.target.value })} className="mt-1 w-full rounded-xl border border-emerald-200 bg-white p-3 text-sm font-bold text-slate-800" />
+          </label>
+        </div>
+      </section>
+    )}
+
+    <section aria-labelledby="user360-integrity-title" className="rounded-3xl border border-slate-200 bg-slate-50 p-4 md:p-5">
+      <h4 id="user360-integrity-title" className="text-xs font-black uppercase text-slate-800">Linked Records — Read Only</h4>
+      <p className="mt-1 text-[9px] font-bold text-slate-500">ข้อมูลประวัติจะไม่ถูกลบหรือเขียนทับจากการแก้ Profile</p>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-2xl bg-white p-3"><p className="text-[9px] font-black text-slate-600">EXAMS</p><p className="mt-1 text-lg font-black text-slate-800">{detail.recent_exams.length}</p><p className="text-[9px] font-bold text-slate-500">ล่าสุด {formatDate(detail.recent_exams[0]?.created_at)}</p></div>
+        <div className="rounded-2xl bg-white p-3"><p className="text-[9px] font-black text-slate-600">WORK PERMITS</p><p className="mt-1 text-lg font-black text-slate-800">{detail.recent_work_permits.length}</p><p className="text-[9px] font-bold text-amber-700">Active {activePermits.length}</p></div>
+        <div className="rounded-2xl bg-white p-3"><p className="text-[9px] font-black text-slate-600">SUPPLIER PASSES</p><p className="mt-1 text-lg font-black text-slate-800">{detail.supplier_passes.length}</p><p className="text-[9px] font-bold text-emerald-700">Active {activePasses.length}</p></div>
+        <div className="rounded-2xl bg-white p-3"><p className="text-[9px] font-black text-slate-600">AUDIT EVENTS</p><p className="mt-1 text-lg font-black text-slate-800">{detail.recent_audit.length}</p><p className="text-[9px] font-bold text-slate-500">Role {detail.profile.role}</p></div>
+      </div>
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
+        <div className="rounded-2xl bg-white p-3 text-[10px] font-bold text-slate-600">
+          <p className="font-black text-slate-800">Account &amp; Security</p>
+          <p className="mt-2">LINE: {detail.profile.line_connected ? 'Connected' : 'Not connected'}</p>
+          <p>PIN version: {detail.auth_security?.pin_version ?? '-'}</p>
+          <p>Failed attempts: {detail.auth_security?.failed_attempts ?? 0}</p>
+        </div>
+        <div className="rounded-2xl bg-white p-3 text-[10px] font-bold text-slate-600">
+          <p className="font-black text-slate-800">Recent Integrity Status</p>
+          <p className="mt-2">Latest exam: {detail.recent_exams[0]?.status || '-'}</p>
+          <p>Latest permit: {detail.recent_work_permits[0]?.status || '-'}</p>
+          <p>Latest pass: {detail.supplier_passes[0]?.status || '-'}</p>
+        </div>
+      </div>
+    </section>
+
+    <section className="rounded-3xl border border-violet-100 bg-violet-50/50 p-4 md:p-5">
+      <label className="text-[10px] font-black uppercase text-violet-700">Change Reason *</label>
+      <textarea aria-label="เหตุผลการแก้ไข User 360" maxLength={500} rows={3} value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} placeholder="ระบุเหตุผลเพื่อบันทึก Audit Log (ห้ามกรอกเลขบัตรประชาชน)" className="mt-2 w-full resize-none rounded-2xl border border-violet-200 bg-white p-3 text-sm font-bold text-slate-800 outline-none focus:border-violet-500" />
+      <p className="mt-1 text-right text-[9px] font-bold text-slate-600">{form.reason.length}/500</p>
+    </section>
+  </>;
 };
 
 const TabButton = ({ active, onClick, icon, label }: any) => (

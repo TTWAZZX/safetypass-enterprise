@@ -4,7 +4,7 @@ import {
   SupplierOutsourceReportRow, SupplierOutsourceType, SupplierOutsourceWorkType,
   TrainingProgram, QuestionRevision, VendorNameMatch, VendorSaveResult, VendorStatus,
   ExternalRegistrationNotificationRecipient, ExternalRegistrationApplicationRow,
-  ExternalRegistrationApplicationDetail,
+  ExternalRegistrationApplicationDetail, AdminUser360, AdminUser360UpdateInput,
 } from '../types'
 import {
   resolveRegistrationStatus, RegistrationStatus, StagedRegistrationProfile,
@@ -416,6 +416,40 @@ export const api = {
     return data as { archived: boolean; history_preserved: boolean; already_inactive: boolean };
   },
 
+  getAdminUser360: async (id: string): Promise<AdminUser360> => {
+    const { data, error } = await supabase.rpc('admin_get_user360', {
+      user_id_param: id,
+    });
+    if (error) throw error;
+    return data as AdminUser360;
+  },
+
+  getAdminUser360FeatureEnabled: async (): Promise<boolean> => {
+    const { data, error } = await supabase.rpc('admin_get_user360_feature_flag');
+    if (error) throw error;
+    return data === true;
+  },
+
+  updateAdminUser360: async (input: AdminUser360UpdateInput): Promise<AdminUser360> => {
+    const { data, error } = await supabase.rpc('admin_update_user360', {
+      user_id_param: input.userId,
+      name_param: input.name,
+      age_param: input.age,
+      date_of_birth_param: input.dateOfBirth,
+      nationality_param: input.nationality,
+      vendor_id_param: input.vendorId,
+      induction_expiry_param: input.inductionExpiry,
+      program_codes_param: input.programs,
+      participant_type_param: input.participantType || null,
+      work_type_param: input.workType || null,
+      access_start_date_param: input.accessStartDate || null,
+      access_end_date_param: input.accessEndDate || null,
+      reason_param: input.reason,
+    });
+    if (error) throw error;
+    return data as AdminUser360;
+  },
+
   adminSetUserRole: async (id: string, role: 'ADMIN' | 'USER') => {
     const { data, error } = await supabase.rpc('admin_set_user_role', {
       user_id_param: id,
@@ -448,6 +482,87 @@ export const api = {
       throw new Error(result?.message || 'ไม่สามารถรีเซต PIN ได้');
     }
     return { expiresAt: result.expiresAt };
+  },
+
+  adminIdentityStepUp: async (pin: string) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error('Authentication required');
+    const response = await fetch('/api/set-auth-pin', {
+      method: 'POST', cache: 'no-store',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ action: 'admin-identity-step-up', pin }),
+    });
+    const result = await response.json().catch(() => null);
+    if (!response.ok || result?.ok !== true || typeof result?.stepUpToken !== 'string') throw new Error(result?.message || 'PIN verification failed');
+    return { stepUpToken: result.stepUpToken as string, expiresAt: result.expiresAt as string };
+  },
+
+  adminRevealNationalId: async (input: { userId: string; reason: string; stepUpToken: string }) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error('Authentication required');
+    const response = await fetch('/api/set-auth-pin', {
+      method: 'POST', cache: 'no-store',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ action: 'admin-reveal-national-id', ...input }),
+    });
+    const result = await response.json().catch(() => null);
+    if (!response.ok || !/^\d{13}$/.test(String(result?.nationalId || ''))) throw new Error(result?.message || 'Unable to reveal protected identity');
+    return { nationalId: result.nationalId as string, expiresAt: result.expiresAt as string };
+  },
+
+  adminExportNationalIds: async (input: { userIds: string[]; reason: string; stepUpToken: string }) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error('Authentication required');
+    const response = await fetch('/api/set-auth-pin', {
+      method: 'POST', cache: 'no-store',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ action: 'admin-export-national-ids', confirmed: true, ...input }),
+    });
+    if (!response.ok) {
+      const result = await response.json().catch(() => null);
+      throw new Error(result?.message || 'Unable to export protected identities');
+    }
+    const blob = await response.blob();
+    const disposition = response.headers.get('content-disposition') || '';
+    const fileName = disposition.match(/filename="([^"]+)"/)?.[1] || 'protected-identities.csv';
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = fileName;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    return { exported: true };
+  },
+
+  adminCorrectNationalId: async (input: { userId: string; newNationalId: string; reason: string; stepUpToken: string }) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error('Authentication required');
+    const response = await fetch('/api/set-auth-pin', {
+      method: 'POST', cache: 'no-store',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ action: 'admin-correct-national-id', ...input }),
+    });
+    const result = await response.json().catch(() => null);
+    if (!response.ok || result?.ok !== true) {
+      const error = new Error(result?.message || 'Unable to correct protected identity') as Error & { operationId?: string; status?: string };
+      error.operationId = result?.operationId;
+      error.status = result?.status;
+      throw error;
+    }
+    return result as { ok: true; operationId: string; status: 'COMPLETED'; maskedNationalId: string; temporaryPinExpiresAt: string };
+  },
+
+  adminRecoverNationalIdCorrection: async (input: { operationId: string; reason: string; stepUpToken: string }) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error('Authentication required');
+    const response = await fetch('/api/set-auth-pin', {
+      method: 'POST', cache: 'no-store',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ action: 'admin-recover-national-id-correction', ...input }),
+    });
+    const result = await response.json().catch(() => null);
+    if (!response.ok || result?.ok !== true) throw new Error(result?.message || 'Unable to recover identity correction');
+    return result as { ok: true; operationId: string; status: 'COMPLETED' | 'ROLLED_BACK'; temporaryPinExpiresAt: string };
   },
 
   /* =====================================================

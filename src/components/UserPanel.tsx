@@ -83,7 +83,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
   const [showHistory, setShowHistory] = useState(false);
   const [supplierOutsourceEnabled, setSupplierOutsourceEnabled] = useState(false);
   const [supplierStatus, setSupplierStatus] = useState<SupplierOutsourceStatus | null>(null);
-  const [trainingPrograms, setTrainingPrograms] = useState<TrainingProgram[]>(['CONTRACTOR']);
+  const [trainingPrograms, setTrainingPrograms] = useState<TrainingProgram[]>([]);
   const [showSupplierEnrollment, setShowSupplierEnrollment] = useState(false);
   const [supplierParticipantType, setSupplierParticipantType] = useState<SupplierOutsourceType>('supplier');
   const [supplierWorkType, setSupplierWorkType] = useState<SupplierOutsourceWorkType>('Driver');
@@ -215,7 +215,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
         mockApi.getMyTrainingPrograms(),
       ]);
       setSupplierOutsourceEnabled(flags.supplierOutsourceEnabled);
-      setTrainingPrograms(programs.length > 0 ? programs : ['CONTRACTOR']);
+      setTrainingPrograms(programs);
       if (flags.supplierOutsourceEnabled && programs.includes('SUPPLIER_OUTSOURCE')) {
         setSupplierStatus(await mockApi.getMySupplierOutsourceStatus());
       } else {

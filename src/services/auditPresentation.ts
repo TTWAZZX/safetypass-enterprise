@@ -19,6 +19,21 @@ const ACTION_LABELS: Record<string, { label: string; tone: AuditPresentation['to
   ADMIN_USER_UPDATED: { label: 'แก้ไขข้อมูลผู้ใช้งาน', tone: 'blue' },
   ADMIN_INDUCTION_RESET: { label: 'รีเซตสถานะการอบรม', tone: 'amber' },
   ADMIN_PIN_RESET: { label: 'รีเซต PIN ผู้ใช้งาน', tone: 'violet' },
+  ADMIN_USER360_UPDATED: { label: 'แก้ไขข้อมูล User 360', tone: 'blue' },
+  ADMIN_USER360_FEATURE_TOGGLED: { label: 'เปลี่ยนสถานะ User 360', tone: 'amber' },
+  ADMIN_TRAINING_PROGRAM_ADDED: { label: 'เพิ่มโปรแกรมอบรม', tone: 'emerald' },
+  ADMIN_TRAINING_PROGRAM_REMOVED: { label: 'ถอดโปรแกรมอบรม', tone: 'red' },
+  ADMIN_SUPPLIER_ACCESS_CHANGED: { label: 'แก้ไขสิทธิ์ Supplier / Outsource', tone: 'amber' },
+  ADMIN_SUPPLIER_PASS_REVOKED: { label: 'เพิกถอน Supplier Pass เดิม', tone: 'red' },
+  ADMIN_NATIONAL_ID_REVEAL_SUCCEEDED: { label: 'เปิดดูเลขบัตรประชาชน', tone: 'violet' },
+  ADMIN_NATIONAL_ID_REVEAL_DENIED: { label: 'ปฏิเสธการเปิดดูเลขบัตร', tone: 'red' },
+  ADMIN_NATIONAL_ID_EXPORT_SUCCEEDED: { label: 'ส่งออกเลขบัตรประชาชน', tone: 'violet' },
+  ADMIN_NATIONAL_ID_EXPORT_DENIED: { label: 'ปฏิเสธการส่งออกเลขบัตร', tone: 'red' },
+  ADMIN_NATIONAL_ID_CORRECTION_PREPARED: { label: 'เตรียมแก้เลขบัตรประชาชน', tone: 'amber' },
+  ADMIN_NATIONAL_ID_CORRECTION_DENIED: { label: 'ปฏิเสธการแก้เลขบัตรประชาชน', tone: 'red' },
+  ADMIN_NATIONAL_ID_CORRECTION_COMPLETED: { label: 'แก้เลขบัตรประชาชนสำเร็จ', tone: 'emerald' },
+  ADMIN_NATIONAL_ID_CORRECTION_ROLLED_BACK: { label: 'ย้อนคืนการแก้เลขบัตร', tone: 'amber' },
+  ADMIN_NATIONAL_ID_CORRECTION_RECOVERY_REQUIRED: { label: 'ต้องกู้คืนการแก้เลขบัตร', tone: 'red' },
   ADMIN_VENDOR_CREATED: { label: 'เพิ่มบริษัทใหม่', tone: 'emerald' },
   ADMIN_VENDOR_DELETED: { label: 'ลบข้อมูลบริษัท', tone: 'red' },
   ADMIN_VENDOR_ARCHIVED: { label: 'เก็บบริษัทออกจากรายการใช้งาน', tone: 'red' },
@@ -40,6 +55,7 @@ const ACTION_LABELS: Record<string, { label: string; tone: AuditPresentation['to
 const FIELD_LABELS: Record<string, string> = {
   name: 'ชื่อ',
   age: 'อายุ',
+  date_of_birth: 'วันเกิด',
   nationality: 'สัญชาติ',
   vendor_id: 'บริษัท',
   role: 'สิทธิ์การใช้งาน',
@@ -47,6 +63,12 @@ const FIELD_LABELS: Record<string, string> = {
   induction_expiry: 'วันหมดอายุการอบรม',
   pdpa_agreed: 'การยอมรับ PDPA',
   status: 'สถานะ',
+  programs: 'โปรแกรมอบรม',
+  participant_type: 'ประเภทผู้เข้าร่วม',
+  work_type: 'ประเภทงาน',
+  access_start_date: 'วันเริ่มสิทธิ์',
+  access_end_date: 'วันสิ้นสุดสิทธิ์',
+  program_code: 'โปรแกรมอบรม',
 };
 
 const parseDetails = (value: AuditLog['details']): AuditDetails => {
@@ -64,6 +86,9 @@ const getTargetLabel = (log: AuditLog, details: AuditDetails) => {
   if (log.action.startsWith('EXTERNAL_REGISTRATION_APPLICATION_')) return `คำขอ ${log.target}`;
   if (log.action.includes('EMAIL_RECIPIENT')) return typeof details.email === 'string' ? details.email : 'ผู้รับอีเมลแจ้งเตือน';
   if (log.action === 'EXTERNAL_REGISTRATION_FEATURE_TOGGLED') return 'ระบบรับสมัครบุคคลภายนอก';
+  if (log.action === 'ADMIN_USER360_FEATURE_TOGGLED') return 'ระบบ Admin User 360';
+  if (log.action.includes('NATIONAL_ID_')) return 'ข้อมูลระบุตัวตนที่ได้รับการคุ้มครอง';
+  if (log.action.includes('TRAINING_PROGRAM') || log.action.includes('SUPPLIER_')) return 'สิทธิ์และประวัติการอบรม';
   if (log.action.includes('VENDOR')) return 'ข้อมูลบริษัท';
   if (log.action.includes('USER') || log.action === 'ADMIN_PIN_RESET') return 'ข้อมูลผู้ใช้งาน';
   if (log.action.includes('AUTH_PROFILE')) return 'บัญชีผู้ใช้งาน';
@@ -77,6 +102,7 @@ const getSummary = (log: AuditLog, details: AuditDetails) => {
   if (log.action === 'ADMIN_USER_UPDATED' && fields.includes('role')) return 'เปลี่ยนสิทธิ์ระหว่างผู้ใช้งานทั่วไปและผู้ดูแลระบบ';
   if (fields.length > 0) return `ข้อมูลที่เปลี่ยน: ${fields.map((field) => FIELD_LABELS[field] || field).join(', ')}`;
   if (log.action === 'EXTERNAL_REGISTRATION_FEATURE_TOGGLED') return details.enabled === true ? 'เปิดรับคำขอลงทะเบียนจากบุคคลภายนอก' : 'ปิดรับคำขอลงทะเบียนจากบุคคลภายนอก';
+  if (log.action === 'ADMIN_USER360_FEATURE_TOGGLED') return details.enabled === true ? 'เปิดใช้งาน Admin User 360' : 'ปิดใช้งานและกลับไปใช้ Edit Profile เดิม';
   if (log.action.includes('EMAIL_RECIPIENT') && typeof details.email === 'string') return `อีเมล: ${details.email}`;
   if (log.action === 'ADMIN_PIN_RESET' && typeof details.expires_at === 'string') return `PIN ชั่วคราวใช้ได้ถึง ${new Date(details.expires_at).toLocaleString('th-TH')}`;
   if (typeof details.rejection_reason === 'string' && details.rejection_reason) return `เหตุผล: ${details.rejection_reason}`;

@@ -11,6 +11,9 @@ const allowedTests = new Set([
   'supabase/tests/external_registration_submission_test.sql',
   'supabase/tests/external_registration_admin_workflow_test.sql',
   'supabase/tests/external_registration_followup_test.sql',
+  'supabase/tests/admin_training_access_guards_test.sql',
+  'supabase/tests/admin_user360_foundation_test.sql',
+  'supabase/tests/admin_identity_privileged_workflow_test.sql',
 ]);
 const testPath = process.argv[2]?.replaceAll('\\', '/');
 if (!allowedTests.has(testPath)) throw new Error('Remote database test path is not allowed');
@@ -35,7 +38,7 @@ if (!env.SUPABASE_DB_PASSWORD || /YOUR-PASSWORD|PLACEHOLDER|\[|\]/i.test(env.SUP
     cwd: process.cwd(),
     maxBuffer: 4 * 1024 * 1024,
   });
-  console.log('Remote registration database regression passed via linked Supabase CLI (transaction rolled back).');
+  console.log('Remote database regression passed via linked Supabase CLI (transaction rolled back).');
   process.exit(0);
 }
 
@@ -44,13 +47,13 @@ poolerUrl.password = env.SUPABASE_DB_PASSWORD;
 const client = new pg.Client({
   connectionString: poolerUrl.toString(),
   ssl: { rejectUnauthorized: false },
-  application_name: 'safetypass-registration-regression',
+  application_name: 'safetypass-remote-regression',
 });
 
 try {
   await client.connect();
   await client.query(readFileSync(testPath, 'utf8'));
-  console.log('Remote registration database regression passed (transaction rolled back).');
+  console.log('Remote database regression passed (transaction rolled back).');
 } finally {
   await client.end().catch(() => undefined);
 }

@@ -1,0 +1,11 @@
+{
+  "createdOn": "2026-08-18",
+  "source": "isolated Docker schema-only restore",
+  "boundaryVersion": "20260804180000",
+  "boundaryName": "phase4_admin_integrity_audit",
+  "historicalMigrationCount": 28,
+  "containsTableData": false,
+  "containsAuthUsers": false,
+  "sha256": "8adb12193d28f994eab79b108f31e26201102d3ab2e1e067ea0ac2efa3ea0155",
+  "validationCommand": "npm run test:db:staging-bootstrap"
+}

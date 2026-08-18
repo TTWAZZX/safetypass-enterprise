@@ -83,6 +83,14 @@ async function installMocks(page, options = {}) {
     completedRegistrationRequests: 0,
     pinUpgradeRequests: 0,
     adminPinResetRequests: 0,
+    user360ReadRequests: 0,
+    user360UpdateRequests: 0,
+    user360UpdatePayloads: [],
+    legacyUserProfileUpdateRequests: 0,
+    identityStepUpRequests: 0,
+    identityRevealRequests: 0,
+    identityExportRequests: 0,
+    identityCorrectionRequests: 0,
     archiveVendorRequests: 0,
     archiveUserRequests: 0,
     directHighIntegrityWrites: 0,
@@ -90,6 +98,34 @@ async function installMocks(page, options = {}) {
     lineApiRequests: 0,
     lineLoginRequests: 0,
   };
+  let user360Programs = ['SUPPLIER_OUTSOURCE'];
+  let user360ActivePermit = false;
+  let user360NationalId = userNationalId;
+  const user360Snapshot = () => ({
+    profile: {
+      ...profile('USER'),
+      masked_national_id: `${user360NationalId.slice(0, 3)}••••••${user360NationalId.slice(-4)}`,
+      vendor: { id: vendorId, name: 'บริษัททดสอบ', status: 'APPROVED' },
+      line_connected: false,
+      last_login: null,
+    },
+    programs: user360Programs.map((programCode) => ({
+      program_code: programCode,
+      participant_type: programCode === 'SUPPLIER_OUTSOURCE' ? 'supplier' : null,
+      work_type: programCode === 'SUPPLIER_OUTSOURCE' ? 'Driver' : null,
+      access_start_date: programCode === 'SUPPLIER_OUTSOURCE' ? '2026-07-29' : null,
+      access_end_date: programCode === 'SUPPLIER_OUTSOURCE' ? '2027-07-29' : null,
+      passed_at: null,
+      expires_at: null,
+      created_at: '2026-07-29T00:00:00.000Z',
+      updated_at: '2026-07-29T00:00:00.000Z',
+    })),
+    recent_exams: [{ id: '40000000-0000-4000-8000-000000000001', exam_type: 'SUPPLIER_OUTSOURCE', score: 20, total_questions: 20, status: 'PASSED', created_at: '2026-07-29T00:00:00.000Z' }],
+    recent_work_permits: user360ActivePermit ? [{ id: '60000000-0000-4000-8000-000000000001', permit_no: 'WP-TEST-001', expire_date: '2027-07-29T00:00:00.000Z', status: 'ACTIVE', created_at: '2026-07-29T00:00:00.000Z' }] : [],
+    supplier_passes: [{ id: '70000000-0000-4000-8000-000000000001', issued_at: '2026-07-29T00:00:00.000Z', expires_at: '2027-07-29T00:00:00.000Z', status: 'ACTIVE', created_at: '2026-07-29T00:00:00.000Z' }],
+    auth_security: { pin_version: 2, failed_attempts: 0, locked_until: null, pin_changed_at: '2026-07-29T00:00:00.000Z', pin_reset_state: 'NONE', pin_reset_expires_at: null },
+    recent_audit: [],
+  });
   let managedQuestions = examQuestions('INDUCTION');
   managedQuestions[7] = { ...managedQuestions[7], choices_json: managedQuestions[7].choices_json.slice(0, 3) };
   managedQuestions[9] = {
@@ -237,6 +273,7 @@ async function installMocks(page, options = {}) {
           { key: 'PASSING_SCORE_WORK_PERMIT', value: '80' },
           { key: 'PASSING_SCORE_SUPPLIER_OUTSOURCE', value: '80' },
         ],
+        admin_get_user360_feature_flag: options.user360Enabled !== false,
         get_my_supplier_outsource_status: [{
           participant_type: 'supplier', work_type: 'Driver', access_start_date: '2026-07-29',
           access_end_date: '2027-07-29', passed_at: '2026-07-29T00:00:00.000Z', expires_at: future,
@@ -318,6 +355,25 @@ async function installMocks(page, options = {}) {
       if (rpc === 'admin_archive_user') {
         authDiagnostics.archiveUserRequests += 1;
         return json(route, { archived: true, history_preserved: true, already_inactive: false });
+      }
+      if (rpc === 'admin_get_user360') {
+        authDiagnostics.user360ReadRequests += 1;
+        return json(route, user360Snapshot());
+      }
+      if (rpc === 'admin_update_user360') {
+        authDiagnostics.user360UpdateRequests += 1;
+        authDiagnostics.user360UpdatePayloads.push(payload);
+        const requestedPrograms = Array.isArray(payload.program_codes_param) ? payload.program_codes_param : [];
+        if (user360ActivePermit && !requestedPrograms.includes('CONTRACTOR')) {
+          return json(route, { message: 'Active Work Permit must be revoked or expired before removing Contractor access' }, 400);
+        }
+        user360Programs = requestedPrograms;
+        if (requestedPrograms.includes('CONTRACTOR')) user360ActivePermit = true;
+        return json(route, user360Snapshot());
+      }
+      if (rpc === 'admin_update_user_profile') {
+        authDiagnostics.legacyUserProfileUpdateRequests += 1;
+        return json(route, null);
       }
       if (rpc === 'admin_get_directory_page') {
         if (payload.p_section === 'VENDORS') {
@@ -481,6 +537,34 @@ async function installMocks(page, options = {}) {
   await page.route('**/api/auth-session-status', (route) => json(route, { requiresPinUpgrade: false }));
   await page.route('**/api/set-auth-pin', (route) => {
     const payload = route.request().postDataJSON?.() || {};
+    if (payload.action === 'admin-identity-step-up') {
+      authDiagnostics.identityStepUpRequests += 1;
+      return json(route, { ok: true, stepUpToken: 'e2e-step-up-token', expiresAt: new Date(Date.now() + 5 * 60_000).toISOString() });
+    }
+    if (payload.action === 'admin-reveal-national-id') {
+      authDiagnostics.identityRevealRequests += 1;
+      return json(route, { nationalId: user360NationalId, expiresAt: new Date(Date.now() + 60_000).toISOString() }, 200, { 'cache-control': 'no-store' });
+    }
+    if (payload.action === 'admin-export-national-ids') {
+      authDiagnostics.identityExportRequests += 1;
+      return route.fulfill({
+        status: 200,
+        contentType: 'text/csv; charset=utf-8',
+        headers: { 'cache-control': 'no-store', 'content-disposition': 'attachment; filename="protected-identities-e2e.csv"' },
+        body: `"User ID","National ID","Name"\r\n"${userId}","${user360NationalId}","Test User"`,
+      });
+    }
+    if (payload.action === 'admin-correct-national-id') {
+      authDiagnostics.identityCorrectionRequests += 1;
+      user360NationalId = payload.newNationalId;
+      return json(route, {
+        ok: true,
+        operationId: '80000000-0000-4000-8000-000000000001',
+        status: 'COMPLETED',
+        maskedNationalId: `${user360NationalId.slice(0, 3)}••••••${user360NationalId.slice(-4)}`,
+        temporaryPinExpiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+      });
+    }
     if (payload.action === 'admin-reset-user-pin') {
       authDiagnostics.adminPinResetRequests += 1;
       return json(route, {
@@ -763,6 +847,74 @@ try {
   await adminPage.getByRole('button', { name: 'เก็บบริษัท บริษัททดสอบ' }).first().click();
   await adminPage.getByText('เก็บบริษัทแล้ว โดยยังรักษาข้อมูลเชื่อมโยงเดิม', { exact: true }).waitFor();
   await adminPage.getByRole('button', { name: /^Personnel$/i }).click();
+
+  await adminPage.getByRole('button', { name: 'แก้ไข ผู้ใช้ทดสอบระบบ' }).first().click();
+  let user360Dialog = adminPage.getByRole('dialog', { name: 'User 360 Profile' });
+  await user360Dialog.waitFor();
+  await user360Dialog.getByText(`${userNationalId.slice(0, 3)}••••••${userNationalId.slice(-4)}`, { exact: false }).waitFor();
+  if (await user360Dialog.getByText(userNationalId, { exact: true }).count()) throw new Error('User 360 dialog exposed a full national ID');
+  const contractorProgram = user360Dialog.getByLabel('Contractor program');
+  const supplierProgram = user360Dialog.getByLabel('Supplier and Outsource program');
+  if (await contractorProgram.isChecked() || !(await supplierProgram.isChecked())) throw new Error('User 360 initial program state is incorrect');
+  await contractorProgram.check();
+  await user360Dialog.getByLabel('เหตุผลการแก้ไข User 360').fill('Assign Contractor and retain Supplier access');
+  await user360Dialog.getByRole('button', { name: 'Save Protocol' }).click();
+  await adminPage.getByText('อัปเดตข้อมูลพนักงานสำเร็จ', { exact: true }).waitFor();
+  if (adminAuthDiagnostics.user360UpdateRequests !== 1) throw new Error('User 360 save did not use the atomic RPC exactly once');
+  const successfulUser360Payload = adminAuthDiagnostics.user360UpdatePayloads[0];
+  if (!successfulUser360Payload.program_codes_param.includes('CONTRACTOR')
+      || !successfulUser360Payload.program_codes_param.includes('SUPPLIER_OUTSOURCE')
+      || successfulUser360Payload.reason_param !== 'Assign Contractor and retain Supplier access') {
+    throw new Error('User 360 atomic RPC payload did not preserve both programs and the audit reason');
+  }
+
+  await adminPage.getByRole('button', { name: 'แก้ไข ผู้ใช้ทดสอบระบบ' }).first().click();
+  user360Dialog = adminPage.getByRole('dialog', { name: 'User 360 Profile' });
+  await user360Dialog.waitFor();
+  await user360Dialog.getByLabel('Contractor program').uncheck();
+  await user360Dialog.getByText(/มี Work Permit ที่ Active 1 รายการ/).waitFor();
+  await user360Dialog.getByLabel('เหตุผลการแก้ไข User 360').fill('Attempt Contractor removal while permit is active');
+  await user360Dialog.getByRole('button', { name: 'Save Protocol' }).click();
+  await adminPage.getByText('ไม่สามารถถอด Contractor ได้ เนื่องจากยังมี Work Permit ที่ Active', { exact: true }).waitFor();
+  if (adminAuthDiagnostics.user360UpdateRequests !== 1) throw new Error('Blocked Contractor removal called the atomic RPC');
+  await user360Dialog.getByRole('button', { name: 'ปิดหน้าต่างแก้ไขผู้ใช้' }).click();
+
+  await adminPage.getByRole('button', { name: 'แก้ไข ผู้ใช้ทดสอบระบบ' }).first().click();
+  user360Dialog = adminPage.getByRole('dialog', { name: 'User 360 Profile' });
+  await user360Dialog.waitFor();
+  if (!(await user360Dialog.getByLabel('Contractor program').isChecked())) throw new Error('Blocked update did not preserve the server-side Contractor program');
+  await adminPage.getByText('ไม่สามารถถอด Contractor ได้ เนื่องจากยังมี Work Permit ที่ Active', { exact: true }).waitFor({ state: 'hidden' });
+
+  await user360Dialog.getByLabel('Admin PIN สำหรับข้อมูลส่วนบุคคล').fill('999999');
+  await user360Dialog.getByRole('button', { name: /Verify PIN/ }).click();
+  await user360Dialog.getByText(/PIN verified — protected actions available/).waitFor();
+  await user360Dialog.getByLabel('เหตุผลสำหรับการจัดการเลขบัตร').fill('Verify protected employee document');
+  await user360Dialog.getByRole('button', { name: /Reveal 60 seconds/ }).click();
+  await user360Dialog.getByText(userNationalId, { exact: true }).waitFor();
+  await user360Dialog.getByRole('button', { name: 'ซ่อนเลขบัตรประชาชน' }).click();
+  if (await user360Dialog.getByText(userNationalId, { exact: true }).count()) throw new Error('Reveal value remained after explicit hide');
+
+  await user360Dialog.getByLabel('ยืนยัน Full-ID Export').check();
+  const protectedDownloadPromise = adminPage.waitForEvent('download');
+  await user360Dialog.getByRole('button', { name: /Full-ID Export/ }).click();
+  const protectedDownload = await protectedDownloadPromise;
+  if (protectedDownload.suggestedFilename() !== 'protected-identities-e2e.csv') throw new Error('Protected export filename is incorrect');
+
+  const correctedNationalId = '1444444444441';
+  await user360Dialog.getByLabel('เลขบัตรประชาชนใหม่').fill(correctedNationalId);
+  await user360Dialog.getByLabel('ยืนยันแก้เลขบัตรประชาชน').check();
+  await user360Dialog.getByRole('button', { name: /Correct Identity/ }).click();
+  await user360Dialog.getByText(`${correctedNationalId.slice(0, 3)}••••••${correctedNationalId.slice(-4)}`, { exact: true }).waitFor();
+  if (await user360Dialog.getByText(correctedNationalId, { exact: true }).count()) throw new Error('Corrected full national ID remained in User 360 DOM');
+  if (adminAuthDiagnostics.identityStepUpRequests !== 1
+      || adminAuthDiagnostics.identityRevealRequests !== 1
+      || adminAuthDiagnostics.identityExportRequests !== 1
+      || adminAuthDiagnostics.identityCorrectionRequests !== 1) {
+    throw new Error('Privileged identity actions did not use the existing protected API boundary exactly once');
+  }
+  await assertA11y(adminPage, 'User 360 edit modal', '[aria-labelledby="edit-profile-dialog-title"]');
+  await user360Dialog.getByRole('button', { name: 'ปิดหน้าต่างแก้ไขผู้ใช้' }).click();
+
   const workbook = new ExcelJSModule.Workbook();
   const sheet = workbook.addWorksheet('Users');
   sheet.addRow(['Name', 'National ID', 'Vendor', 'Role', 'Age', 'Nationality']);
@@ -865,6 +1017,27 @@ try {
   if (overflow > 2) throw new Error(`Admin mobile view has ${overflow}px horizontal overflow`);
   await assertA11y(adminPage, 'mobile admin users');
   await adminContext.close();
+
+  const legacyAdminContext = await browser.newContext({ viewport: { width: 1365, height: 900 }, reducedMotion: 'reduce' });
+  const legacyAdminPage = await legacyAdminContext.newPage();
+  const legacyAdminDiagnostics = await installMocks(legacyAdminPage, { user360Enabled: false });
+  await login(legacyAdminPage, adminNationalId);
+  await legacyAdminPage.getByText('Dashboard Analytics', { exact: false }).waitFor();
+  await legacyAdminPage.getByRole('button', { name: /Vendors & Users/i }).click();
+  await legacyAdminPage.getByText('User & Vendor Compliance', { exact: false }).waitFor();
+  await legacyAdminPage.getByRole('button', { name: /^Personnel$/i }).click();
+  await legacyAdminPage.getByRole('button', { name: 'แก้ไข ผู้ใช้ทดสอบระบบ' }).first().click();
+  const legacyEditDialog = legacyAdminPage.getByRole('dialog', { name: 'Edit Profile' });
+  await legacyEditDialog.waitFor();
+  if (await legacyEditDialog.getByText('Training Programs', { exact: true }).count()) throw new Error('Feature flag off exposed User 360 controls');
+  await legacyEditDialog.getByRole('button', { name: 'Save Protocol' }).click();
+  await legacyAdminPage.getByText('อัปเดตข้อมูลพนักงานสำเร็จ', { exact: true }).waitFor();
+  if (legacyAdminDiagnostics.legacyUserProfileUpdateRequests !== 1
+      || legacyAdminDiagnostics.user360ReadRequests !== 0
+      || legacyAdminDiagnostics.user360UpdateRequests !== 0) {
+    throw new Error('Feature flag off did not preserve the legacy profile RPC path');
+  }
+  await legacyAdminContext.close();
 
   console.log('Production Assurance E2E passed (login, user, retake/resume, admin, import/export, mobile and accessibility).');
 } finally {

@@ -9,6 +9,13 @@ const base = {
 };
 
 describe('getUserReadiness', () => {
+  it('does not infer Contractor access when no program is assigned', () => {
+    const result = getUserReadiness({ ...base, programs: [] });
+    expect(result.code).toBe('NO_PROGRAM');
+    expect(result.totalCount).toBe(0);
+    expect(result.tracks).toEqual([]);
+  });
+
   it('never presents a suspended user as ready', () => {
     expect(getUserReadiness({ ...base, isActive: false, programs: ['CONTRACTOR', 'SUPPLIER_OUTSOURCE'] }).code).toBe('SUSPENDED');
   });

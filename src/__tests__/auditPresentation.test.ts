@@ -40,4 +40,16 @@ describe('audit presentation', () => {
     expect(result.actionLabel).toBe('อนุมัติคำขอลงทะเบียน');
     expect(result.targetLabel).toBe('คำขอ EXT-2026-001');
   });
+
+  it('presents the User 360 feature flag as a readable audit event', () => {
+    const result = presentAuditLog(log({
+      action: 'ADMIN_USER360_FEATURE_TOGGLED',
+      target: 'system_config:ADMIN_USER360_ENABLED',
+      details: JSON.stringify({ enabled: true, values_recorded: false }),
+    }));
+    expect(result.actionLabel).toContain('User 360');
+    expect(result.targetLabel).toContain('User 360');
+    expect(result.summary).toContain('เปิดใช้งาน');
+    expect(result.tone).toBe('amber');
+  });
 });

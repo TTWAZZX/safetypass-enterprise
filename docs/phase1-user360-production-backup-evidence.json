@@ -1,0 +1,102 @@
+{
+  "createdAt": "2026-08-18T11:50:25+07:00",
+  "projectName": "safety-passport-enterprise",
+  "projectRef": "qdodmxrecioltwdryhec",
+  "region": "ap-southeast-1",
+  "providerBackup": {
+    "backups": null,
+    "pitrEnabled": false,
+    "logicalBackupRequired": true
+  },
+  "backupDirectory": "C:\\Users\\Admin\\Documents\\SafetyPass Backups\\user360-pre-migration-20260818-115025",
+  "storageEncryption": {
+    "type": "Windows EFS",
+    "directoryEncryptedAttributeVerified": true,
+    "everyBackupFileEncryptedAttributeVerified": true
+  },
+  "valuesOrRowsCapturedInEvidence": false,
+  "files": [
+    {
+      "name": "roles.sql",
+      "bytes": 297,
+      "sha256": "25873CEC56A2CC6514E204F420231777F85C03DA818CAA7090CDCDFA89776ECD"
+    },
+    {
+      "name": "schema.sql",
+      "bytes": 242230,
+      "sha256": "07A1A090A367734280B7ABD7F4FFF42493D3BFEE5780113C0DE07781612B97EE"
+    },
+    {
+      "name": "schema-full.sql",
+      "bytes": 336787,
+      "sha256": "A0B38CC80415BFEF55A3E6EB4E0AE8D5D262A57F50AF20662D94ED406534B09B"
+    },
+    {
+      "name": "data.sql",
+      "bytes": 1627849,
+      "sha256": "8DC5D4C391CFEBD5086FAB45B3C0F7416F88C9B427EB597D705005306F0C9909"
+    }
+  ],
+  "restore": {
+    "target": "isolated PostgreSQL 17.6 Docker container",
+    "roles": "PASS",
+    "authStoragePublicSchema": "PASS",
+    "data": "PASS",
+    "managedExtensionPrerequisite": "PASS",
+    "tablesChecked": 41,
+    "exactTableMatches": 40,
+    "unexpectedMismatches": 0,
+    "expectedPlatformManagedExclusions": [
+      "auth.schema_migrations"
+    ]
+  },
+  "migrationRehearsal": {
+    "result": "PASS_PRODUCTION_SHAPED_RESTORE_REHEARSAL",
+    "protectedTableCounts": {
+      "users": 452,
+      "exam_history": 1087,
+      "exam_logs": 1087,
+      "work_permits": 386,
+      "supplier_outsource_passes": 1,
+      "user_training_access": 455,
+      "vendors": 320,
+      "questions": 70
+    },
+    "activeUsersWithoutProgram": 0,
+    "auditFullNationalIdsAfter": 0,
+    "featureFlag": "false",
+    "protectedDataParity": "PASS"
+  },
+  "productionDryRun": {
+    "result": "PASS",
+    "pendingMigrations": [
+      "20260818103000_admin_training_access_guards.sql",
+      "20260818120000_admin_user360_foundation.sql",
+      "20260818143000_admin_identity_privileged_workflow.sql"
+    ],
+    "seeds": [],
+    "roles": []
+  },
+  "rollout": {
+    "migrationResult": "PASS",
+    "migrationApplied": [
+      "20260818103000_admin_training_access_guards.sql",
+      "20260818120000_admin_user360_foundation.sql",
+      "20260818143000_admin_identity_privileged_workflow.sql"
+    ],
+    "remoteSqlRegressions": "PASS_ROLLED_BACK",
+    "deploymentId": "dpl_GvfzHcgNrf6SceoTyup1m1JYaDdw",
+    "productionAlias": "https://safetypass-enterprise.vercel.app",
+    "vercelFunctions": 12,
+    "vercelFunctionLimit": 12,
+    "featureFlag": "true",
+    "featureFlagAuditRecorded": true,
+    "postMigrationDataCheck": "PASS",
+    "authenticatedMaskedUser360Rpc": "PASS",
+    "productionBrowserSmoke": "PASS",
+    "protectedIdentityUnauthenticatedStatus": 401
+  },
+  "productionChanged": true,
+  "migrationApplied": true,
+  "deploymentTriggered": true
+}
