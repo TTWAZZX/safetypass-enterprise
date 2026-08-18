@@ -200,21 +200,51 @@ describe('auth-login API', () => {
     expect(String(upstream.mock.calls[1][0])).toContain('record_auth_login_failure');
   });
 
-  it('does not authenticate while a PIN reset is pending', async () => {
+  it('keeps a PIN reset pending when the Auth password update is not complete', async () => {
     configure();
-    const upstream = vi.fn().mockResolvedValueOnce(jsonResponse({
-      user_exists: true,
-      is_active: true,
-      pin_version: 2,
-      pin_reset_state: 'PENDING',
-      pin_reset_expires_at: new Date(Date.now() + 30 * 60_000).toISOString(),
-    }));
+    const upstream = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        user_exists: true,
+        user_id: '10000000-0000-4000-8000-000000000009',
+        is_active: true,
+        pin_version: 2,
+        pin_reset_state: 'PENDING',
+        pin_reset_expires_at: new Date(Date.now() + 30 * 60_000).toISOString(),
+      }))
+      .mockResolvedValueOnce(jsonResponse({ message: 'Invalid credentials' }, 400));
     vi.stubGlobal('fetch', upstream);
 
     const result = await invoke('890123', '192.0.2.9');
 
     expect(result.status).toBe(503);
-    expect(upstream).toHaveBeenCalledTimes(1);
+    expect(upstream).toHaveBeenCalledTimes(2);
+  });
+
+  it('self-recovers a pending reset after the temporary PIN authenticates', async () => {
+    configure();
+    const userId = '10000000-0000-4000-8000-000000000019';
+    const upstream = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        user_exists: true,
+        user_id: userId,
+        is_active: true,
+        pin_version: 2,
+        pin_reset_state: 'PENDING',
+        pin_reset_expires_at: new Date(Date.now() + 30 * 60_000).toISOString(),
+      }))
+      .mockResolvedValueOnce(jsonResponse({ access_token: 'recovered-reset', refresh_token: 'recovered-refresh' }))
+      .mockResolvedValueOnce(jsonResponse({ user_id: userId, reset_state: 'ACTIVE' }))
+      .mockResolvedValueOnce(jsonResponse(null));
+    vi.stubGlobal('fetch', upstream);
+
+    const result = await invoke('890123', '192.0.2.19');
+
+    expect(result.status).toBe(200);
+    expect(result.body).toEqual({
+      accessToken: 'recovered-reset', refreshToken: 'recovered-refresh', requiresPinUpgrade: true,
+    });
+    expect(String(upstream.mock.calls[2][0])).toContain('service_recover_prepared_pin_reset');
+    expect(JSON.parse(String(upstream.mock.calls[2][1]?.body))).toEqual({ user_id_param: userId });
   });
 
   it('rejects an expired temporary PIN before calling Supabase Auth', async () => {

@@ -810,6 +810,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     try {
       await api.adminResetUserPin(id);
       showToast(`รีเซต PIN ของ ${name} แล้ว กรุณาแจ้งให้ใช้เลขบัตร 6 หลักท้ายภายใน 30 นาที`, 'success');
+      await loadData();
     } catch (error: any) {
       showToast(error?.message || 'ไม่สามารถรีเซต PIN ได้', 'error');
     } finally {

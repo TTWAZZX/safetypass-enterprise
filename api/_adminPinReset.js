@@ -18,6 +18,19 @@ const authorizedRpc = async (auth, name, body) => {
   return { ok: response.ok, data: await safeJson(response) };
 };
 
+const serviceRpc = async (config, name, body) => {
+  const response = await fetch(`${config.url}/rest/v1/rpc/${name}`, {
+    method: 'POST',
+    headers: {
+      apikey: config.serviceKey,
+      Authorization: `Bearer ${config.serviceKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  return { ok: response.ok, data: await safeJson(response) };
+};
+
 export const handleAdminResetUserPin = async (req, res) => {
   const auth = await requireAdminUser(req, res);
   if (!auth) return undefined;
@@ -43,20 +56,44 @@ export const handleAdminResetUserPin = async (req, res) => {
   }
 
   try {
-    const authUserResponse = await fetch(`${config.url}/auth/v1/admin/users/${userId}`, {
+    let resetUserId = userId;
+    let authUserResponse = await fetch(`${config.url}/auth/v1/admin/users/${resetUserId}`, {
       headers: {
         apikey: config.serviceKey,
         Authorization: `Bearer ${config.serviceKey}`,
       },
     });
-    const targetAuthUser = await safeJson(authUserResponse);
+    let targetAuthUser = await safeJson(authUserResponse);
+
+    // Legacy registrations can have one valid Auth identity whose UUID differs
+    // from the surviving public profile UUID. Recover only that unambiguous
+    // case through the service-role atomic relink RPC, then continue normally.
+    if (!authUserResponse.ok) {
+      const relink = await serviceRpc(config, 'service_relink_orphaned_profile_for_pin_reset', {
+        actor_id_param: auth.user.id,
+        target_user_id_param: userId,
+      });
+      const canonicalUserId = String(relink.data?.user_id || '');
+      if (!relink.ok || !/^[0-9a-f-]{36}$/i.test(canonicalUserId)) {
+        return res.status(409).json({ message: 'This user does not have a resettable authentication account' });
+      }
+      resetUserId = canonicalUserId;
+      authUserResponse = await fetch(`${config.url}/auth/v1/admin/users/${resetUserId}`, {
+        headers: {
+          apikey: config.serviceKey,
+          Authorization: `Bearer ${config.serviceKey}`,
+        },
+      });
+      targetAuthUser = await safeJson(authUserResponse);
+    }
+
     const targetEmail = String(targetAuthUser?.email || '').toLowerCase();
     const emailMatch = targetEmail.match(/^(\d{13})@safetypass\.com$/);
-    if (!authUserResponse.ok || !emailMatch || targetAuthUser?.id !== userId) {
+    if (!authUserResponse.ok || !emailMatch || targetAuthUser?.id !== resetUserId) {
       return res.status(409).json({ message: 'This user does not have a resettable authentication account' });
     }
 
-    const begin = await authorizedRpc(auth, 'admin_begin_pin_reset', { user_id_param: userId });
+    const begin = await authorizedRpc(auth, 'admin_begin_pin_reset', { user_id_param: resetUserId });
     if (!begin.ok || begin.data?.reset_state !== 'PENDING') {
       const message = typeof begin.data?.message === 'string' ? begin.data.message : 'Unable to prepare PIN reset';
       return res.status(400).json({ message });
@@ -65,7 +102,7 @@ export const handleAdminResetUserPin = async (req, res) => {
     const nationalId = emailMatch[1];
     const temporaryPin = nationalId.slice(-6);
     const password = createSecurePinPassword(nationalId, temporaryPin, pepper);
-    const passwordResponse = await fetch(`${config.url}/auth/v1/admin/users/${userId}`, {
+    const passwordResponse = await fetch(`${config.url}/auth/v1/admin/users/${resetUserId}`, {
       method: 'PUT',
       headers: {
         apikey: config.serviceKey,
@@ -85,7 +122,10 @@ export const handleAdminResetUserPin = async (req, res) => {
       return res.status(503).json({ message: 'Unable to update the temporary authentication PIN; retry the reset' });
     }
 
-    const activated = await authorizedRpc(auth, 'admin_activate_pin_reset', { user_id_param: userId });
+    const activated = await serviceRpc(config, 'service_activate_admin_pin_reset', {
+      actor_id_param: auth.user.id,
+      user_id_param: resetUserId,
+    });
     if (!activated.ok || activated.data?.reset_state !== 'ACTIVE') {
       return res.status(503).json({ message: 'PIN was prepared but reset activation failed; retry the reset' });
     }

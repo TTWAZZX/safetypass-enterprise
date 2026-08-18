@@ -70,7 +70,11 @@ describe('admin-reset-user-pin API', () => {
       name: 'Reset User', password_scheme: 'pin-v2-admin-reset', must_change_pin: true,
     });
     expect(String(upstream.mock.calls[3][0])).toContain('admin_begin_pin_reset');
-    expect(String(upstream.mock.calls[5][0])).toContain('admin_activate_pin_reset');
+    expect(String(upstream.mock.calls[5][0])).toContain('service_activate_admin_pin_reset');
+    expect(JSON.parse(String(upstream.mock.calls[5][1]?.body))).toEqual({
+      actor_id_param: adminId,
+      user_id_param: userId,
+    });
     expect(JSON.stringify(result.body)).not.toContain(nationalId);
     expect(JSON.stringify(result.body)).not.toContain('890123');
   });
@@ -101,5 +105,41 @@ describe('admin-reset-user-pin API', () => {
 
     expect(result).toEqual({ status: 400, body: { message: 'Only USER accounts can be reset' } });
     expect(upstream).toHaveBeenCalledTimes(4);
+  });
+
+  it('atomically relinks an orphaned legacy profile before resetting its PIN', async () => {
+    configure();
+    const canonicalUserId = '30000000-0000-4000-8000-000000000003';
+    const expiresAt = new Date(Date.now() + 30 * 60_000).toISOString();
+    const upstream = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ id: adminId, email: '1999999999999@safetypass.com' }))
+      .mockResolvedValueOnce(jsonResponse(true))
+      .mockResolvedValueOnce(jsonResponse({ message: 'User not found' }, 404))
+      .mockResolvedValueOnce(jsonResponse({ status: 'RELINKED', user_id: canonicalUserId, old_user_id: userId }))
+      .mockResolvedValueOnce(jsonResponse({
+        id: canonicalUserId,
+        email: `${nationalId}@safetypass.com`,
+        user_metadata: { name: 'Legacy Reset User' },
+      }))
+      .mockResolvedValueOnce(jsonResponse({ user_id: canonicalUserId, reset_state: 'PENDING', expires_at: expiresAt }))
+      .mockResolvedValueOnce(jsonResponse({ id: canonicalUserId }))
+      .mockResolvedValueOnce(jsonResponse({ user_id: canonicalUserId, reset_state: 'ACTIVE', expires_at: expiresAt }));
+    vi.stubGlobal('fetch', upstream);
+
+    const result = await invoke({ userId }, '192.0.2.33');
+
+    expect(result).toEqual({ status: 200, body: { ok: true, expiresAt } });
+    expect(String(upstream.mock.calls[3][0])).toContain('service_relink_orphaned_profile_for_pin_reset');
+    expect(JSON.parse(String(upstream.mock.calls[3][1]?.body))).toEqual({
+      actor_id_param: adminId,
+      target_user_id_param: userId,
+    });
+    expect(String(upstream.mock.calls[4][0])).toContain(`/admin/users/${canonicalUserId}`);
+    expect(JSON.parse(String(upstream.mock.calls[5][1]?.body))).toEqual({ user_id_param: canonicalUserId });
+    expect(String(upstream.mock.calls[6][0])).toContain(`/admin/users/${canonicalUserId}`);
+    expect(JSON.parse(String(upstream.mock.calls[7][1]?.body))).toEqual({
+      actor_id_param: adminId,
+      user_id_param: canonicalUserId,
+    });
   });
 });

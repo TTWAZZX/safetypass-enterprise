@@ -102,12 +102,19 @@ export default async function handler(req, res) {
     );
     const resetIsCurrent = resetState === 'ACTIVE'
       && resetHasTimeRemaining;
+    const pendingResetRecovery = resetState === 'PENDING'
+      && resetHasTimeRemaining
+      && isSecurePin
+      && pin === nationalId.slice(-6);
     const isTemporaryResetPin = Boolean(
-      resetIsCurrent && isSecurePin && pin === nationalId.slice(-6),
+      (resetIsCurrent && isSecurePin && pin === nationalId.slice(-6)) || pendingResetRecovery,
     );
 
-    if (resetState === 'PENDING' && resetHasTimeRemaining) {
+    if (resetState === 'PENDING' && resetHasTimeRemaining && !pendingResetRecovery) {
       return res.status(503).json({ message: 'PIN reset is being prepared; please try again shortly' });
+    }
+    if (resetState === 'PENDING' && !resetHasTimeRemaining) {
+      return res.status(401).json({ message: 'Temporary PIN has expired; contact an administrator' });
     }
     if (resetState === 'ACTIVE' && !resetIsCurrent) {
       return res.status(401).json({ message: 'Temporary PIN has expired; contact an administrator' });
@@ -145,12 +152,25 @@ export default async function handler(req, res) {
       }
     }
 
+    if (!login && pendingResetRecovery) {
+      return res.status(503).json({ message: 'PIN reset is being prepared; please try again shortly' });
+    }
+
     if (!login) {
       const failure = await rpc(serviceConfig, 'record_auth_login_failure', { national_id_param: nationalId });
       return res.status(failure?.locked_until ? 429 : 401).json({
         message: failure?.locked_until ? 'Account is temporarily locked' : 'Invalid credentials',
         lockedUntil: failure?.locked_until || null,
       });
+    }
+
+    if (pendingResetRecovery) {
+      const recoveredReset = await rpc(serviceConfig, 'service_recover_prepared_pin_reset', {
+        user_id_param: context.user_id,
+      });
+      if (recoveredReset?.reset_state !== 'ACTIVE') {
+        return res.status(503).json({ message: 'PIN reset activation could not be recovered' });
+      }
     }
 
     await rpc(serviceConfig, 'record_auth_login_success', {

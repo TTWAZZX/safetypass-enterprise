@@ -14,6 +14,7 @@ const allowedTests = new Set([
   'supabase/tests/admin_training_access_guards_test.sql',
   'supabase/tests/admin_user360_foundation_test.sql',
   'supabase/tests/admin_identity_privileged_workflow_test.sql',
+  'supabase/tests/admin_pin_reset_auth_relink_test.sql',
 ]);
 const testPath = process.argv[2]?.replaceAll('\\', '/');
 if (!allowedTests.has(testPath)) throw new Error('Remote database test path is not allowed');
