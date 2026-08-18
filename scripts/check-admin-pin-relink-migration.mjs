@@ -34,6 +34,9 @@ const client = new pg.Client({
 const migration = unwrapTransaction(readFileSync(
   'supabase/migrations/20260818170000_admin_pin_reset_auth_relink.sql',
   'utf8',
+)) + '\n' + unwrapTransaction(readFileSync(
+  'supabase/migrations/20260818171500_admin_pin_reset_service_begin.sql',
+  'utf8',
 ));
 const regression = unwrapTransaction(readFileSync(
   'supabase/tests/admin_pin_reset_auth_relink_test.sql',

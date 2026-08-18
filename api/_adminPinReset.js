@@ -93,7 +93,10 @@ export const handleAdminResetUserPin = async (req, res) => {
       return res.status(409).json({ message: 'This user does not have a resettable authentication account' });
     }
 
-    const begin = await authorizedRpc(auth, 'admin_begin_pin_reset', { user_id_param: resetUserId });
+    const begin = await serviceRpc(config, 'service_begin_admin_pin_reset', {
+      actor_id_param: auth.user.id,
+      user_id_param: resetUserId,
+    });
     if (!begin.ok || begin.data?.reset_state !== 'PENDING') {
       const message = typeof begin.data?.message === 'string' ? begin.data.message : 'Unable to prepare PIN reset';
       return res.status(400).json({ message });

@@ -119,14 +119,11 @@ $$;
 update auth.users
 set raw_user_meta_data = jsonb_build_object('password_scheme', 'pin-v2-admin-reset')
 where id = 'a1800000-0000-4000-8000-000000000003';
-update public.user_auth_security
-set pin_reset_state = 'PENDING',
-    pin_reset_requested_at = now(),
-    pin_reset_expires_at = now() + interval '30 minutes',
-    pin_reset_by = 'a1800000-0000-4000-8000-000000000001'
-where user_id = 'a1800000-0000-4000-8000-000000000003';
-
 set local role service_role;
+select public.service_begin_admin_pin_reset(
+  'a1800000-0000-4000-8000-000000000001',
+  'a1800000-0000-4000-8000-000000000003'
+);
 select public.service_recover_prepared_pin_reset('a1800000-0000-4000-8000-000000000003');
 reset role;
 

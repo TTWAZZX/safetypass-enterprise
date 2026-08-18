@@ -69,7 +69,11 @@ describe('admin-reset-user-pin API', () => {
     expect(authUpdate.user_metadata).toEqual({
       name: 'Reset User', password_scheme: 'pin-v2-admin-reset', must_change_pin: true,
     });
-    expect(String(upstream.mock.calls[3][0])).toContain('admin_begin_pin_reset');
+    expect(String(upstream.mock.calls[3][0])).toContain('service_begin_admin_pin_reset');
+    expect(JSON.parse(String(upstream.mock.calls[3][1]?.body))).toEqual({
+      actor_id_param: adminId,
+      user_id_param: userId,
+    });
     expect(String(upstream.mock.calls[5][0])).toContain('service_activate_admin_pin_reset');
     expect(JSON.parse(String(upstream.mock.calls[5][1]?.body))).toEqual({
       actor_id_param: adminId,
@@ -135,7 +139,10 @@ describe('admin-reset-user-pin API', () => {
       target_user_id_param: userId,
     });
     expect(String(upstream.mock.calls[4][0])).toContain(`/admin/users/${canonicalUserId}`);
-    expect(JSON.parse(String(upstream.mock.calls[5][1]?.body))).toEqual({ user_id_param: canonicalUserId });
+    expect(JSON.parse(String(upstream.mock.calls[5][1]?.body))).toEqual({
+      actor_id_param: adminId,
+      user_id_param: canonicalUserId,
+    });
     expect(String(upstream.mock.calls[6][0])).toContain(`/admin/users/${canonicalUserId}`);
     expect(JSON.parse(String(upstream.mock.calls[7][1]?.body))).toEqual({
       actor_id_param: adminId,
