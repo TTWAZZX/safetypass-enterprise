@@ -178,10 +178,17 @@ export default async function handler(req, res) {
       pin_version_param: isSecurePin ? 2 : 1,
     });
 
+    const authenticatedUserId = String(login.user?.id || '');
+    const profileUserId = String(context.user_id || '');
+    const requiresProfileRepair = /^[0-9a-f-]{36}$/i.test(authenticatedUserId)
+      && /^[0-9a-f-]{36}$/i.test(profileUserId)
+      && authenticatedUserId !== profileUserId;
+
     return res.status(200).json({
       accessToken: login.access_token,
       refreshToken: login.refresh_token,
       requiresPinUpgrade: isTemporaryResetPin || (!isSecurePin && isPinV2Enforced()),
+      ...(requiresProfileRepair ? { requiresProfileRepair: true } : {}),
     });
   } catch {
     return res.status(503).json({ message: 'Authentication service is unavailable' });

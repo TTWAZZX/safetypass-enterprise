@@ -220,6 +220,33 @@ describe('auth-login API', () => {
     expect(upstream).toHaveBeenCalledTimes(2);
   });
 
+  it('flags an authenticated legacy UUID mismatch for atomic profile repair', async () => {
+    configure();
+    const profileUserId = '10000000-0000-4000-8000-000000000031';
+    const authUserId = '10000000-0000-4000-8000-000000000032';
+    const upstream = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        user_exists: true, user_id: profileUserId, is_active: true, pin_version: 1,
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        access_token: 'mismatch-access',
+        refresh_token: 'mismatch-refresh',
+        user: { id: authUserId },
+      }))
+      .mockResolvedValueOnce(jsonResponse(null));
+    vi.stubGlobal('fetch', upstream);
+
+    const result = await invoke('0123', '192.0.2.31');
+
+    expect(result.status).toBe(200);
+    expect(result.body).toEqual({
+      accessToken: 'mismatch-access',
+      refreshToken: 'mismatch-refresh',
+      requiresPinUpgrade: true,
+      requiresProfileRepair: true,
+    });
+  });
+
   it('self-recovers a pending reset after the temporary PIN authenticates', async () => {
     configure();
     const userId = '10000000-0000-4000-8000-000000000019';

@@ -36,6 +36,10 @@ values ('88888888-8888-4888-8888-888888888881', 'INDUCTION', 10, 10, 'PASSED');
 insert into public.user_training_access(user_id, program_code)
 values ('88888888-8888-4888-8888-888888888881', 'CONTRACTOR');
 
+update public.user_auth_security
+set pin_version = 1, failed_attempts = 3, locked_until = null
+where user_id = '88888888-8888-4888-8888-888888888881';
+
 do $$
 begin
   if has_function_privilege('anon', 'public.repair_my_orphaned_registration()', 'EXECUTE') then
@@ -82,5 +86,25 @@ begin
     where user_id = '88888888-8888-4888-8888-888888888882'
       and program_code = 'CONTRACTOR'
   ) then raise exception 'Training access was not preserved'; end if;
+
+  if not exists (
+    select 1 from public.user_auth_security
+    where user_id = '88888888-8888-4888-8888-888888888882'
+      and pin_version = 1
+      and failed_attempts = 3
+  ) then raise exception 'Legacy PIN security state was not preserved'; end if;
+
+  if not exists (
+    select 1 from public.user_auth_profile_relinks
+    where old_user_id = '88888888-8888-4888-8888-888888888881'
+      and new_user_id = '88888888-8888-4888-8888-888888888882'
+      and repair_reason = 'SELF_AUTHENTICATED_LEGACY_LOGIN'
+  ) then raise exception 'Self-repair ledger was not recorded'; end if;
+
+  if not exists (
+    select 1 from public.audit_logs
+    where action = 'LEGACY_AUTH_PROFILE_RELINKED'
+      and details not like '%1999999999999%'
+  ) then raise exception 'Redacted self-repair audit was not recorded'; end if;
 end;
 $$;

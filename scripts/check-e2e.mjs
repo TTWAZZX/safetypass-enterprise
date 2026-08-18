@@ -851,7 +851,7 @@ try {
   await adminPage.getByRole('button', { name: 'แก้ไข ผู้ใช้ทดสอบระบบ' }).first().click();
   let user360Dialog = adminPage.getByRole('dialog', { name: 'User 360 Profile' });
   await user360Dialog.waitFor();
-  await user360Dialog.getByText(`${userNationalId.slice(0, 3)}••••••${userNationalId.slice(-4)}`, { exact: false }).waitFor();
+  await user360Dialog.getByText(`${userNationalId.slice(0, 3)}••••••${userNationalId.slice(-4)}`, { exact: true }).waitFor();
   if (await user360Dialog.getByText(userNationalId, { exact: true }).count()) throw new Error('User 360 dialog exposed a full national ID');
   const contractorProgram = user360Dialog.getByLabel('Contractor program');
   const supplierProgram = user360Dialog.getByLabel('Supplier and Outsource program');

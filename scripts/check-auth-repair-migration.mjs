@@ -32,7 +32,7 @@ const client = new pg.Client({
 });
 
 const migration = unwrapTransaction(readFileSync(
-  'supabase/migrations/20260804093000_repair_orphaned_auth_accounts.sql',
+  'supabase/migrations/20260818180000_harden_legacy_first_login_relink.sql',
   'utf8',
 ));
 const regression = unwrapTransaction(readFileSync(

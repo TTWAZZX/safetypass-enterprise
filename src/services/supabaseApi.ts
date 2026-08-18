@@ -144,6 +144,22 @@ export const api = {
       }
     }
 
+    // Supabase Auth can authenticate an older identity whose UUID differs from
+    // the surviving public.users profile. Repair the profile graph before the
+    // first profile read; the database RPC is authenticated, atomic and
+    // preserves every FK relationship discovered from the catalog.
+    if (!authError && loginResult?.requiresProfileRepair === true) {
+      const { data: repaired, error: repairError } = await supabase.rpc(
+        'repair_my_orphaned_registration',
+      );
+      if (repairError || repaired !== true) {
+        await supabase.auth.signOut();
+        authError = repairError || new Error('Profile repair failed');
+      } else if (pin.length === 4) {
+        requiresPinUpgrade = true;
+      }
+    }
+
     // Some legacy rows can remain fully registered in public.users after their
     // Supabase Auth identity was removed. Prepare a replacement session and let
     // the database atomically re-link only a verified orphaned USER profile.
