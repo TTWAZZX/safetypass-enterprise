@@ -29,6 +29,7 @@ import VendorImportReviewDialog, { VendorImportReviewItem } from './VendorImport
 import UserRoleDialog from './UserRoleDialog';
 import AdminIdentityControls from './AdminIdentityControls';
 import { presentAuditLog } from '../services/auditPresentation';
+import { getAdminPromotionReadiness } from '../services/adminPromotionReadiness';
 import {
   getImportSummary,
   prepareUserImportRows,
@@ -54,6 +55,33 @@ const auditToneClasses = {
   red: 'bg-red-50 text-red-700 border-red-100',
   violet: 'bg-violet-50 text-violet-700 border-violet-100',
   slate: 'bg-slate-100 text-slate-700 border-slate-200',
+};
+
+const registrationStatusToneClasses = {
+  emerald: 'border-emerald-100 bg-emerald-50 text-emerald-800',
+  amber: 'border-amber-200 bg-amber-50 text-amber-800',
+  red: 'border-red-200 bg-red-50 text-red-700',
+  slate: 'border-slate-200 bg-slate-100 text-slate-600',
+};
+
+const UserRegistrationStatus = ({ user }: { user: any }) => {
+  const readiness = getAdminPromotionReadiness(user);
+  const dotClasses = {
+    emerald: 'bg-emerald-500',
+    amber: 'bg-amber-500',
+    red: 'bg-red-500',
+    slate: 'bg-slate-400',
+  };
+
+  return (
+    <span
+      className={`flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[8px] font-bold ${registrationStatusToneClasses[readiness.statusTone]}`}
+      title={readiness.checks.filter((check) => !check.passed).map((check) => check.label).join(', ') || 'ผ่านเงื่อนไขการลงทะเบียนครบแล้ว'}
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${dotClasses[readiness.statusTone]}`} aria-hidden="true" />
+      {readiness.statusLabel}
+    </span>
+  );
 };
 
 type UserEditForm = {
@@ -1290,15 +1318,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                                  {activeTab === 'USERS' && (
                                     <div className="flex items-center gap-2">
                                         <p className="text-[10px] text-slate-600 font-mono tracking-tighter">ID: {maskNationalID(item.national_id)}</p>
-                                        {item.last_login ? (
-                                            <span className="text-[8px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded flex items-center gap-1 border border-emerald-100">
-                                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> Active
-                                            </span>
-                                        ) : (
-                                            <span className="text-[8px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded flex items-center gap-1 border border-slate-200">
-                                                <div className="w-1.5 h-1.5 rounded-full bg-slate-300"></div> Pending
-                                            </span>
-                                        )}
+                                        <UserRegistrationStatus user={item} />
                                     </div>
                                  )}
                                </div>
@@ -1427,15 +1447,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                                {activeTab === 'USERS' && (
                                    <div className="flex items-center justify-between mt-1">
                                       <p className="text-[10px] text-slate-400 font-mono truncate">ID: {maskNationalID(item.national_id)}</p>
-                                      {item.last_login ? (
-                                        <span className="text-[8px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded flex items-center gap-1">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> Active
-                                        </span>
-                                      ) : (
-                                        <span className="text-[8px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded flex items-center gap-1">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-slate-300"></div> Pending
-                                        </span>
-                                      )}
+                                      <UserRegistrationStatus user={item} />
                                    </div>
                                )}
                                {activeTab === 'VENDORS' && <p className="text-[10px] text-slate-600 font-mono mt-0.5 truncate">Reg: {new Date(item.created_at).toLocaleDateString()}</p>}

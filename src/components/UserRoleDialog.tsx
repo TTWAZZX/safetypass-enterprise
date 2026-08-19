@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
-import { Loader2, ShieldCheck, UserRound, X } from 'lucide-react';
+import { CheckCircle2, CircleX, Loader2, ShieldCheck, UserRound, X } from 'lucide-react';
 import { useDialogFocus } from '../hooks/useDialogFocus';
+import { getAdminPromotionReadiness } from '../services/adminPromotionReadiness';
 
 interface RoleUser {
   id: string;
@@ -23,8 +24,9 @@ const UserRoleDialog: React.FC<Props> = ({ user, isCurrentAdmin, busy, onClose, 
   const dialogRef = useRef<HTMLDivElement>(null);
   const currentRole: 'ADMIN' | 'USER' = user.role === 'ADMIN' ? 'ADMIN' : 'USER';
   const [selectedRole, setSelectedRole] = useState<'ADMIN' | 'USER'>(currentRole);
-  const cannotPromote = selectedRole === 'ADMIN' && currentRole === 'USER'
-    && (user.is_active === false || !user.last_login || user.pdpa_agreed !== true);
+  const promotionReadiness = getAdminPromotionReadiness(user);
+  const isPromotion = selectedRole === 'ADMIN' && currentRole === 'USER';
+  const cannotPromote = isPromotion && !promotionReadiness.eligible;
   const changed = selectedRole !== currentRole;
   useDialogFocus(true, dialogRef, onClose);
 
@@ -56,7 +58,21 @@ const UserRoleDialog: React.FC<Props> = ({ user, isCurrentAdmin, busy, onClose, 
           </div>
 
           {isCurrentAdmin && <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[10px] font-bold text-amber-800">ไม่สามารถเปลี่ยนสิทธิ์บัญชีที่กำลังใช้งานอยู่ได้</p>}
-          {cannotPromote && <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[10px] font-bold text-amber-800">เลื่อนเป็นแอดมินได้หลังจากผู้ใช้ลงทะเบียนสำเร็จและบัญชี Active แล้วเท่านั้น</p>}
+          {isPromotion && (
+            <div className={`rounded-xl border p-3 ${cannotPromote ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}>
+              <p className={`text-[10px] font-black ${cannotPromote ? 'text-amber-900' : 'text-emerald-900'}`}>
+                {cannotPromote ? 'ยังไม่สามารถเลื่อนเป็นแอดมินได้' : 'ผู้ใช้นี้พร้อมเลื่อนเป็นแอดมิน'}
+              </p>
+              <ul className="mt-2 space-y-1.5" aria-label="เงื่อนไขการเลื่อนเป็นแอดมิน">
+                {promotionReadiness.checks.map((check) => (
+                  <li key={check.code} className={`flex items-center gap-2 text-[10px] font-bold ${check.passed ? 'text-emerald-800' : 'text-red-700'}`}>
+                    {check.passed ? <CheckCircle2 size={14} aria-hidden="true" /> : <CircleX size={14} aria-hidden="true" />}
+                    <span>{check.label}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {changed && !cannotPromote && !isCurrentAdmin && (
             <p className="rounded-xl border border-violet-200 bg-violet-50 p-3 text-[10px] font-bold leading-relaxed text-violet-800">
               {selectedRole === 'ADMIN' ? 'ผู้ใช้นี้จะเข้าถึงข้อมูลและเครื่องมือใน Admin Portal ได้' : 'ผู้ใช้นี้จะสูญเสียสิทธิ์เข้าถึง Admin Portal ทันที'}
