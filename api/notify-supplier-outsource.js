@@ -1,5 +1,6 @@
 import { cleanText, isRateLimited, requireAuthenticatedUser } from './_auth.js';
 import { createSupplierOutsourcePassMessage } from './_lineMessages.js';
+import { createDeliveryResponse, getLineDestinations, pushLineNotification } from './_lineClient.js';
 
 const MAX_NOTIFICATION_AGE_MS = 30 * 60 * 1000;
 
@@ -70,19 +71,20 @@ export default async function handler(req, res) {
       verificationToken: pass.verification_token,
     });
 
-    const targets = [lineGroupId];
     const directLineId = cleanText(profile.line_user_id, 40);
-    if (/^U[0-9A-Fa-f]{32}$/.test(directLineId) && directLineId !== lineGroupId) targets.push(directLineId);
-    const responses = await Promise.all(targets.map((target) => fetch('https://api.line.me/v2/bot/message/push', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${lineAccessToken}` },
-      body: JSON.stringify({ to: target, messages: [message] }),
-    })));
-    if (responses.some((response) => !response.ok)) {
-      console.error('LINE API Error: Supplier and Outsource notification failed');
-      return res.status(502).json({ message: 'Failed to send LINE notification' });
+    const targetState = getLineDestinations(lineGroupId, directLineId, { requireDirect: true });
+    const results = await pushLineNotification({ accessToken: lineAccessToken, message, destinations: targetState.destinations, flow: 'supplier_outsource' });
+    const delivery = createDeliveryResponse(results, targetState);
+    if (!delivery.success) {
+      return res.status(502).json({
+        ...delivery,
+        code: 'LINE_DELIVERY_FAILED',
+        message: targetState.directAvailable
+          ? 'Failed to send one or more LINE notifications'
+          : 'LINE account is not linked for direct notification',
+      });
     }
-    return res.status(200).json({ success: true, destinations: targets.length });
+    return res.status(200).json(delivery);
   } catch (error) {
     console.error('Supplier and Outsource notification error:', error);
     return res.status(500).json({ message: 'Internal Server Error' });

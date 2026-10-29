@@ -62,6 +62,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
   const [passThreshold, setPassThreshold] = useState<number>(80); 
   
   const [updatedUserData, setUpdatedUserData] = useState<User | null>(null);
+  const [notificationError, setNotificationError] = useState<string | null>(null);
   const [detailedResults, setDetailedResults] = useState<{question: Question, userAns: any, isCorrect: boolean}[]>([]);
 
   const [currentPage, setCurrentPage] = useState(0);
@@ -228,6 +229,7 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
     }
     lastSubmitRef.current = now;
     setLoading(true);
+    setNotificationError(null);
     
     try {
       // ส่งคำตอบไปตรวจที่ Server — เฉลยอยู่ที่ server เท่านั้น
@@ -254,39 +256,29 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
             ? '/api/notify-work-permit'
             : '/api/notify-supplier-outsource';
 
-        fetch(notificationEndpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({
-            vendor: user.vendors?.name || 'EXTERNAL (ไม่มีสังกัด)',
-            permitNo: permitNo,
-          })
-        })
-          .then(res => {
-            if (!res.ok) {
-              return res.text().then(body => {
-                // 📋 บันทึก LINE API failure ลง Supabase
-                api.logNotificationFailure({
-                  user_id: user.id,
-                  exam_type: type,
-                  error_message: `HTTP ${res.status}`,
-                  context: body.slice(0, 200)
-                });
-              });
-            }
-          })
-          .catch(err => {
-            // 📋 บันทึก network error ลง Supabase
-            api.logNotificationFailure({
-              user_id: user.id,
-              exam_type: type,
-              error_message: err?.message || 'Network error',
-              context: 'fetch failed'
-            });
+        try {
+          const notificationResponse = await fetch(notificationEndpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({
+              vendor: user.vendors?.name || 'EXTERNAL (ไม่มีสังกัด)',
+              permitNo,
+            }),
           });
+          const responseBody = await notificationResponse.json().catch(() => null);
+          if (!notificationResponse.ok || responseBody?.success !== true) {
+            throw new Error(responseBody?.message || `HTTP ${notificationResponse.status}`);
+          }
+        } catch (notificationFailure: any) {
+          console.error('LINE notification failed', {
+            examType: type,
+            message: notificationFailure?.message || 'Network error',
+          });
+          setNotificationError(`บันทึกผลสอบสำเร็จ แต่ส่ง LINE notification ไม่สำเร็จ: ${notificationFailure?.message || 'Network error'}`);
+        }
       }
 
       if (serverResult.passed) {
@@ -484,6 +476,15 @@ const ExamSystem: React.FC<ExamSystemProps> = ({
         <p className={`font-bold text-center text-[10px] md:text-xs mb-6 uppercase tracking-widest ${passed ? 'text-emerald-500' : 'text-red-400'}`}>
             {passed ? 'You are now certified' : 'Please review and retry'}
         </p>
+
+        {notificationError && (
+          <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-left text-sm font-bold text-amber-900" role="alert">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+              <span>{notificationError}</span>
+            </div>
+          </div>
+        )}
 
         {/* Score Box */}
         <div className="bg-slate-50 rounded-[2rem] p-6 mb-6 border border-slate-100 text-center relative overflow-hidden">

@@ -1,13 +1,10 @@
 import { cleanText, isRateLimited, requireAuthenticatedUser } from './_auth.js';
-import { createLoginButton } from './_lineMessages.js';
+import { createDeliveryResponse, getLineDestinations, pushLineNotification } from './_lineClient.js';
+import { createWorkPermitPassMessage } from './_lineMessages.js';
 
 export default async function handler(req, res) {
-  // รับเฉพาะ Method POST
-  if (req.method !== 'POST') {
-    return res.status(405).json({ message: 'Method Not Allowed' });
-  }
+  if (req.method !== 'POST') return res.status(405).json({ message: 'Method Not Allowed' });
 
-  // ✅ รับค่าจาก Frontend (ดึงมาครบถ้วนเหมือนเดิม)
   const auth = await requireAuthenticatedUser(req, res);
   if (!auth) return;
 
@@ -19,6 +16,13 @@ export default async function handler(req, res) {
     return res.status(429).json({ message: 'Please wait before sending another notification' });
   }
 
+  const lineAccessToken = process.env.LINE_ACCESS_TOKEN;
+  const lineGroupId = process.env.LINE_GROUP_ID;
+  if (!lineAccessToken || !lineGroupId) {
+    return res.status(500).json({ message: 'LINE credentials missing' });
+  }
+
+  const headers = { apikey: auth.config.anonKey, Authorization: auth.authorization };
   const permitQuery = new URLSearchParams({
     select: 'permit_no,expire_date,status',
     user_id: `eq.${auth.user.id}`,
@@ -27,22 +31,8 @@ export default async function handler(req, res) {
     expire_date: `gt.${new Date().toISOString()}`,
     limit: '1',
   });
-  let permitRecord;
-  try {
-    const permitResponse = await fetch(`${auth.config.url}/rest/v1/work_permits?${permitQuery}`, {
-      headers: { apikey: auth.config.anonKey, Authorization: auth.authorization },
-    });
-    const permits = permitResponse.ok ? await permitResponse.json() : [];
-    if (!Array.isArray(permits) || permits.length !== 1) {
-      return res.status(403).json({ message: 'No active permit was found for this user' });
-    }
-    permitRecord = permits[0];
-  } catch {
-    return res.status(503).json({ message: 'Permit verification is unavailable' });
-  }
-
   const profileQuery = new URLSearchParams({
-    select: 'name,vendors(name)',
+    select: 'name,line_user_id,vendors(name)',
     id: `eq.${auth.user.id}`,
     limit: '1',
   });
@@ -55,241 +45,51 @@ export default async function handler(req, res) {
     limit: '1',
   });
 
-  let profile;
-  let examResult;
   try {
-    const headers = { apikey: auth.config.anonKey, Authorization: auth.authorization };
-    const [profileResponse, historyResponse] = await Promise.all([
+    const [permitResponse, profileResponse, historyResponse] = await Promise.all([
+      fetch(`${auth.config.url}/rest/v1/work_permits?${permitQuery}`, { headers }),
       fetch(`${auth.config.url}/rest/v1/users?${profileQuery}`, { headers }),
       fetch(`${auth.config.url}/rest/v1/exam_history?${historyQuery}`, { headers }),
     ]);
-    if (!profileResponse.ok || !historyResponse.ok) {
+    if (!permitResponse.ok || !profileResponse.ok || !historyResponse.ok) {
       return res.status(503).json({ message: 'Exam details are unavailable' });
     }
-    const [profiles, history] = await Promise.all([profileResponse.json(), historyResponse.json()]);
-    profile = profiles?.[0];
-    examResult = history?.[0];
-    if (!profile || !examResult) {
-      return res.status(403).json({ message: 'Passed exam details were not found' });
+
+    const [permits, profiles, history] = await Promise.all([
+      permitResponse.json(), profileResponse.json(), historyResponse.json(),
+    ]);
+    const permit = permits?.[0];
+    const profile = profiles?.[0];
+    const examResult = history?.[0];
+    if (!permit) return res.status(403).json({ message: 'No active permit was found for this user' });
+    if (!profile || !examResult) return res.status(403).json({ message: 'Passed exam details were not found' });
+
+    const score = Number(examResult.score);
+    const totalQuestions = Number(examResult.total_questions);
+    if (!Number.isFinite(score) || !Number.isFinite(totalQuestions) || totalQuestions <= 0) {
+      return res.status(422).json({ message: 'Invalid exam score' });
     }
-  } catch {
-    return res.status(503).json({ message: 'Exam details are unavailable' });
-  }
-
-  const vendorRelation = Array.isArray(profile.vendors) ? profile.vendors[0] : profile.vendors;
-  const name = cleanText(profile.name, 120) || 'Verified user';
-  const vendor = cleanText(vendorRelation?.name, 120) || 'ไม่มีสังกัด';
-  const score = Number(examResult.score);
-  const maxScore = Number(examResult.total_questions);
-  if (!Number.isFinite(score) || !Number.isFinite(maxScore) || maxScore <= 0) {
-    return res.status(422).json({ message: 'Invalid exam score' });
-  }
-  const status = 'PASSED';
-
-  // ตรวจสอบสถานะการสอบ
-  const isPassed = status === 'PASSED';
-
-  const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN;
-  const LINE_GROUP_ID = process.env.LINE_GROUP_ID;
-
-  // 🌐 ตั้งค่า URL ของเว็บคุณ
-  const BASE_URL = "https://safetypass-enterprise.vercel.app";
-
-  if (!LINE_ACCESS_TOKEN || !LINE_GROUP_ID) {
-    return res.status(500).json({ message: 'LINE Credentials Missing' });
-  }
-
-  // 🎨 ออกแบบ Flex Message แบบ Premium Enterprise
-  const flexMessage = {
-    to: LINE_GROUP_ID,
-    messages: [
-      {
-        type: 'flex',
-        altText: isPassed ? `สอบผ่าน: ${name}` : `สอบไม่ผ่าน: ${name}`,
-        contents: {
-          type: "bubble",
-          size: "mega", // อัปเกรดขนาดให้ใหญ่ขึ้นเพื่อให้ข้อความไม่เบียดกัน
-          header: {
-            type: "box",
-            layout: "vertical",
-            contents: [
-              {
-                type: "box",
-                layout: "horizontal",
-                contents: [
-                  {
-                    type: "text",
-                    text: "SECURITY COMPLIANCE NODE",
-                    color: "#EAB308", // สีทอง Premium
-                    size: "xxs",
-                    weight: "bold",
-                    flex: 0
-                  }
-                ],
-                paddingBottom: "5px"
-              },
-              {
-                type: "text",
-                text: isPassed ? "PERMIT APPROVED" : "ASSESSMENT FAILED",
-                color: isPassed ? "#10B981" : "#EF4444", // เขียวถ้าผ่าน แดงถ้าตก
-                weight: "bold",
-                size: "lg",
-                wrap: true
-              }
-            ],
-            backgroundColor: "#0F172A", // สีน้ำเงินเข้มหรูหรา
-            paddingAll: "20px",
-            paddingTop: "22px",
-            paddingBottom: "22px"
-          },
-          body: {
-            type: "box",
-            layout: "vertical",
-            contents: [
-              {
-                type: "text",
-                text: "สรุปผลการทดสอบความปลอดภัยก่อนเข้างาน (Safety Induction & Work Permit)",
-                weight: "regular",
-                size: "xs",
-                color: "#64748B",
-                wrap: true,
-                margin: "none"
-              },
-              {
-                type: "separator",
-                margin: "lg",
-                color: "#E2E8F0"
-              },
-              {
-                type: "box",
-                layout: "vertical",
-                margin: "lg",
-                spacing: "md",
-                contents: [
-                  {
-                    type: "box",
-                    layout: "horizontal",
-                    contents: [
-                      { type: "text", text: "ใบอนุญาต", color: "#94A3B8", size: "sm", flex: 3 },
-                      { 
-                        type: "text", 
-                        text: permitRecord.permit_no || "-",
-                        wrap: true, 
-                        color: "#0F172A", 
-                        size: "sm", 
-                        flex: 7, 
-                        weight: "bold" 
-                      }
-                    ]
-                  },
-                  {
-                    type: "box",
-                    layout: "horizontal",
-                    contents: [
-                      { type: "text", text: "ชื่อ", color: "#94A3B8", size: "sm", flex: 3 },
-                      { type: "text", text: name, wrap: true, color: "#0F172A", size: "sm", flex: 7, weight: "bold" }
-                    ]
-                  },
-                  {
-                    type: "box",
-                    layout: "horizontal",
-                    contents: [
-                      { type: "text", text: "บริษัท", color: "#94A3B8", size: "sm", flex: 3 },
-                      { type: "text", text: vendor || "ไม่มีสังกัด", wrap: true, color: "#0F172A", size: "sm", flex: 7, weight: "bold" }
-                    ]
-                  },
-                  {
-                    type: "box",
-                    layout: "horizontal",
-                    contents: [
-                      { type: "text", text: "คะแนน", color: "#94A3B8", size: "sm", flex: 3 },
-                      { 
-                        type: "text", 
-                        text: `${score} / ${maxScore}`, 
-                        wrap: true, 
-                        color: isPassed ? "#10B981" : "#EF4444", 
-                        size: "sm", 
-                        flex: 7, 
-                        weight: "bold" 
-                      }
-                    ]
-                  },
-                  {
-                    type: "box",
-                    layout: "horizontal",
-                    contents: [
-                      { type: "text", text: "สถานะ", color: "#94A3B8", size: "sm", flex: 3 },
-                      { 
-                        type: "text", 
-                        text: isPassed ? "ผ่านเกณฑ์ (บัตร 5 วัน)" : "ไม่ผ่านเกณฑ์ (สอบใหม่)", 
-                        wrap: true, 
-                        color: isPassed ? "#10B981" : "#EF4444", 
-                        size: "sm", 
-                        flex: 7, 
-                        weight: "bold" 
-                      }
-                    ]
-                  }
-                ]
-              }
-            ],
-            paddingAll: "20px"
-          },
-          // 🔗 ✅ ส่วนปุ่มกด (รักษาระบบและลิงก์เดิมไว้ 100%)
-          footer: {
-            type: "box",
-            layout: "vertical",
-            spacing: "sm",
-            paddingAll: "20px",
-            paddingTop: "0px",
-            contents: [
-              {
-                type: "button",
-                style: "primary",
-                height: "sm",
-                color: "#3B82F6", // สีฟ้าน้ำทะเล
-                action: {
-                  type: "uri",
-                  label: "ดูใบเซอร์ / Digital Pass",
-                  "uri": `https://safetypass-enterprise.vercel.app/verify?permit=${encodeURIComponent(permitNo)}`
-                }
-              },
-              {
-                type: "button",
-                style: "secondary",
-                height: "sm",
-                action: {
-                  type: "uri",
-                  label: "ระงับสิทธิ์สอบ (Admin)",
-                  uri: `${BASE_URL}/admin?search=${encodeURIComponent(permitNo)}`
-                }
-              },
-              createLoginButton()
-            ]
-          }
-        }
-      }
-    ]
-  };
-
-  try {
-    const response = await fetch('https://api.line.me/v2/bot/message/push', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${LINE_ACCESS_TOKEN}`
-      },
-      body: JSON.stringify(flexMessage)
+    const vendorRelation = Array.isArray(profile.vendors) ? profile.vendors[0] : profile.vendors;
+    const message = createWorkPermitPassMessage({
+      permitNo: permit.permit_no,
+      name: cleanText(profile.name, 120) || 'Verified user',
+      vendor: cleanText(vendorRelation?.name, 120) || 'ไม่มีสังกัด',
+      score,
+      totalQuestions,
     });
-
-    if (!response.ok) {
-      const errorData = await response.text();
-      console.error("LINE API Error:", errorData);
-      return res.status(response.status).json({ error: errorData });
+    const targetState = getLineDestinations(lineGroupId, cleanText(profile.line_user_id, 40));
+    const results = await pushLineNotification({ accessToken: lineAccessToken, message, destinations: targetState.destinations, flow: 'work_permit' });
+    const delivery = createDeliveryResponse(results, targetState);
+    if (!delivery.success) {
+      return res.status(502).json({ ...delivery, code: 'LINE_DELIVERY_FAILED', message: 'Failed to send LINE notification' });
     }
-
-    return res.status(200).json({ success: true, message: 'Notification sent!' });
+    return res.status(200).json(delivery);
   } catch (error) {
-    return res.status(500).json({ error: error.message });
+    console.error('[line-notification]', {
+      event: 'handler_failed',
+      flow: 'work_permit',
+      error: String(error?.message || 'Internal Server Error').slice(0, 300),
+    });
+    return res.status(500).json({ message: 'Internal Server Error' });
   }
 }

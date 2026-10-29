@@ -1,5 +1,6 @@
 import { cleanText, isRateLimited, requireAuthenticatedUser } from './_auth.js';
 import { createInductionPassMessage } from './_lineMessages.js';
+import { createDeliveryResponse, getLineDestinations, pushLineNotification } from './_lineClient.js';
 
 const MAX_NOTIFICATION_AGE_MS = 30 * 60 * 1000;
 
@@ -28,7 +29,7 @@ export default async function handler(req, res) {
       limit: '1',
     });
     const profileQuery = new URLSearchParams({
-      select: 'name,national_id,induction_expiry,vendors(name)',
+      select: 'name,national_id,induction_expiry,line_user_id,vendors(name)',
       id: `eq.${auth.user.id}`,
       limit: '1',
     });
@@ -64,7 +65,8 @@ export default async function handler(req, res) {
     if (!nationalId || !/^\d{13}$/.test(nationalId)) {
       return res.status(422).json({ message: 'Invalid user identity' });
     }
-    const vendor = cleanText(profile.vendors?.name, 120) || 'ไม่มีสังกัด';
+    const vendorRelation = Array.isArray(profile.vendors) ? profile.vendors[0] : profile.vendors;
+    const vendor = cleanText(vendorRelation?.name, 120) || 'ไม่มีสังกัด';
     const message = createInductionPassMessage({
       name,
       vendor,
@@ -74,19 +76,13 @@ export default async function handler(req, res) {
       nationalId,
     });
 
-    const lineResponse = await fetch('https://api.line.me/v2/bot/message/push', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${lineAccessToken}`,
-      },
-      body: JSON.stringify({ to: lineGroupId, messages: [message] }),
-    });
-    if (!lineResponse.ok) {
-      console.error('LINE API Error:', await lineResponse.text());
-      return res.status(lineResponse.status).json({ message: 'Failed to send LINE notification' });
+    const targetState = getLineDestinations(lineGroupId, cleanText(profile.line_user_id, 40));
+    const results = await pushLineNotification({ accessToken: lineAccessToken, message, destinations: targetState.destinations, flow: 'induction' });
+    const delivery = createDeliveryResponse(results, targetState);
+    if (!delivery.success) {
+      return res.status(502).json({ ...delivery, code: 'LINE_DELIVERY_FAILED', message: 'Failed to send LINE notification' });
     }
-    return res.status(200).json({ success: true });
+    return res.status(200).json(delivery);
   } catch (error) {
     console.error('Induction notification error:', error);
     return res.status(500).json({ message: 'Internal Server Error' });
