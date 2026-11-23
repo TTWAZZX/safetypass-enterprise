@@ -7,12 +7,13 @@ import {
   ShieldCheck, AlertTriangle, UserX, Activity,
   ShieldAlert, Clock, ArrowRight, ChevronDown
 } from 'lucide-react';
-import { downloadSupplierOutsourceWorkbook, downloadWorkbook } from '../services/excelExport';
+import { downloadSupplierOutsourceWorkbook, downloadWorkbook, reportNationalIdNumbers } from '../services/excelExport';
 import { SupplierOutsourceReportRow } from '../types';
 import AsyncState from './AsyncState';
 import { calculateSupplierDashboardMetrics } from '../services/dashboardMetrics';
 import { buildAdminActionItems } from '../services/adminActionCenter';
 import AdminActionCenter from './AdminActionCenter';
+import ReportExportDialog from './ReportExportDialog';
 
 const DashboardCharts = lazy(() => import('./DashboardCharts'));
 
@@ -27,7 +28,7 @@ const AdminDashboard: React.FC<{
   const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
-  const [supplierExportLoading, setSupplierExportLoading] = useState(false);
+  const [exportReport, setExportReport] = useState<'CONTRACTOR' | 'SUPPLIER_OUTSOURCE' | null>(null);
   const [supplierRows, setSupplierRows] = useState<SupplierOutsourceReportRow[]>([]);
   const [supplierLaunchStatus, setSupplierLaunchStatus] = useState({ enabled: false, activeQuestionCount: 0 });
   const [supplierLoadError, setSupplierLoadError] = useState('');
@@ -169,26 +170,21 @@ const AdminDashboard: React.FC<{
     supplierActions: supplierMetrics.actionRequired,
   }), [stats.failed, stats.suspended, complianceStats, supplierMetrics.actionRequired]);
 
-  const matchesHistoryFilters = (item: any) => {
-    const matchesSearch = 
-      item.users?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.users?.vendors?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.users?.national_id?.includes(searchTerm);
-
-    const matchesDate = filterDate ? item.created_at.startsWith(filterDate) : true;
-    const matchesStatus = filterStatus === 'ALL' ? true : item.status === filterStatus;
-    const matchesType = filterType === 'ALL' ? true : item.exam_type === filterType;
-
-    return matchesSearch && matchesDate && matchesStatus && matchesType;
-  };
-
   const totalPages = itemsPerPage === -1 ? 1 : Math.ceil(totalItems / itemsPerPage);
   const paginatedData = history;
 
-  const exportToExcel = async () => {
-    const allHistory = await api.getAllExamHistory();
-    const exportHistory = (allHistory || []).filter(matchesHistoryFilters);
-    if (exportHistory.length === 0) return;
+  const exportToExcel = async (stepUpToken: string, reason: string) => {
+    const pageSize = 1000;
+    const filters = { pageSize, search: searchTerm, examType: filterType, status: filterStatus, date: filterDate };
+    const firstPage = await api.getExamHistoryPage({ ...filters, page: 1 });
+    const exportHistory = firstPage.rows;
+    for (let page = 2; page <= Math.ceil(firstPage.total / pageSize); page += 1) {
+      const nextPage = await api.getExamHistoryPage({ ...filters, page });
+      exportHistory.push(...nextPage.rows);
+    }
+    if (exportHistory.length === 0) throw new Error('ไม่พบรายการตรงกับตัวกรองสำหรับส่งออก');
+    const fullIds = await api.getReportExportIds('CONTRACTOR', exportHistory.map((row) => row.user_id), stepUpToken, reason);
+    const nationalIds = reportNationalIdNumbers(exportHistory.map((row) => fullIds[row.user_id]));
 
     // Header row (ลำดับคอลัมน์ตามที่กำหนด)
     const headers = [
@@ -198,8 +194,7 @@ const AdminDashboard: React.FC<{
     ];
 
     // Data rows — ใช้ array เพื่อควบคุมลำดับคอลัมน์ได้แน่นอน
-    const rows = exportHistory.map(item => {
-      const idNum = parseInt((item.users?.national_id || '').replace(/\D/g, '') || '0', 10);
+    const rows = exportHistory.map((item, index) => {
       return [
         new Date(item.created_at),                                       // A – Date object → Excel date
         item.status === 'PASSED' ? 'ผ่าน (PASS)' : 'ไม่ผ่าน (FAIL)',  // B
@@ -207,7 +202,7 @@ const AdminDashboard: React.FC<{
         item.users?.name || '-',                                          // D
         item.users?.age ?? '-',                                           // E
         item.users?.nationality || '-',                                   // F
-        idNum,                                                             // G – number → custom 13-digit format
+        nationalIds[index],                                               // G – national ID from the protected export
         item.users?.vendors?.name || '-',                                 // H
         item.exam_type || '-',                                             // I
       ];
@@ -224,18 +219,9 @@ const AdminDashboard: React.FC<{
     );
   };
 
-  const exportSupplierOutsource = async () => {
-    try {
-      setSupplierExportLoading(true);
-      const rows = await api.getSupplierOutsourceReport();
-      await downloadSupplierOutsourceWorkbook(rows);
-      setExportMenuOpen(false);
-    } catch (exportError: any) {
-      console.error('Supplier & Outsource export failed:', exportError);
-      window.alert(exportError?.message || 'ไม่สามารถส่งออกรายงาน Supplier & Outsource ได้ กรุณาลองใหม่อีกครั้ง');
-    } finally {
-      setSupplierExportLoading(false);
-    }
+  const exportSupplierOutsource = async (stepUpToken: string, reason: string) => {
+    const rows = await api.getSupplierOutsourceReport();
+    await downloadSupplierOutsourceWorkbook(await api.attachSupplierReportExportIds(rows, stepUpToken, reason));
   };
 
   const renderPagination = (position: 'top' | 'bottom') => {
@@ -337,8 +323,8 @@ const AdminDashboard: React.FC<{
                   type="button"
                   role="menuitem"
                   disabled={totalItems === 0}
-                  onClick={async () => {
-                    await exportToExcel();
+                  onClick={() => {
+                    setExportReport('CONTRACTOR');
                     setExportMenuOpen(false);
                   }}
                   className="w-full rounded-xl px-4 py-3 text-left transition-colors hover:bg-blue-50 focus:bg-blue-50 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
@@ -349,17 +335,25 @@ const AdminDashboard: React.FC<{
                 <button
                   type="button"
                   role="menuitem"
-                  disabled={supplierExportLoading}
-                  onClick={exportSupplierOutsource}
+                  onClick={() => {
+                    setExportReport('SUPPLIER_OUTSOURCE');
+                    setExportMenuOpen(false);
+                  }}
                   className="w-full rounded-xl px-4 py-3 text-left transition-colors hover:bg-emerald-50 focus:bg-emerald-50 focus:outline-none disabled:cursor-wait disabled:opacity-50"
                 >
                   <span className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-800">
-                    {supplierExportLoading && <Loader2 size={13} className="animate-spin" />}
                     รายงาน Supplier & Outsource
                   </span>
                   <span className="mt-1 block text-[9px] font-bold text-slate-600">Supplier Epass Check Member</span>
                 </button>
               </div>
+            )}
+            {exportReport && (
+              <ReportExportDialog
+                title={exportReport === 'CONTRACTOR' ? 'รายงานผู้รับเหมาเดิม' : 'รายงาน Supplier & Outsource'}
+                onClose={() => setExportReport(null)}
+                onExport={exportReport === 'CONTRACTOR' ? exportToExcel : exportSupplierOutsource}
+              />
             )}
           </div>
           <button onClick={fetchData} title="รีเฟรชข้อมูล (Refresh)" aria-label="รีเฟรชข้อมูล Dashboard" className="min-h-11 min-w-11 p-3.5 bg-slate-100 text-slate-500 rounded-2xl hover:bg-blue-50 hover:text-blue-600 transition-all active:scale-90 flex-shrink-0">

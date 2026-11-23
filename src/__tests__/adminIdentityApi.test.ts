@@ -62,6 +62,42 @@ describe('admin privileged identity API', () => {
     delete process.env.AUTH_PIN_PEPPER;
   });
 
+  it('requires both an admin session and PIN verification before loading report IDs', async () => {
+    configure();
+    const request = { action: 'admin-identity-report-export', report: 'CONTRACTOR', userIds: [userId], reason: 'Prepare report' };
+    const upstream = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ id: adminId }))
+      .mockResolvedValueOnce(jsonResponse(false))
+      .mockResolvedValueOnce(jsonResponse({ id: adminId }))
+      .mockResolvedValueOnce(jsonResponse(true));
+    vi.stubGlobal('fetch', upstream);
+
+    expect((await invoke(request, '192.0.2.80')).status).toBe(403);
+    expect((await invoke(request, '192.0.2.80')).status).toBe(401);
+    expect(upstream).toHaveBeenCalledTimes(4);
+  });
+
+  it('loads only the requested report identities with no-store', async () => {
+    configure();
+    const token = await obtainStepUp('192.0.2.81');
+    const upstream = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ id: adminId }))
+      .mockResolvedValueOnce(jsonResponse(true))
+      .mockResolvedValueOnce(jsonResponse({ [userId]: oldNationalId }));
+    vi.stubGlobal('fetch', upstream);
+
+    const result = await invoke({
+      action: 'admin-identity-report-export', report: 'SUPPLIER_OUTSOURCE', userIds: [userId],
+      reason: 'Prepare report', stepUpToken: token,
+    }, '192.0.2.81');
+    expect(upstream.mock.calls[2][0]).toMatch(/\/rpc\/service_get_report_export_ids$/);
+    expect(JSON.parse(upstream.mock.calls[2][1].body)).toEqual({
+      actor_id_param: adminId, report_param: 'SUPPLIER_OUTSOURCE', user_ids_param: [userId], reason_param: 'Prepare report',
+    });
+    expect(result.body).toEqual({ nationalIds: { [userId]: oldNationalId } });
+    expect(result.headers.get('cache-control')).toBe('no-store');
+  });
+
   it('uses server-side PIN verification and a short-lived signed step-up token', async () => {
     configure();
     const upstream = vi.fn()
