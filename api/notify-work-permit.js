@@ -1,5 +1,5 @@
 import { cleanText, isRateLimited, requireAuthenticatedUser } from './_auth.js';
-import { createDeliveryResponse, getLineDestinations, pushLineNotification } from './_lineClient.js';
+import { createDeliveryResponse, getLineDestinations, getLinkedLineRecipient, pushLineNotification } from './_lineClient.js';
 import { createWorkPermitPassMessage } from './_lineMessages.js';
 
 export default async function handler(req, res) {
@@ -12,7 +12,7 @@ export default async function handler(req, res) {
   if (!permitNo || !/^\d{10}$/.test(permitNo)) {
     return res.status(400).json({ message: 'Invalid permit number' });
   }
-  if (isRateLimited(`work-permit:${auth.user.id}:${permitNo}`, 60 * 1000)) {
+  if (await isRateLimited(`work-permit:${auth.user.id}:${permitNo}`, 60 * 1000)) {
     return res.status(429).json({ message: 'Please wait before sending another notification' });
   }
 
@@ -24,7 +24,7 @@ export default async function handler(req, res) {
 
   const headers = { apikey: auth.config.anonKey, Authorization: auth.authorization };
   const permitQuery = new URLSearchParams({
-    select: 'permit_no,expire_date,status',
+    select: 'permit_no,verification_token,expire_date,status',
     user_id: `eq.${auth.user.id}`,
     permit_no: `eq.${permitNo}`,
     status: 'eq.ACTIVE',
@@ -32,7 +32,7 @@ export default async function handler(req, res) {
     limit: '1',
   });
   const profileQuery = new URLSearchParams({
-    select: 'name,line_user_id,vendors(name)',
+    select: 'name,line_user_id,line_identity_verified_at,vendors(name)',
     id: `eq.${auth.user.id}`,
     limit: '1',
   });
@@ -62,6 +62,7 @@ export default async function handler(req, res) {
     const profile = profiles?.[0];
     const examResult = history?.[0];
     if (!permit) return res.status(403).json({ message: 'No active permit was found for this user' });
+    if (!permit.verification_token) return res.status(422).json({ message: 'Pass verification is unavailable' });
     if (!profile || !examResult) return res.status(403).json({ message: 'Passed exam details were not found' });
 
     const score = Number(examResult.score);
@@ -72,12 +73,13 @@ export default async function handler(req, res) {
     const vendorRelation = Array.isArray(profile.vendors) ? profile.vendors[0] : profile.vendors;
     const message = createWorkPermitPassMessage({
       permitNo: permit.permit_no,
+      verificationToken: permit.verification_token,
       name: cleanText(profile.name, 120) || 'Verified user',
       vendor: cleanText(vendorRelation?.name, 120) || 'ไม่มีสังกัด',
       score,
       totalQuestions,
     });
-    const targetState = getLineDestinations(lineGroupId, cleanText(profile.line_user_id, 40));
+    const targetState = getLineDestinations(lineGroupId, getLinkedLineRecipient(profile));
     const results = await pushLineNotification({ accessToken: lineAccessToken, message, destinations: targetState.destinations, flow: 'work_permit' });
     const delivery = createDeliveryResponse(results, targetState);
     if (!delivery.success) {

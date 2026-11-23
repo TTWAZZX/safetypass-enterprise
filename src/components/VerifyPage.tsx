@@ -35,6 +35,8 @@ const VerifyPage: React.FC = () => {
       let userId = urlParams.get('id');
       const permitId = urlParams.get('permit'); 
       const supplierToken = urlParams.get('supplier');
+      const inductionToken = urlParams.get('induction');
+      const workPermitToken = urlParams.get('workPermit');
 
       if (!userId) {
         const pathParts = window.location.pathname.split('/');
@@ -46,6 +48,10 @@ const VerifyPage: React.FC = () => {
 
       if (supplierToken) {
         checkSupplierOutsourceStatus(supplierToken);
+      } else if (workPermitToken) {
+        checkPermitStatus(workPermitToken, true);
+      } else if (inductionToken) {
+        checkUserStatus(inductionToken, true);
       } else if (permitId) {
         checkPermitStatus(permitId);
       } else if (userId) {
@@ -91,9 +97,11 @@ const VerifyPage: React.FC = () => {
     }
   };
 
-  const checkPermitStatus = async (permitNo: string) => {
+  const checkPermitStatus = async (value: string, isToken = false) => {
     try {
-      const { data, error } = await supabase.rpc('verify_safety_pass', { permit_no_param: permitNo });
+      const { data, error } = isToken
+        ? await supabase.rpc('verify_work_permit_token', { token_param: value })
+        : await supabase.rpc('verify_safety_pass', { permit_no_param: value });
       if (error || !data?.[0]) {
         setStatus('NOT_FOUND');
         return;
@@ -112,17 +120,17 @@ const VerifyPage: React.FC = () => {
     }
   };
 
-  const checkUserStatus = async (id: string) => {
+  const checkUserStatus = async (id: string, isToken = false) => {
     try {
       const normalizedId = id.trim();
-      if (!/^\d{13}$/.test(normalizedId)) {
+      if (!isToken && !/^\d{13}$/.test(normalizedId)) {
         setStatus('NOT_FOUND');
         return;
       }
 
-      const { data, error } = await supabase.rpc('verify_induction_pass', {
-        national_id_param: normalizedId,
-      });
+      const { data, error } = isToken
+        ? await supabase.rpc('verify_induction_pass_token', { token_param: normalizedId })
+        : await supabase.rpc('verify_induction_pass', { national_id_param: normalizedId });
       if (error) throw error;
 
       const pass = data?.[0];

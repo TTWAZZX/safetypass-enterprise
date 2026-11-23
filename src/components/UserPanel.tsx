@@ -149,27 +149,11 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
         return;
       }
 
-      // ถ้าเปิดในแอป LINE หรือล็อกอินแล้ว ดึงข้อมูลได้ทันที!
-      const profile = await liff.getProfile();
-      const newAvatarUrl = profile.pictureUrl;
-
-      if (!newAvatarUrl) {
-        showToast('ไม่พบรูปโปรไฟล์ใน LINE ของคุณ', 'error');
-        return;
-      }
-
-      // 1. บันทึกรูปภาพลงฐานข้อมูล
-      const { error } = await supabase
-        .from('users')
-        .update({ avatar_url: newAvatarUrl })
-        .eq('id', user.id);
-
-      if (error) throw error;
-      if (profile.userId) await mockApi.linkMyLineIdentity(profile.userId);
-
-      // 2. อัปเดตหน้าจอให้เปลี่ยนรูปทันที
-      onUserUpdate({ ...user, avatar_url: newAvatarUrl });
-      showToast('ซิงค์รูปโปรไฟล์จาก LINE สำเร็จ!', 'success');
+      const lineAccessToken = liff.getAccessToken();
+      if (!lineAccessToken) throw new Error('LINE access token is missing');
+      const newAvatarUrl = await mockApi.linkMyLineIdentity(lineAccessToken);
+      if (newAvatarUrl) onUserUpdate({ ...user, avatar_url: newAvatarUrl });
+      showToast(newAvatarUrl ? 'ซิงค์รูปโปรไฟล์จาก LINE สำเร็จ!' : 'เชื่อมบัญชี LINE สำเร็จ', 'success');
 
     } catch (err: any) {
       console.error(err);
@@ -476,11 +460,11 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
                 setTimeout(async () => {
                     const { data: freshUser } = await supabase
                         .from('users')
-                        .select('induction_expiry')
+                        .select('induction_expiry,induction_verification_token')
                         .eq('id', user.id)
                         .single();
                     if (freshUser?.induction_expiry) {
-                        onUserUpdate({ ...u, induction_expiry: freshUser.induction_expiry });
+                        onUserUpdate({ ...u, ...freshUser });
                         setCardType('INDUCTION');
                         setShowCard(true);
                     }
@@ -948,7 +932,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
               
               {/* 🔥 แก้ไข URL เข้ารหัส permit_no สำหรับ QR เล็กในหน้าแรก */}
               <button type="button" aria-label="ขยาย QR Code ใบอนุญาต" className="bg-white p-2.5 rounded-2xl shadow-lg active:scale-95 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-400" onClick={() => setShowQRFullScreen(true)}>
-                <QRCodeSVG title="QR Code สำหรับตรวจสอบใบอนุญาต" value={`${window.location.origin}/verify?id=${encodeURIComponent(user.national_id)}&permit=${encodeURIComponent(activePermit.permit_no)}`} size={112} />
+                {activePermit.verification_token && <QRCodeSVG title="QR Code สำหรับตรวจสอบใบอนุญาต" value={`${window.location.origin}/verify?workPermit=${encodeURIComponent(activePermit.verification_token)}`} size={112} />}
               </button>
 
               <div className="text-left">
@@ -1012,7 +996,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
             <div className="bg-white p-10 rounded-[3rem] shadow-[0_0_80px_rgba(59,130,246,0.4)] animate-in zoom-in duration-500">
               
               {/* 🔥 แก้ไข URL เข้ารหัส permit_no สำหรับ QR แบบ Fullscreen */}
-              <QRCodeSVG title="QR Code สำหรับตรวจสอบใบอนุญาตแบบเต็มจอ" value={`${window.location.origin}/verify?id=${encodeURIComponent(user.national_id)}&permit=${encodeURIComponent(activePermit.permit_no)}`} size={300} />
+              {activePermit.verification_token && <QRCodeSVG title="QR Code สำหรับตรวจสอบใบอนุญาตแบบเต็มจอ" value={`${window.location.origin}/verify?workPermit=${encodeURIComponent(activePermit.verification_token)}`} size={300} />}
               
             </div>
             <div className="mt-10 text-3xl font-black tracking-[0.3em] uppercase border-b-2 border-blue-500 pb-4">{activePermit.permit_no}</div>

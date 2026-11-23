@@ -1,4 +1,7 @@
 {
+  "crons": [
+    { "path": "/api/send-external-registration-result", "schedule": "0 0 * * *" }
+  ],
   "headers": [
     {
       "source": "/(.*)",

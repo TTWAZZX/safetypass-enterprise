@@ -4,10 +4,12 @@ import {
 import { handleAdminResetUserPin } from './_adminPinReset.js';
 import { handleAdminIdentityAction } from './_adminIdentity.js';
 import { createSecurePinPassword, getPermanentPinError } from './_pin.js';
+import { handleLinkLineIdentity } from './_lineIdentity.js';
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'POST') return res.status(405).json({ message: 'Method Not Allowed' });
+  if (req.body?.action === 'link-line-identity') return handleLinkLineIdentity(req, res);
   if (req.body?.action === 'admin-reset-user-pin') return handleAdminResetUserPin(req, res);
   if (String(req.body?.action || '').startsWith('admin-identity-')
       || req.body?.action === 'admin-reveal-national-id'
@@ -29,7 +31,7 @@ export default async function handler(req, res) {
   }
 
   const forwardedFor = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
-  if (isRateLimited(`set-auth-pin:${auth.user.id}:${forwardedFor || 'unknown'}`, 750)) {
+  if (await isRateLimited(`set-auth-pin:${auth.user.id}:${forwardedFor || 'unknown'}`, 750)) {
     return res.status(429).json({ message: 'Please wait before trying again' });
   }
 
@@ -43,6 +45,18 @@ export default async function handler(req, res) {
   }
 
   try {
+    const eligibility = await fetch(`${config.url}/rest/v1/rpc/service_can_set_auth_pin`, {
+      method: 'POST',
+      headers: {
+        apikey: config.serviceKey,
+        Authorization: `Bearer ${config.serviceKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ user_id_param: auth.user.id, national_id_param: nationalId }),
+    });
+    if (!eligibility.ok) return res.status(503).json({ message: 'Unable to verify PIN change eligibility' });
+    if (await eligibility.json() !== true) return res.status(403).json({ message: 'Account is not eligible to change PIN' });
+
     const password = createSecurePinPassword(nationalId, pin, pepper);
     const passwordResponse = await fetch(`${config.url}/auth/v1/admin/users/${auth.user.id}`, {
       method: 'PUT',

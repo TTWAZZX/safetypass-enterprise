@@ -148,7 +148,7 @@ const requireStepUp = (req, auth, pepper) => verifyStepUpToken(req.body?.stepUpT
 const handleStepUp = async (req, res, auth, pepper) => {
   const pin = cleanText(req.body?.pin, 6);
   const forwardedFor = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
-  if (!pin || isRateLimited(`admin-identity-step-up:${auth.user.id}:${forwardedFor || 'unknown'}`, 1500)) {
+  if (!pin || await isRateLimited(`admin-identity-step-up:${auth.user.id}:${forwardedFor || 'unknown'}`, 1500)) {
     return res.status(429).json({ message: 'Please wait before verifying again' });
   }
   if (!await verifyAdminPin(auth, pin, pepper)) return res.status(401).json({ message: 'PIN verification failed' });

@@ -41,6 +41,7 @@ function profile(role) {
     vendor_id: vendorId,
     role,
     induction_expiry: future,
+    induction_verification_token: '40000000-0000-4000-8000-000000000010',
     created_at: '2026-07-29T00:00:00.000Z',
     age: 30,
     date_of_birth: '1996-01-01',
@@ -84,6 +85,7 @@ async function installMocks(page, options = {}) {
     pinUpgradeRequests: 0,
     adminPinResetRequests: 0,
     user360ReadRequests: 0,
+    userRoleUpdates: [],
     user360UpdateRequests: 0,
     user360UpdatePayloads: [],
     legacyUserProfileUpdateRequests: 0,
@@ -101,13 +103,18 @@ async function installMocks(page, options = {}) {
   let user360Programs = ['SUPPLIER_OUTSOURCE'];
   let user360ActivePermit = false;
   let user360NationalId = userNationalId;
+  let personnelRole = 'USER';
+  const personnelProfile = () => ({
+    ...profile('USER'),
+    role: personnelRole,
+    last_login: '2026-07-29T00:00:00.000Z',
+  });
   const user360Snapshot = () => ({
     profile: {
-      ...profile('USER'),
+      ...personnelProfile(),
       masked_national_id: `${user360NationalId.slice(0, 3)}••••••${user360NationalId.slice(-4)}`,
       vendor: { id: vendorId, name: 'บริษัททดสอบ', status: 'APPROVED' },
       line_connected: false,
-      last_login: null,
     },
     programs: user360Programs.map((programCode) => ({
       program_code: programCode,
@@ -246,6 +253,10 @@ async function installMocks(page, options = {}) {
       if (rpc === 'check_user_exists') authDiagnostics.directIdentityRpcRequests += 1;
       if (rpc === 'complete_registration_v4') authDiagnostics.completedRegistrationRequests += 1;
       const rpcResponses = {
+        registration_invitation_required: options.invitationRequired === true,
+        verify_induction_pass_token: [{
+          name: 'ผู้ใช้ทดสอบระบบ', vendor_name: 'บริษัททดสอบ', induction_expiry: future, is_active: true,
+        }],
         get_my_staged_registration_profile: {
           name: 'ผู้ใช้ที่บริษัทเตรียมไว้',
           age: 42,
@@ -375,12 +386,23 @@ async function installMocks(page, options = {}) {
         authDiagnostics.legacyUserProfileUpdateRequests += 1;
         return json(route, null);
       }
+      if (rpc === 'admin_set_user_role') {
+        authDiagnostics.userRoleUpdates.push(payload);
+        const previousRole = personnelRole;
+        personnelRole = payload.role_param;
+        return json(route, {
+          changed: previousRole !== personnelRole,
+          user_id: payload.user_id_param,
+          previous_role: previousRole,
+          role: personnelRole,
+        });
+      }
       if (rpc === 'admin_get_directory_page') {
         if (payload.p_section === 'VENDORS') {
           return json(route, { rows: [{ id: vendorId, name: 'บริษัททดสอบ', status: 'APPROVED', created_at: '2026-07-29T00:00:00.000Z' }], total: 1, stats: null });
         }
         return json(route, {
-          rows: [profile('USER')], total: 1,
+          rows: [personnelProfile()], total: 1,
           stats: { total_users: 1, active_users: 1, suspended_users: 0, certified_users: 1 },
         });
       }
@@ -515,6 +537,10 @@ async function installMocks(page, options = {}) {
       return json(route, { status });
     }
     authDiagnostics.stagedPrepareRequests += 1;
+    if (options.invitationRequired && (
+      payload.invitationCode !== 'abcdef0123456789abcdef0123456789'
+      || payload.initialPin !== stagedNationalId.slice(-6)
+    )) return json(route, { ok: false, code: 'INVITATION_REQUIRED' }, 403);
     currentRole = 'USER';
     currentAuthEmail = `${stagedNationalId}@safetypass.com`;
     return json(route, {
@@ -661,6 +687,24 @@ const server = await preview({ preview: { host: '127.0.0.1', port, strictPort: t
 let browser;
 try {
   browser = await chromium.launch({ headless: true });
+
+  const invitationContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const invitationPage = await invitationContext.newPage();
+  const invitationChecks = await installMocks(invitationPage, { invitationRequired: true });
+  await invitationPage.goto(appUrl, { waitUntil: 'domcontentloaded' });
+  await invitationPage.getByRole('button', { name: 'ลงทะเบียน', exact: true }).click();
+  await invitationPage.getByPlaceholder('เลขบัตรประจำตัวประชาชน 13 หลัก').fill(stagedNationalId);
+  await invitationPage.getByLabel('รหัสเชิญจากเจ้าหน้าที่ Safety').waitFor();
+  if (invitationChecks.stagedPrepareRequests !== 0) throw new Error('Staged registration started without proof');
+  await invitationPage.getByLabel('รหัสเชิญจากเจ้าหน้าที่ Safety').fill('abcdef0123456789abcdef0123456789');
+  await invitationPage.getByLabel('PIN เริ่มต้น 6 หลักท้ายบัตร').fill(stagedNationalId.slice(-6));
+  await invitationPage.getByRole('button', { name: 'ตรวจสอบ', exact: true }).click();
+  await invitationPage.getByText('พบข้อมูลที่บริษัทเตรียมไว้ เติมข้อมูลสำเร็จ', { exact: true }).waitFor();
+  await invitationPage.goto(`${appUrl}/verify?induction=${profile('USER').induction_verification_token}`, {
+    waitUntil: 'domcontentloaded',
+  });
+  await invitationPage.getByText('ผู้ใช้ทดสอบระบบ', { exact: true }).waitFor();
+  await invitationContext.close();
 
   const userContext = await browser.newContext({ viewport: { width: 390, height: 844 }, acceptDownloads: true, reducedMotion: 'reduce' });
   const userPage = await userContext.newPage();
@@ -852,6 +896,14 @@ try {
   await adminPage.getByText('เก็บบริษัทแล้ว โดยยังรักษาข้อมูลเชื่อมโยงเดิม', { exact: true }).waitFor();
   await adminPage.getByRole('button', { name: /^Personnel$/i }).click();
 
+  const personnelRow = adminPage.getByRole('row').filter({ hasText: 'ผู้ใช้ทดสอบระบบ' });
+  await personnelRow.getByText('ผู้ใช้', { exact: true }).waitFor();
+  await personnelRow.getByRole('button', { name: 'กำหนดสิทธิ์ของ ผู้ใช้ทดสอบระบบ' }).click();
+  let roleDialog = adminPage.getByRole('dialog', { name: 'กำหนดสิทธิ์ผู้ใช้งาน' });
+  await roleDialog.getByText('บทบาทปัจจุบัน', { exact: false }).waitFor();
+  await adminPage.keyboard.press('Escape');
+  await roleDialog.waitFor({ state: 'hidden' });
+
   await adminPage.getByRole('button', { name: 'แก้ไข ผู้ใช้ทดสอบระบบ' }).first().click();
   let user360Dialog = adminPage.getByRole('dialog', { name: 'User 360 Profile' });
   await user360Dialog.waitFor();
@@ -860,6 +912,25 @@ try {
   const contractorProgram = user360Dialog.getByLabel('Contractor program');
   const supplierProgram = user360Dialog.getByLabel('Supplier and Outsource program');
   if (await contractorProgram.isChecked() || !(await supplierProgram.isChecked())) throw new Error('User 360 initial program state is incorrect');
+  await user360Dialog.getByLabel('ชื่อผู้ใช้').fill('Draft name');
+  await user360Dialog.getByText('ผู้ใช้', { exact: true }).waitFor();
+  await user360Dialog.getByRole('button', { name: 'เปลี่ยนสิทธิ์', exact: true }).click();
+  roleDialog = adminPage.getByRole('dialog', { name: 'กำหนดสิทธิ์ผู้ใช้งาน' });
+  await roleDialog.getByRole('radio', { name: /ผู้ดูแลระบบ/ }).click();
+  await roleDialog.getByRole('button', { name: 'ยืนยันการเปลี่ยนสิทธิ์' }).click();
+  await user360Dialog.getByText('แอดมิน', { exact: true }).waitFor();
+  await personnelRow.getByText('แอดมิน', { exact: true }).waitFor();
+  if (await user360Dialog.getByLabel('ชื่อผู้ใช้').inputValue() !== 'Draft name') throw new Error('Role change discarded an unsaved profile edit');
+  await user360Dialog.getByLabel('ชื่อผู้ใช้').fill('ผู้ใช้ทดสอบระบบ');
+  await user360Dialog.getByRole('button', { name: 'เปลี่ยนสิทธิ์', exact: true }).click();
+  await roleDialog.getByRole('radio', { name: /ผู้ใช้งานทั่วไป/ }).click();
+  await roleDialog.getByRole('button', { name: 'ยืนยันการเปลี่ยนสิทธิ์' }).click();
+  await user360Dialog.getByText('ผู้ใช้', { exact: true }).waitFor();
+  await personnelRow.getByText('ผู้ใช้', { exact: true }).waitFor();
+  if (adminAuthDiagnostics.userRoleUpdates.map((update) => update.role_param).join(',') !== 'ADMIN,USER'
+      || adminAuthDiagnostics.userRoleUpdates.some((update) => update.user_id_param !== userId)) {
+    throw new Error('Role updates did not target the correct user through the admin RPC');
+  }
   await contractorProgram.check();
   await user360Dialog.getByLabel('เหตุผลการแก้ไข User 360').fill('Assign Contractor and retain Supplier access');
   await user360Dialog.getByRole('button', { name: 'Save Protocol' }).click();

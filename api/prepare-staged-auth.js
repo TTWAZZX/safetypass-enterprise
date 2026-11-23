@@ -53,6 +53,7 @@ const recoverStagedBootstrapIdentity = async (
   nationalId,
   email,
   bootstrapPassword,
+  invitationId,
 ) => {
   const lookup = await serviceRequest(
     url,
@@ -72,6 +73,7 @@ const recoverStagedBootstrapIdentity = async (
     'PUT',
     {
       password: bootstrapPassword,
+      ...(invitationId ? { app_metadata: { registration_invitation_id: invitationId } } : {}),
       user_metadata: { password_scheme: 'bootstrap-v2', must_change_pin: true },
     },
   );
@@ -91,6 +93,7 @@ const createBootstrapIdentity = async (
   serviceKey,
   email,
   bootstrapPassword,
+  invitationId,
 ) => {
   const created = await serviceRequest(
     url,
@@ -101,6 +104,7 @@ const createBootstrapIdentity = async (
       email,
       password: bootstrapPassword,
       email_confirm: true,
+      ...(invitationId ? { app_metadata: { registration_invitation_id: invitationId } } : {}),
       user_metadata: { password_scheme: 'bootstrap-v2', must_change_pin: true },
     },
   );
@@ -136,12 +140,12 @@ export default async function handler(req, res) {
   if (cached && cached.expiresAt <= Date.now()) statusCache.delete(identityKey);
 
   if (statusOnly && (
-    isRateLimited(`registration-status-client:${clientKey}`, 750)
-    || isRateLimited(`registration-status-identity:${identityKey}`, 1500)
+    await isRateLimited(`registration-status-client:${clientKey}`, 750)
+    || await isRateLimited(`registration-status-identity:${identityKey}`, 1500)
   )) {
     return res.status(429).json({ message: 'Please wait before checking again' });
   }
-  if (!statusOnly && isRateLimited(`prepare-staged-auth:${clientKey}`, 750)) {
+  if (!statusOnly && await isRateLimited(`prepare-staged-auth:${clientKey}`, 750)) {
     return res.status(200).json({ ok: false });
   }
 
@@ -168,12 +172,38 @@ export default async function handler(req, res) {
         requires_registration: status.requires_registration === true,
         is_active: status.is_active !== false,
       } : null;
+      if (statusCache.size >= 2048) statusCache.delete(statusCache.keys().next().value);
       statusCache.set(identityKey, { status: safeStatus, expiresAt: Date.now() + STATUS_CACHE_MS });
       return res.status(200).json({ status: safeStatus });
     }
     if (!statusResponse.ok
       || status?.is_active === false) {
       return res.status(200).json({ ok: false });
+    }
+
+    const requirement = await serviceRequest(url, serviceKey, '/rest/v1/rpc/registration_invitation_required');
+    if (!requirement.ok || typeof requirement.data !== 'boolean') {
+      return res.status(503).json({ ok: false });
+    }
+    let invitationId;
+    if (requirement.data) {
+      const code = typeof req.body?.invitationCode === 'string'
+        ? req.body.invitationCode.trim().toLowerCase() : '';
+      if (status?.user_exists === true && status?.requires_registration !== true) {
+        return res.status(403).json({ ok: false, code: 'CONTACT_ADMIN' });
+      }
+      if (!/^[0-9a-f]{32}$/.test(code) || req.body?.initialPin !== nationalId.slice(-6)) {
+        return res.status(403).json({ ok: false, code: 'INVITATION_REQUIRED' });
+      }
+      const invitation = await serviceRequest(url, serviceKey, '/rest/v1/rpc/service_get_registration_invitation', 'POST', {
+        national_id_param: nationalId,
+        code_param: code,
+      });
+      if (!invitation.ok) return res.status(503).json({ ok: false });
+      invitationId = invitation.data;
+      if (typeof invitationId !== 'string' || !/^[0-9a-f-]{36}$/i.test(invitationId)) {
+        return res.status(403).json({ ok: false, code: 'INVITATION_REQUIRED' });
+      }
     }
 
     const email = `${nationalId}@safetypass.com`;
@@ -193,6 +223,7 @@ export default async function handler(req, res) {
         nationalId,
         email,
         bootstrapPassword,
+        invitationId,
       );
     }
 
@@ -203,10 +234,11 @@ export default async function handler(req, res) {
         serviceKey,
         email,
         bootstrapPassword,
+        invitationId,
       );
     }
 
-    if (!session) {
+    if (!session && !requirement.data) {
       const pinLogin = await authRequest(
         url,
         anonKey,
@@ -216,7 +248,7 @@ export default async function handler(req, res) {
       session = sessionResult(pinLogin);
     }
 
-    if (!session) {
+    if (!session && !requirement.data) {
       const legacyLogin = await authRequest(
         url,
         anonKey,

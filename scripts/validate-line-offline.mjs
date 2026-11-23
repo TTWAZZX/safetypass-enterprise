@@ -27,6 +27,16 @@ for (const [name, message] of messages) {
   }
   if (message.contents?.type !== 'bubble') throw new Error(`${name} must use a bubble container`);
   visit(message, name);
+  if (name === 'induction' || name === 'workPermit') {
+    const expectedParameter = name === 'induction' ? 'induction' : 'workPermit';
+    const links = [...JSON.stringify(message).matchAll(/https:\/\/[^"]+\/verify\?[^"]+/g)];
+    if (links.length === 0 || links.some(([link]) => {
+      const params = new URL(link).searchParams;
+      return params.size !== 1 || !/^[0-9a-f-]{36}$/i.test(params.get(expectedParameter) || '');
+    })) {
+      throw new Error(`${name} must use a verification token without personal identifiers`);
+    }
+  }
 }
 
 console.log(`Offline LINE validation passed (${messages.length} message flows).`);

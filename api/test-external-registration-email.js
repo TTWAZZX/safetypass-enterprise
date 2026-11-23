@@ -5,7 +5,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ message: 'Method Not Allowed' });
   const auth = await requireAdminUser(req, res);
   if (!auth) return;
-  if (isRateLimited(`external-registration-email-test:${auth.user.id}`, 60 * 1000)) {
+  if (await isRateLimited(`external-registration-email-test:${auth.user.id}`, 60 * 1000)) {
     return res.status(429).json({ message: 'Please wait before sending another test email' });
   }
 

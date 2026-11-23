@@ -9,7 +9,7 @@ export default async function handler(req, res) {
 
   const auth = await requireAuthenticatedUser(req, res);
   if (!auth) return;
-  if (isRateLimited(`vendor-request:${auth.user.id}`, 5 * 60 * 1000)) {
+  if (await isRateLimited(`vendor-request:${auth.user.id}`, 5 * 60 * 1000)) {
     return res.status(429).json({ message: 'Please wait before sending another request' });
   }
   const vendorName = cleanText(req.body?.vendorName, 120);

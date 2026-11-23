@@ -42,7 +42,7 @@ export const handleAdminResetUserPin = async (req, res) => {
   if (userId === auth.user.id) return res.status(400).json({ message: 'Administrators cannot reset their own PIN here' });
 
   const forwardedFor = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
-  if (isRateLimited(`admin-reset-user-pin:${auth.user.id}:${userId}:${forwardedFor || 'unknown'}`, 1500)) {
+  if (await isRateLimited(`admin-reset-user-pin:${auth.user.id}:${userId}:${forwardedFor || 'unknown'}`, 1500)) {
     return res.status(429).json({ message: 'Please wait before resetting this PIN again' });
   }
 

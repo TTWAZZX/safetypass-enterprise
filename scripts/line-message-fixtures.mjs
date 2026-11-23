@@ -10,10 +10,11 @@ export function createLineMessageFixtures() {
   return {
     induction: createInductionPassMessage({
       name: 'ผู้ใช้ทดสอบ', vendor: 'บริษัททดสอบ', score: 10, totalQuestions: 10,
-      expiryDate: '2027-07-29T23:59:59.000Z', nationalId: '1339900567890',
+      expiryDate: '2027-07-29T23:59:59.000Z', verificationToken: '123e4567-e89b-42d3-a456-426614174001',
     }),
     workPermit: createWorkPermitPassMessage({
       permitNo: '2026070024', name: 'ผู้ใช้ทดสอบ', vendor: 'บริษัททดสอบ', score: 10, totalQuestions: 10,
+      verificationToken: '123e4567-e89b-42d3-a456-426614174002',
     }),
     supplierPass: createSupplierOutsourcePassMessage({
       name: 'ผู้ใช้ทดสอบ', vendor: 'บริษัททดสอบ', participantType: 'supplier', workType: 'Driver',

@@ -1,5 +1,10 @@
 const LINE_USER_ID_PATTERN = /^U[0-9A-Fa-f]{32}$/;
 
+export function getLinkedLineRecipient(profile) {
+  if (process.env.LINE_VERIFIED_LINK_REQUIRED === 'true' && !profile?.line_identity_verified_at) return null;
+  return profile?.line_user_id || null;
+}
+
 export function getLineDestinations(groupId, lineUserId, { requireDirect = false } = {}) {
   const destinations = [];
   if (typeof groupId === 'string' && groupId.trim()) destinations.push({ kind: 'group', id: groupId.trim() });

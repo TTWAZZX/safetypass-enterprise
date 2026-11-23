@@ -26,7 +26,7 @@ import { useDialogFocus } from '../hooks/useDialogFocus';
 import { buildDirectoryFilterSummary } from '../services/directoryFilterSummary';
 import ImportPreviewDialog from './ImportPreviewDialog';
 import VendorImportReviewDialog, { VendorImportReviewItem } from './VendorImportReviewDialog';
-import UserRoleDialog from './UserRoleDialog';
+import UserRoleDialog, { UserRoleBadge, type RoleUser } from './UserRoleDialog';
 import AdminIdentityControls from './AdminIdentityControls';
 import { presentAuditLog } from '../services/auditPresentation';
 import { getAdminPromotionReadiness } from '../services/adminPromotionReadiness';
@@ -125,7 +125,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
   const [bulkLoading, setBulkLoading] = useState(false);
   const [resettingPinUserId, setResettingPinUserId] = useState<string | null>(null);
   const [currentAdminId, setCurrentAdminId] = useState<string | null>(null);
-  const [roleDialogUser, setRoleDialogUser] = useState<any | null>(null);
+  const [roleDialogUser, setRoleDialogUser] = useState<RoleUser | null>(null);
   const [savingUserRole, setSavingUserRole] = useState(false);
 
   const [loading, setLoading] = useState(true);
@@ -180,7 +180,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
   const editDialogRef = useRef<HTMLDivElement>(null);
   const editRequestRef = useRef(0);
   const vendorDialogRef = useRef<HTMLDivElement>(null);
-  useDialogFocus(isEditModalOpen, editDialogRef, () => setIsEditModalOpen(false));
+  useDialogFocus(isEditModalOpen && !roleDialogUser, editDialogRef, () => setIsEditModalOpen(false));
   useDialogFocus(vendorDialogOpen, vendorDialogRef, () => setVendorDialogOpen(false));
 
   useEffect(() => {
@@ -857,11 +857,16 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
     setSavingUserRole(true);
     try {
       const result = await api.adminSetUserRole(roleDialogUser.id, role);
+      const updateRole = <T extends { id: string; role: string | null }>(user: T): T =>
+        user.id === result.user_id ? { ...user, role: result.role } : user;
+      setDataList((rows) => rows.map(updateRole));
+      setEditingUser((user: RoleUser | null) => user && updateRole(user));
+      setUser360((detail) => detail && { ...detail, profile: updateRole(detail.profile) });
       showToast(result.changed
         ? `เปลี่ยนสิทธิ์ ${roleDialogUser.name} เป็น ${role === 'ADMIN' ? 'ผู้ดูแลระบบ' : 'ผู้ใช้งานทั่วไป'} แล้ว`
         : 'สิทธิ์ผู้ใช้งานไม่มีการเปลี่ยนแปลง', 'success');
       setRoleDialogUser(null);
-      await loadData();
+      await loadData(true);
     } catch (error: any) {
       const messages: Record<string, string> = {
         'You cannot change your own role': 'ไม่สามารถเปลี่ยนสิทธิ์บัญชีที่กำลังใช้งานอยู่ได้',
@@ -1032,6 +1037,8 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
         secondary: 'บริษัท / Vendor',
         issues: row.issues,
       });
+
+  const editingRoleUser: RoleUser | null = user360?.profile ?? editingUser;
 
   return (
     <div className="space-y-4 md:space-y-6 text-left animate-in fade-in duration-500 pb-10 relative px-2 md:px-0">
@@ -1310,10 +1317,10 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                                  {item.name?.charAt(0)}
                                </div>
                                <div className="min-w-0 flex flex-col gap-0.5">
-                                 <div className="font-black text-slate-800 uppercase text-xs truncate max-w-[200px] flex items-center gap-2">
-                                    {item.name}
+                                 <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                    <span className="max-w-[200px] truncate text-xs font-black uppercase text-slate-800">{item.name}</span>
                                     {item.is_active === false && <span className="bg-red-500 text-white px-1.5 py-0.5 rounded text-[8px] tracking-widest shrink-0">BANNED</span>}
-                                    {activeTab === 'USERS' && item.role === 'ADMIN' && <span className="bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded text-[8px] tracking-widest shrink-0">ADMIN</span>}
+                                    {activeTab === 'USERS' && <UserRoleBadge role={item.role} />}
                                  </div>
                                  {activeTab === 'USERS' && (
                                     <div className="flex items-center gap-2">
@@ -1368,10 +1375,9 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                                   <button
                                     onClick={() => setRoleDialogUser(item)}
                                     aria-label={`กำหนดสิทธิ์ของ ${item.name}`}
-                                    title="กำหนดสิทธิ์ Admin / User"
-                                    className="p-2.5 rounded-xl border border-violet-100 text-violet-600 hover:bg-violet-50 transition-all active:scale-90 shadow-sm"
+                                    className="inline-flex min-h-10 items-center gap-1.5 whitespace-nowrap rounded-xl border border-violet-200 bg-violet-50 px-2.5 text-[11px] font-bold text-violet-800 hover:bg-violet-100"
                                   >
-                                    <ShieldCheck size={16} />
+                                    <ShieldCheck size={15} aria-hidden="true" /> เปลี่ยนสิทธิ์
                                   </button>
                                   {item.role === 'USER' && item.is_active !== false && (
                                     <button
@@ -1442,7 +1448,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                                <div className="flex items-center gap-2">
                                  <h4 className="font-black text-slate-800 uppercase text-sm truncate">{item.name}</h4>
                                  {item.is_active === false && <span className="bg-red-500 text-white px-1.5 py-0.5 rounded text-[8px] tracking-widest shrink-0">BANNED</span>}
-                                 {activeTab === 'USERS' && item.role === 'ADMIN' && <span className="bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded text-[8px] tracking-widest shrink-0">ADMIN</span>}
+                                 {activeTab === 'USERS' && <UserRoleBadge role={item.role} />}
                                </div>
                                {activeTab === 'USERS' && (
                                    <div className="flex items-center justify-between mt-1">
@@ -1497,7 +1503,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                          </div>
 
                          {/* Card Actions */}
-                         <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                         <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-2">
                             {activeTab === 'VENDORS' && item.status !== 'APPROVED' && (
                               <button onClick={() => handleUpdateVendorStatus(item.id, item.name, 'APPROVED')} aria-label={`อนุมัติบริษัท ${item.name}`} className="min-h-11 min-w-11 p-2.5 rounded-xl bg-emerald-500 text-white hover:bg-emerald-600 active:scale-90 transition-all"><CheckCircle size={14} /></button>
                             )}
@@ -1507,7 +1513,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                             <button onClick={() => activeTab === 'VENDORS' ? handleEditVendor(item as Vendor) : handleEditUser(item)} aria-label={`แก้ไข ${item.name}`} className="min-h-11 min-w-11 p-2.5 rounded-xl border border-slate-200 text-slate-500 bg-white active:scale-90 transition-all"><Edit3 size={14} /></button>
                             {activeTab === 'USERS' && (
                               <>
-                                <button onClick={() => setRoleDialogUser(item)} aria-label={`กำหนดสิทธิ์ของ ${item.name}`} className="min-h-11 min-w-11 p-2.5 rounded-xl border border-violet-200 text-violet-600 bg-violet-50 active:scale-90 transition-all"><ShieldCheck size={14} /></button>
+                                <button onClick={() => setRoleDialogUser(item)} aria-label={`กำหนดสิทธิ์ของ ${item.name}`} className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-violet-200 bg-violet-50 px-2.5 text-xs font-bold text-violet-800 hover:bg-violet-100"><ShieldCheck size={14} aria-hidden="true" /> เปลี่ยนสิทธิ์</button>
                                 {item.role === 'USER' && item.is_active !== false && (
                                   <button
                                     onClick={() => handleResetUserPin(item.id, item.name)}
@@ -1676,7 +1682,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
 
       {/* 📝 EDIT USER MODAL */}
       {isEditModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div inert={Boolean(roleDialogUser)} className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div aria-hidden="true" className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={closeUserEdit} />
           <div ref={editDialogRef} role="dialog" aria-modal="true" aria-labelledby="edit-profile-dialog-title" tabIndex={-1} className={`bg-white w-full ${user360Enabled ? 'max-w-4xl' : 'max-w-lg'} rounded-[2rem] md:rounded-[2.5rem] shadow-2xl border relative z-10 p-6 md:p-8 text-left animate-in zoom-in-95 duration-300 max-h-[95vh] overflow-y-auto mx-4 md:mx-0 focus:outline-none`}>
               <div className="flex justify-between items-center mb-6 border-b pb-4 sticky top-0 bg-white z-20">
@@ -1689,6 +1695,17 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                   </div>
                   <button onClick={closeUserEdit} aria-label="ปิดหน้าต่างแก้ไขผู้ใช้" className="min-h-11 min-w-11 text-slate-600 hover:text-red-600 transition-colors bg-slate-50 p-3 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500"><X size={20}/></button>
               </div>
+              {editingRoleUser && (
+                <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <div className="flex flex-wrap items-center gap-2 text-sm font-bold text-slate-700">
+                    บทบาทในระบบ <UserRoleBadge role={editingRoleUser.role} />
+                  </div>
+                  <button type="button" onClick={() => setRoleDialogUser(editingRoleUser)} disabled={user360Loading || submitting}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-violet-200 bg-white px-3 text-sm font-bold text-violet-800 hover:bg-violet-50 disabled:opacity-50">
+                    <ShieldCheck size={16} aria-hidden="true" /> เปลี่ยนสิทธิ์
+                  </button>
+                </div>
+              )}
               {user360Enabled && user360Loading && (
                 <div className="flex min-h-48 items-center justify-center gap-3 text-sm font-bold text-slate-500"><Loader2 className="animate-spin" size={20}/> กำลังโหลดข้อมูล User 360</div>
               )}

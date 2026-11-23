@@ -1,5 +1,52 @@
 # Security deployment checklist
 
+## Administrator, account activation, exams and pass links
+
+Run `npm run test:db:staging-bootstrap` against disposable local PostgreSQL
+before applying the four `20261123` migrations to staging. Apply the schema
+before deploying the app build that reads the new verification token columns.
+
+- Check that an existing administrator can manage users, approve applications,
+  view reports and reset a PIN. Confirm a regular user can edit their profile,
+  resume a saved exam and complete a training program they are assigned to.
+- Keep `REGISTRATION_INVITATION_REQUIRED` at its default `false` for the first
+  smoke test. In staging, turn it on, issue an invitation from Vendors & Users
+  and verify first login with the invitation and last six national ID digits.
+  With the requirement enabled, legacy PIN accounts must upgrade before
+  using admin controls or exams.
+  Use a verified channel to deliver activation codes. Test valid and expired
+  resets, legacy PIN upgrade, and recovery of staged or orphaned accounts
+  before enabling the invitation requirement in production. Setting the
+  requirement back to `false` pauses the new activation requirement.
+- Check the QR codes and LINE links for Induction and Work Permit, including
+  previously printed cards. New links contain verification tokens. Old links
+  continue to resolve for existing cards during reissue. Review the status of
+  old cards before retiring the legacy lookup endpoints.
+- Normal admin reports show masked national IDs. Verify that an authorized
+  identity reveal or export still requires the existing PIN recheck and a
+  recorded reason.
+
+## Verified LINE, shared rate limits and email retries
+
+Apply both `2026112310` migrations before releasing the API code. Test with
+Node.js 22, a staging LINE Login channel, and non-production mail accounts.
+
+- Set `LINE_LOGIN_CHANNEL_ID` to the LINE Login channel associated with the
+  configured LIFF app. Test opening the sync action and sending a direct
+  notification. Existing linked accounts can continue receiving messages
+  while users re-sync. Enable `LINE_VERIFIED_LINK_REQUIRED=true` after affected
+  users have re-synced to restrict direct messages to verified accounts.
+- Set `SHARED_RATE_LIMIT_ENABLED=true` in staging and test login, account
+  activation, PIN changes and notifications. With no shared limiter setting,
+  the API uses a bounded instance-local limiter. If the shared database
+  limiter is unavailable, protected requests are rate limited until it returns.
+- Set server-only `CRON_SECRET` in Vercel to enable the scheduled worker. Its
+  configured daily start is 07:00 ICT, and normal submit and approve actions
+  still attempt to send immediately. Retries use a database lease and stop
+  after five attempts. An SMTP acknowledgement followed by a database or
+  process failure may still result in a duplicate. Before production, test
+  retries and the scheduler endpoint using a staging mailbox.
+
 The notification endpoints now require a valid Supabase access token and verify an active work permit before notifying LINE.
 
 ## Browser response headers

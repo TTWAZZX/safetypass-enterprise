@@ -5,7 +5,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ message: 'Method Not Allowed' });
   const auth = await requireAuthenticatedUser(req, res);
   if (!auth) return;
-  if (isRateLimited(`supplier-access-notice:${auth.user.id}`, 60 * 1000)) {
+  if (await isRateLimited(`supplier-access-notice:${auth.user.id}`, 60 * 1000)) {
     return res.status(429).json({ message: 'Please wait before sending another notification' });
   }
 

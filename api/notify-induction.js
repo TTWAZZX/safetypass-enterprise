@@ -1,6 +1,6 @@
 import { cleanText, isRateLimited, requireAuthenticatedUser } from './_auth.js';
 import { createInductionPassMessage } from './_lineMessages.js';
-import { createDeliveryResponse, getLineDestinations, pushLineNotification } from './_lineClient.js';
+import { createDeliveryResponse, getLineDestinations, getLinkedLineRecipient, pushLineNotification } from './_lineClient.js';
 
 const MAX_NOTIFICATION_AGE_MS = 30 * 60 * 1000;
 
@@ -9,7 +9,7 @@ export default async function handler(req, res) {
 
   const auth = await requireAuthenticatedUser(req, res);
   if (!auth) return;
-  if (isRateLimited(`induction:${auth.user.id}`, 60 * 1000)) {
+  if (await isRateLimited(`induction:${auth.user.id}`, 60 * 1000)) {
     return res.status(429).json({ message: 'Please wait before sending another notification' });
   }
 
@@ -29,7 +29,7 @@ export default async function handler(req, res) {
       limit: '1',
     });
     const profileQuery = new URLSearchParams({
-      select: 'name,national_id,induction_expiry,line_user_id,vendors(name)',
+      select: 'name,induction_verification_token,induction_expiry,line_user_id,line_identity_verified_at,vendors(name)',
       id: `eq.${auth.user.id}`,
       limit: '1',
     });
@@ -52,19 +52,8 @@ export default async function handler(req, res) {
     }
 
     const name = cleanText(profile.name, 120) || 'Verified user';
-    let identityValue = profile.national_id;
-    if (!/^\d{13}$/.test(cleanText(identityValue, 13))) {
-      const identityResponse = await fetch(`${auth.config.url}/rest/v1/rpc/get_my_decrypted_id`, {
-        method: 'POST',
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        body: '{}',
-      });
-      if (identityResponse.ok) identityValue = await identityResponse.json();
-    }
-    const nationalId = cleanText(identityValue, 13);
-    if (!nationalId || !/^\d{13}$/.test(nationalId)) {
-      return res.status(422).json({ message: 'Invalid user identity' });
-    }
+    const verificationToken = cleanText(profile.induction_verification_token, 36);
+    if (!verificationToken) return res.status(422).json({ message: 'Pass verification is unavailable' });
     const vendorRelation = Array.isArray(profile.vendors) ? profile.vendors[0] : profile.vendors;
     const vendor = cleanText(vendorRelation?.name, 120) || 'ไม่มีสังกัด';
     const message = createInductionPassMessage({
@@ -73,10 +62,10 @@ export default async function handler(req, res) {
       score: Number(result.score) || 0,
       totalQuestions: Number(result.total_questions) || 0,
       expiryDate: profile.induction_expiry,
-      nationalId,
+      verificationToken,
     });
 
-    const targetState = getLineDestinations(lineGroupId, cleanText(profile.line_user_id, 40));
+    const targetState = getLineDestinations(lineGroupId, getLinkedLineRecipient(profile));
     const results = await pushLineNotification({ accessToken: lineAccessToken, message, destinations: targetState.destinations, flow: 'induction' });
     const delivery = createDeliveryResponse(results, targetState);
     if (!delivery.success) {
