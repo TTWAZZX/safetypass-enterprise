@@ -306,8 +306,12 @@ async function installMocks(page, options = {}) {
             exam_type: 'INDUCTION', score: 10, total_questions: 10, status: 'PASSED',
             created_at: '2026-07-29T00:00:00.000Z',
             users: { ...profile('USER'), national_id: '133••••••7890', vendors: { name: 'บริษัททดสอบ' } },
+          }, {
+            id: '40000000-0000-4000-8000-000000000002', user_id: null,
+            exam_type: 'INDUCTION', score: 8, total_questions: 10, status: 'FAILED',
+            created_at: '2026-07-28T00:00:00.000Z', users: null,
           }],
-          total: 1,
+          total: 2,
         },
         admin_get_exam_history: [{
           id: '40000000-0000-4000-8000-000000000001', user_id: userId,
@@ -890,11 +894,15 @@ try {
     if (report.getWorksheet(worksheet)?.getCell(cell).value !== Number(userNationalId)) {
       throw new Error('Excel did not preserve the full national ID');
     }
+    if (worksheet === 'Safety_Report' && report.getWorksheet(worksheet)?.getCell('G3').value !== null) {
+      throw new Error('Contractor report did not leave the missing national ID blank');
+    }
     await dialog.waitFor({ state: 'hidden' });
   };
   await adminPage.getByRole('button', { name: /Export Data/i }).click();
   await adminPage.getByRole('menuitem', { name: /รายงานผู้รับเหมาเดิม/ }).click();
   await assertReportExport('รายงานผู้รับเหมาเดิม', 'Safety_Report', 'G2');
+  await adminPage.getByText('ส่งออกรายงานแล้ว โดยเว้นช่องเลขบัตรไว้ 1 แถว เพราะไม่มีเลขบัตรเต็มในระบบ', { exact: true }).waitFor();
   await adminPage.getByRole('button', { name: /Export Data/i }).click();
   await adminPage.getByRole('menuitem', { name: /รายงาน Supplier & Outsource/ }).click();
   await assertReportExport('รายงาน Supplier & Outsource', 'Sheet1', 'F3');

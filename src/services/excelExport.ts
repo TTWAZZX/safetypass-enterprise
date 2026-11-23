@@ -52,12 +52,17 @@ export type SupplierOutsourceExcelRow = {
   expiration_date: string | null;
 };
 
+export function reportNationalIdNumber(value: string | null | undefined): number | null {
+  const id = value?.trim();
+  return id && /^\d{13}$/.test(id) && Number(id) !== 0 ? Number(id) : null;
+}
+
 export function reportNationalIdNumbers(values: readonly (string | null | undefined)[]): number[] {
-  const validIds = values.filter((value) => typeof value === 'string' && /^\d{13}$/.test(value.trim()) && Number(value) !== 0);
+  const validIds = values.map(reportNationalIdNumber).filter((value): value is number => value !== null);
   if (validIds.length !== values.length) {
     throw new Error(`พบ ${values.length - validIds.length} รายการที่ไม่มีเลขบัตรประชาชนจริง 13 หลัก กรุณาตรวจสอบข้อมูลก่อน Export`);
   }
-  return validIds.map(Number);
+  return validIds;
 }
 
 const supplierExportDate = (value: string | null): Date | null => {

@@ -7,13 +7,14 @@ import {
   ShieldCheck, AlertTriangle, UserX, Activity,
   ShieldAlert, Clock, ArrowRight, ChevronDown
 } from 'lucide-react';
-import { downloadSupplierOutsourceWorkbook, downloadWorkbook, reportNationalIdNumbers } from '../services/excelExport';
+import { downloadSupplierOutsourceWorkbook, downloadWorkbook, reportNationalIdNumber } from '../services/excelExport';
 import { SupplierOutsourceReportRow } from '../types';
 import AsyncState from './AsyncState';
 import { calculateSupplierDashboardMetrics } from '../services/dashboardMetrics';
 import { buildAdminActionItems } from '../services/adminActionCenter';
 import AdminActionCenter from './AdminActionCenter';
 import ReportExportDialog from './ReportExportDialog';
+import { useToastContext } from './ToastProvider';
 
 const DashboardCharts = lazy(() => import('./DashboardCharts'));
 
@@ -21,6 +22,7 @@ const AdminDashboard: React.FC<{
   onNavigateToUsers?: () => void;
   onNavigateToSupplier?: () => void;
 }> = ({ onNavigateToUsers, onNavigateToSupplier }) => {
+  const { showToast } = useToastContext();
   const [history, setHistory] = useState<any[]>([]);
   const [stats, setStats] = useState({ total: 0, passed: 0, failed: 0, suspended: 0 });
   const [complianceStats, setComplianceStats] = useState<{ noCert: number; expired: number; expiring: number } | null>(null);
@@ -184,7 +186,8 @@ const AdminDashboard: React.FC<{
     }
     if (exportHistory.length === 0) throw new Error('ไม่พบรายการตรงกับตัวกรองสำหรับส่งออก');
     const fullIds = await api.getReportExportIds('CONTRACTOR', exportHistory.map((row) => row.user_id), stepUpToken, reason);
-    const nationalIds = reportNationalIdNumbers(exportHistory.map((row) => fullIds[row.user_id]));
+    const nationalIds = exportHistory.map((row) => reportNationalIdNumber(fullIds[row.user_id]));
+    const missingIds = nationalIds.filter((id) => id === null).length;
 
     // Header row (ลำดับคอลัมน์ตามที่กำหนด)
     const headers = [
@@ -217,6 +220,9 @@ const AdminDashboard: React.FC<{
       [16, 16, 10, 26, 8, 15, 20, 32, 15],
       { 1: 'dd/mm/yyyy', 7: '0000000000000' },
     );
+    if (missingIds > 0) {
+      showToast(`ส่งออกรายงานแล้ว โดยเว้นช่องเลขบัตรไว้ ${missingIds} แถว เพราะไม่มีเลขบัตรเต็มในระบบ`, 'warning');
+    }
   };
 
   const exportSupplierOutsource = async (stepUpToken: string, reason: string) => {
