@@ -23,6 +23,20 @@ interface RegistrationProof {
   initialPin: string;
 }
 
+async function loadVendorDirectory(rpc: 'get_public_registration_vendors' | 'admin_get_external_registration_vendors'): Promise<Vendor[]> {
+  const pageSize = 500;
+  const vendors: Vendor[] = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const query = supabase.rpc(rpc);
+    if (rpc === 'admin_get_external_registration_vendors') query.order('status');
+    const { data, error } = await query.order('name').order('id').range(offset, offset + pageSize);
+    if (error) throw error;
+    const page = (data ?? []) as Vendor[];
+    vendors.push(...page.slice(0, pageSize));
+    if (page.length <= pageSize) return vendors;
+  }
+}
+
 const USER_PROFILE_SELECT = [
   'id', 'national_id', 'name', 'vendor_id', 'role', 'induction_expiry', 'induction_verification_token',
   'created_at', 'age', 'nationality', 'pdpa_agreed', 'pdpa_agreed_at',
@@ -413,11 +427,7 @@ export const api = {
       2. VENDOR MANAGEMENT
   ===================================================== */
 
-  getVendors: async (): Promise<Vendor[]> => {
-    const { data, error } = await supabase.rpc('get_public_registration_vendors');
-    if (error) throw error;
-    return (data || []) as Vendor[];
-  },
+  getVendors: () => loadVendorDirectory('get_public_registration_vendors'),
 
   findVendorNameMatches: async (name: string, excludeVendorId?: string | null): Promise<VendorNameMatch[]> => {
     const { data, error } = await supabase.rpc('find_vendor_name_matches', {
@@ -727,11 +737,7 @@ export const api = {
     return data as ExternalRegistrationApplicationDetail;
   },
 
-  getExternalRegistrationVendors: async (): Promise<Array<{ id: string; name: string; status: VendorStatus }>> => {
-    const { data, error } = await supabase.rpc('admin_get_external_registration_vendors');
-    if (error) throw error;
-    return (data || []) as Array<{ id: string; name: string; status: VendorStatus }>;
-  },
+  getExternalRegistrationVendors: () => loadVendorDirectory('admin_get_external_registration_vendors'),
 
   resolveExternalRegistrationApplication: async (input: {
     applicationId: string;

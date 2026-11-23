@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import { Building2, CheckCircle2, Loader2, ShieldAlert, X } from 'lucide-react';
 import { VendorNameMatch } from '../types';
 import { useDialogFocus } from '../hooks/useDialogFocus';
+import { filterVendors } from '../utils/vendorSearch';
 
 export type VendorImportResolution =
   | { kind: 'EXACT_SKIPPED'; vendorName?: string }
@@ -27,6 +28,7 @@ interface Props {
 const VendorImportReviewDialog: React.FC<Props> = ({ items, resolvingId, onClose, onUseExisting, onCreateNew }) => {
   const dialogRef = useRef<HTMLDivElement>(null);
   const [filter, setFilter] = useState<'ALL' | 'EXACT' | 'PENDING' | 'RESOLVED'>('ALL');
+  const [companySearch, setCompanySearch] = useState('');
   useDialogFocus(true, dialogRef, onClose);
 
   const counts = useMemo(() => ({
@@ -35,6 +37,11 @@ const VendorImportReviewDialog: React.FC<Props> = ({ items, resolvingId, onClose
     resolved: items.filter((item) => item.reason === 'SIMILAR' && item.resolution).length,
   }), [items]);
   const visibleItems = items.filter((item) => {
+    if (companySearch.trim()) {
+      const names = [{ name: item.inputName }, ...item.matches];
+      if (item.resolution?.vendorName) names.push({ name: item.resolution.vendorName });
+      if (filterVendors(names, companySearch).length === 0) return false;
+    }
     if (filter === 'EXACT') return item.reason === 'EXACT';
     if (filter === 'PENDING') return item.reason === 'SIMILAR' && !item.resolution;
     if (filter === 'RESOLVED') return item.reason === 'SIMILAR' && Boolean(item.resolution);
@@ -54,7 +61,15 @@ const VendorImportReviewDialog: React.FC<Props> = ({ items, resolvingId, onClose
           <button type="button" onClick={onClose} disabled={Boolean(resolvingId)} aria-label="ปิด" className="min-h-11 min-w-11 rounded-full bg-slate-100 p-3 text-slate-600 disabled:opacity-50"><X size={18} /></button>
         </header>
 
-        <div className="shrink-0 border-b border-slate-100 px-5 py-3 sm:px-7">
+        <div className="shrink-0 space-y-2 border-b border-slate-100 px-5 py-3 sm:px-7">
+          <input
+            type="search"
+            aria-label="ค้นหาชื่อบริษัทในผลนำเข้า"
+            placeholder="ค้นหาชื่อบริษัท"
+            value={companySearch}
+            onChange={(event) => setCompanySearch(event.target.value)}
+            className="min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none placeholder:text-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+          />
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="group" aria-label="กรองผลตรวจสอบ">
             {([['ALL', `ทั้งหมด ${items.length}`], ['EXACT', `ซ้ำและข้ามแล้ว ${counts.exact}`], ['PENDING', `รอตัดสินใจ ${counts.pending}`], ['RESOLVED', `ตัดสินใจแล้ว ${counts.resolved}`]] as const).map(([value, label]) => (
               <button key={value} type="button" onClick={() => setFilter(value)} className={`min-h-10 rounded-xl border px-3 text-[9px] font-black transition ${filter === value ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-blue-300'}`}>{label}</button>
@@ -63,7 +78,7 @@ const VendorImportReviewDialog: React.FC<Props> = ({ items, resolvingId, onClose
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50 px-4 py-4 sm:px-7">
-          {visibleItems.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-xs font-bold text-slate-500">ไม่มีรายการในหมวดนี้</div> : (
+          {visibleItems.length === 0 ? <div role="status" className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-xs font-bold text-slate-600">{companySearch.trim() ? 'ไม่พบบริษัทที่ตรงกับคำค้นในหมวดนี้' : 'ไม่มีรายการในหมวดนี้'}</div> : (
             <ul className="space-y-3">
               {visibleItems.map((item) => {
                 const busy = resolvingId === item.id;

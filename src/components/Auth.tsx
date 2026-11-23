@@ -1,6 +1,7 @@
 import { supabase } from '../services/supabaseClient'; // ✅ เพิ่มบรรทัดนี้เข้ามา
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/supabaseApi';
+import { filterVendors } from '../utils/vendorSearch';
 import {
   User, Vendor, VendorNameMatch, TrainingProgram, SupplierOutsourceType, SupplierOutsourceWorkType,
 } from '../types';
@@ -102,9 +103,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [manualUrl, setManualUrl] = useState<string>('');
   const [supportUrl, setSupportUrl] = useState<string>('');
 
-  const filteredVendors = vendors.filter((vendor) =>
-    vendor.name.toLocaleLowerCase().includes(vendorSearch.trim().toLocaleLowerCase())
-  );
+  const filteredVendors = filterVendors(vendors, vendorSearch);
   const stagedAgeIsValid = isValidRegistrationAge(stagedProfile?.age);
   const stagedVendorIsUsable = Boolean(
     stagedProfile?.vendor_id

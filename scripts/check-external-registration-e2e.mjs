@@ -5,6 +5,12 @@ const port = 4181;
 const appUrl = `http://127.0.0.1:${port}`;
 const requestNo = 'EXT-2026-000321';
 const trackingToken = 'phase5-browser-token';
+const companyName = 'Phase Five QA Company Co., Ltd.';
+const approvedVendors = [
+  ...Array.from({ length: 500 }, (_, index) => ({ id: `qa-${index}`, name: `Company ${index}`, status: 'APPROVED' })),
+  { id: 'qa-company', name: companyName, status: 'APPROVED' },
+];
+let submittedCompany;
 
 const json = (route, body, status = 200) => route.fulfill({
   status,
@@ -23,16 +29,21 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 
 try {
   await page.route('**/rest/v1/rpc/**', async (route) => {
-    const rpc = new URL(route.request().url()).pathname.split('/').pop();
+    const { pathname, searchParams } = new URL(route.request().url());
+    const rpc = pathname.split('/').pop();
     if (rpc === 'get_external_registration_feature_flag') return json(route, true);
-    if (rpc === 'create_external_access_application') return json(route, {
-      request_no: requestNo,
-      tracking_token: trackingToken,
-      status: 'SUBMITTED',
-    });
+    if (rpc === 'get_public_registration_vendors') {
+      const offset = Number(searchParams.get('offset') ?? 0);
+      const limit = Number(searchParams.get('limit') ?? 500);
+      return json(route, approvedVendors.slice(offset, offset + limit));
+    }
+    if (rpc === 'create_external_access_application') {
+      submittedCompany = route.request().postDataJSON().company_name_param;
+      return json(route, { request_no: requestNo, tracking_token: trackingToken, status: 'SUBMITTED' });
+    }
     if (rpc === 'get_external_access_application_status') return json(route, {
       request_no: requestNo,
-      company_name: 'Phase Five QA Company Co., Ltd.',
+      company_name: companyName,
       company_resolution: 'UNRESOLVED',
       status: 'SUBMITTED',
       submitted_at: '2026-08-02T10:00:00.000Z',
@@ -53,13 +64,18 @@ try {
   await checkboxes.nth(1).check();
   const inputs = page.locator('input:not([type="checkbox"])');
   const values = [
-    'Phase Five QA Company Co., Ltd.', 'ผู้สมัคร', 'ทดสอบระบบ', 'Phase', 'Five',
+    'บริษัทใหม่ที่ยังไม่มีในระบบ', 'ผู้สมัคร', 'ทดสอบระบบ', 'Phase', 'Five',
     'QA Manager', 'tawun666956666956@gmail.com', '0800000000', 'TSH QA Coordinator',
   ];
   for (let index = 0; index < values.length; index += 1) await inputs.nth(index).fill(values[index]);
+  const companyInput = page.getByLabel('ชื่อบริษัท *', { exact: true });
+  if (!(await companyInput.evaluate((input) => input.validity.valid))) throw new Error('New company names must still be allowed');
+  await companyInput.fill('five qa');
+  await page.getByRole('button', { name: companyName, exact: true }).click();
   await checkboxes.nth(3).check();
   await page.getByRole('button', { name: 'ยืนยันและส่งคำขอ' }).click();
   await page.getByText(requestNo, { exact: true }).waitFor();
+  if (submittedCompany !== companyName) throw new Error('External request did not submit the selected company name');
   await page.getByRole('link', { name: /ติดตามสถานะคำขอ/ }).click();
   await page.getByRole('heading', { name: requestNo }).waitFor();
   await page.getByText('รอตรวจสอบ', { exact: true }).waitFor();

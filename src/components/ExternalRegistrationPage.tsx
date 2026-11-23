@@ -1,6 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Building2, CheckCircle2, ChevronRight, ClipboardList, Loader2, Plus, Search, ShieldCheck, Trash2, UserRound } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
+import { api } from '../services/supabaseApi';
+import { filterVendors } from '../utils/vendorSearch';
+import type { Vendor } from '../types';
 
 type UserType = 'CONTRACTOR' | 'SUPPLIER' | 'OUTSOURCE';
 type PageMode = 'FORM' | 'RESULT' | 'STATUS' | 'EDIT';
@@ -51,6 +54,8 @@ const ExternalRegistrationPage: React.FC = () => {
   const [result, setResult] = useState<SubmissionResult | null>(null);
   const [statusData, setStatusData] = useState<any>(null);
   const [editData, setEditData] = useState<EditFormData | null>(null);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const companyInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({
     companyName: '', firstNameTh: '', lastNameTh: '', firstNameEn: '', lastNameEn: '',
     jobTitle: '', email: '', phone: '', types: [] as UserType[], coordinators: [''], pdpa: false,
@@ -62,6 +67,22 @@ const ExternalRegistrationPage: React.FC = () => {
       setFeatureLoading(false);
     });
   }, []);
+
+  const showCompanyField = featureEnabled && (mode === 'FORM' || mode === 'EDIT');
+  useEffect(() => {
+    if (!showCompanyField) return;
+    let active = true;
+    api.getVendors().then((companies) => {
+      if (active) setVendors(companies);
+    }).catch(() => {
+      if (active) setVendors([]);
+    });
+    return () => { active = false; };
+  }, [showCompanyField]);
+
+  const companySuggestions = form.companyName.trim() && !vendors.some((vendor) => vendor.name === form.companyName)
+    ? filterVendors(vendors, form.companyName)
+    : [];
 
   useEffect(() => {
     if (!hasTrackingLink || !['STATUS', 'EDIT'].includes(initialMode)) return;
@@ -203,7 +224,31 @@ const ExternalRegistrationPage: React.FC = () => {
     {isEditing && <div className="mb-6 rounded-2xl border border-purple-200 bg-purple-50 p-4 text-xs font-bold leading-relaxed text-purple-900"><p className="font-black">คำขอเดิม: {editData?.request_no}</p>{editData?.admin_note && <p className="mt-1">ข้อมูลที่ต้องเพิ่มเติม: {editData.admin_note}</p>}{editData?.rejection_reason && <p className="mt-1">เหตุผลจาก Admin: {editData.rejection_reason}</p>}</div>}
     <form onSubmit={submit} className="space-y-6">
       <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm md:p-8"><SectionTitle icon={<ClipboardList size={20} />} title="1. ประเภทผู้ใช้งาน" description="เลือกได้มากกว่า 1 ประเภท" /><div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">{(['CONTRACTOR', 'SUPPLIER', 'OUTSOURCE'] as UserType[]).map((type) => <label key={type} className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition ${form.types.includes(type) ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-500/10' : 'border-slate-200 bg-slate-50 hover:bg-white'}`}><input type="checkbox" checked={form.types.includes(type)} onChange={() => toggleType(type)} className="mt-1 h-4 w-4 accent-blue-700" /><span><span className="block text-sm font-black text-slate-900">{TYPE_LABELS[type]}</span><span className="mt-1 block text-[10px] font-bold text-slate-500">{type === 'CONTRACTOR' ? 'Contractor Online' : 'Supplier E-Pass'}</span></span></label>)}</div>{selectedSystems.length > 0 && <div className="mt-4 flex flex-wrap gap-2"><span className="text-[10px] font-black text-slate-500">ระบบที่เกี่ยวข้อง:</span>{selectedSystems.map((system) => <span key={system} className="rounded-full bg-slate-900 px-3 py-1 text-[10px] font-black text-white">{SYSTEM_LABELS[system]}</span>)}</div>}</section>
-      <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm md:p-8"><SectionTitle icon={<Building2 size={20} />} title="2. ข้อมูลบริษัท" description="กรุณาใช้ชื่อบริษัทเต็ม ไม่ใช้ชื่อย่อ" /><label className="mt-5 block text-[10px] font-black uppercase tracking-widest text-slate-600">ชื่อบริษัท *<input required value={form.companyName} onChange={(e) => updateField('companyName', e.target.value)} className={inputClass} placeholder="ชื่อบริษัทภาษาไทยหรือภาษาอังกฤษ" /></label></section>
+      <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm md:p-8">
+        <SectionTitle icon={<Building2 size={20} />} title="2. ข้อมูลบริษัท" description="เลือกบริษัทจากรายการแนะนำ หรือกรอกชื่อเต็มหากเป็นบริษัทใหม่" />
+        <label className="mt-5 block text-[10px] font-black uppercase tracking-widest text-slate-600">
+          ชื่อบริษัท *
+          <input ref={companyInputRef} required autoComplete="off" value={form.companyName} onChange={(e) => updateField('companyName', e.target.value)} className={inputClass} placeholder="พิมพ์ค้นหาชื่อบริษัทภาษาไทยหรือภาษาอังกฤษ" />
+        </label>
+        {companySuggestions.length > 0 && (
+          <ul aria-label="บริษัทที่แนะนำ" className="mt-2 max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-white">
+            {companySuggestions.map((vendor) => (
+              <li key={vendor.id}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateField('companyName', vendor.name);
+                    companyInputRef.current?.focus();
+                  }}
+                  className="min-h-11 w-full break-words px-4 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-blue-50 focus-visible:bg-blue-50 focus-visible:outline-blue-500"
+                >
+                  {vendor.name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
       <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm md:p-8"><SectionTitle icon={<UserRound size={20} />} title="3. ข้อมูลผู้สมัคร" description="ข้อมูลนี้ใช้ประกอบการตรวจสอบคำขอ" /><div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2"><label className="text-[10px] font-black uppercase tracking-widest text-slate-600">ชื่อภาษาไทย *<input required value={form.firstNameTh} onChange={(e) => updateField('firstNameTh', e.target.value)} className={inputClass} /></label><label className="text-[10px] font-black uppercase tracking-widest text-slate-600">นามสกุลภาษาไทย *<input required value={form.lastNameTh} onChange={(e) => updateField('lastNameTh', e.target.value)} className={inputClass} /></label><label className="text-[10px] font-black uppercase tracking-widest text-slate-600">First Name *<input required value={form.firstNameEn} onChange={(e) => updateField('firstNameEn', e.target.value)} className={inputClass} /></label><label className="text-[10px] font-black uppercase tracking-widest text-slate-600">Last Name *<input required value={form.lastNameEn} onChange={(e) => updateField('lastNameEn', e.target.value)} className={inputClass} /></label><label className="text-[10px] font-black uppercase tracking-widest text-slate-600">ตำแหน่ง *<input required value={form.jobTitle} onChange={(e) => updateField('jobTitle', e.target.value)} className={inputClass} /></label><label className="text-[10px] font-black uppercase tracking-widest text-slate-600">Email Address *<input required type="email" value={form.email} onChange={(e) => updateField('email', e.target.value)} className={inputClass} placeholder="name@company.com" /></label><label className="text-[10px] font-black uppercase tracking-widest text-slate-600 md:col-span-2">เบอร์โทรติดต่อ *<input required value={form.phone} onChange={(e) => updateField('phone', e.target.value)} className={inputClass} placeholder="เบอร์บุคคลหรือบริษัท" /></label></div></section>
       <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm md:p-8"><SectionTitle icon={<ShieldCheck size={20} />} title="4. ผู้ประสานงาน TSH" description="กรุณาระบุชื่อผู้ประสานงานที่ดูแลการเข้าปฏิบัติงาน อย่างน้อย 1 คน" /><div className="mt-5 space-y-3">{form.coordinators.map((name, index) => <div key={index} className="flex items-center gap-2"><input required value={name} onChange={(e) => updateCoordinator(index, e.target.value)} className={inputClass.replace('mt-2', 'mt-0')} placeholder={`ชื่อผู้ประสานงาน TSH คนที่ ${index + 1}`} />{form.coordinators.length > 1 && <button type="button" onClick={() => removeCoordinator(index)} className="min-h-11 min-w-11 rounded-xl border border-red-200 bg-red-50 text-red-700" aria-label={`ลบผู้ประสานงานคนที่ ${index + 1}`}><Trash2 size={16} /></button>}</div>)}<button type="button" onClick={addCoordinator} className="flex min-h-11 items-center gap-2 rounded-xl border border-dashed border-blue-300 px-4 text-[10px] font-black text-blue-700"><Plus size={15} /> เพิ่มผู้ประสานงาน</button></div></section>
       {error && <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-4 text-xs font-bold text-red-700">{error}</div>}
