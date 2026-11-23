@@ -11,6 +11,7 @@ import { useTranslation } from '../context/LanguageContext';
 import ExamSystem from './ExamSystem';
 import DigitalCard from './DigitalCard'; 
 import ExamHistory from './ExamHistory'; 
+import VendorSelect from './VendorSelect';
 import {
   BookOpen,
   Lock,
@@ -116,6 +117,9 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
   // ✅ State สำหรับจัดการข้อมูล Vendor ในหน้า Edit Profile
   const [vendorsList, setVendorsList] = useState<{id: string, name: string}[]>([]);
   const [editVendorId, setEditVendorId] = useState(user.vendor_id || '');
+  const currentVendor = user.vendor_id && user.vendors
+    ? { id: user.vendor_id, ...user.vendors }
+    : null;
   
   // ✅ 1. State สำหรับสถานะปุ่มโหลด LINE
   const [isSyncingLine, setIsSyncingLine] = useState(false);
@@ -289,12 +293,11 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
   // ✅ 2. ดึงรายชื่อบริษัททั้งหมดมาเก็บไว้ทำ Dropdown ตอนกด Edit
   useEffect(() => {
     const fetchVendorsList = async () => {
-        const { data } = await supabase
-          .from('vendors')
-          .select('id, name')
-          .eq('status', 'APPROVED')
-          .order('name');
-        if (data) setVendorsList(data);
+        try {
+          setVendorsList(await mockApi.getVendors());
+        } catch {
+          setVendorsList([]);
+        }
     };
     fetchVendorsList();
   }, []);
@@ -389,7 +392,7 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
         date_of_birth: editDob || null, // ✅ อัปเดต State ให้มีวันเกิด
         nationality: editNationality,
         vendor_id: editVendorId || null,
-        vendors: selectedVendor ? { name: selectedVendor.name } : null
+        vendors: selectedVendor ?? (editVendorId === user.vendor_id ? user.vendors : null),
       } as any); // ป้องกัน Error แดงใน TypeScript ถ้ายังไม่ได้แก้ไฟล์ types.ts
 
       showToast('อัปเดตข้อมูลส่วนตัวเรียบร้อยแล้ว', 'success');
@@ -627,17 +630,17 @@ const UserPanel: React.FC<UserPanelProps> = ({ user, onUserUpdate }) => {
 
                         {/* ✅ Dropdown สำหรับเลือกบริษัท (Vendor) ในโหมดแก้ไข */}
                         <div className="mt-1">
-                            <label className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Company / Vendor</label>
-                            <select 
-                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-bold text-xs outline-none focus:border-blue-500 mt-1" 
+                            <label htmlFor="profile-vendor" className="text-[9px] text-slate-600 font-bold uppercase tracking-widest">บริษัทของฉัน</label>
+                            <VendorSelect
+                                id="profile-vendor"
+                                label="บริษัทของฉัน"
+                                vendors={vendorsList}
+                                currentVendor={currentVendor}
                                 value={editVendorId} 
-                                onChange={(e) => setEditVendorId(e.target.value)}
-                            >
-                                <option value="">-- ไม่ระบุสังกัดบริษัท (None) --</option>
-                                {vendorsList.map(v => (
-                                    <option key={v.id} value={v.id}>{v.name}</option>
-                                ))}
-                            </select>
+                                onChange={setEditVendorId}
+                                emptyLabel="-- ไม่ระบุสังกัดบริษัท (None) --"
+                                className="mt-1"
+                            />
                         </div>
                     </div>
                   ) : (

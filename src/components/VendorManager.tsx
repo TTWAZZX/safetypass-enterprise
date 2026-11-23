@@ -22,6 +22,7 @@ import {
   ShieldAlert, ChevronLeft, ChevronRight, KeyRound
 } from 'lucide-react';
 import AsyncState from './AsyncState';
+import VendorSelect from './VendorSelect';
 import { useDialogFocus } from '../hooks/useDialogFocus';
 import { buildDirectoryFilterSummary } from '../services/directoryFilterSummary';
 import ImportPreviewDialog from './ImportPreviewDialog';
@@ -131,7 +132,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [dataList, setDataList] = useState<any[]>([]);
-  const [allVendors, setAllVendors] = useState<any[]>([]);
+  const [allVendors, setAllVendors] = useState<Pick<Vendor, 'id' | 'name'>[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
   const [totalItems, setTotalItems] = useState(0);
   const [userStats, setUserStats] = useState<{ total: number; noCert: number; expired: number; expiring: number; valid: number } | null>(null);
@@ -207,7 +208,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
       setLoadError('');
     }
     try {
-      const [result, vendorsResult] = await Promise.all([
+      const [result, vendorRows] = await Promise.all([
         api.getDirectoryPage({
           section: activeTab,
           page: currentPage,
@@ -216,7 +217,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
           vendorFilter: activeTab === 'USERS' ? selectedVendorFilter : '',
           certFilter: activeTab === 'USERS' ? certFilter : '',
         }),
-        supabase.from('vendors').select('id, name').eq('status', 'APPROVED').order('name'),
+        activeTab === 'USERS' ? api.getVendors().catch(() => null) : null,
       ]);
 
       if (activeTab === 'LOGS') setLogs(result.rows);
@@ -226,8 +227,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
       const resultTotalPages = itemsPerPage === -1 ? 1 : Math.max(1, Math.ceil(result.total / itemsPerPage));
       if (currentPage > resultTotalPages) setCurrentPage(resultTotalPages);
 
-      const { data: vData } = vendorsResult;
-      setAllVendors(vData || []);
+      if (vendorRows) setAllVendors(vendorRows);
 
     } catch (err: any) {
       if (!silent) setLoadError(err?.message || 'ไม่สามารถโหลดข้อมูลได้');
@@ -1073,28 +1073,24 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
               
               {/* ตัวกรองบริษัท */}
               {activeTab === 'USERS' && (
-                <div className="relative w-full md:w-64">
-                  <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                  <select
-                    className="w-full pl-10 pr-8 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-[11px] text-slate-600 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all shadow-sm appearance-none cursor-pointer truncate"
-                    value={selectedVendorFilter}
-                    onChange={(e) => { setSelectedVendorFilter(e.target.value); setCurrentPage(1); }}
-                    aria-label="กรองบริษัทของผู้ใช้"
-                  >
-                    <option value="">ทุกบริษัท (All Vendors)</option>
-                    {allVendors.map(v => (
-                      <option key={v.id} value={v.id}>{v.name}</option>
-                    ))}
-                    <option value="EXTERNAL">ไม่ระบุสังกัด (EXTERNAL)</option>
-                  </select>
-                </div>
+                <VendorSelect
+                  className="w-full md:w-64"
+                  label="กรองบริษัทของผู้ใช้"
+                  vendors={allVendors}
+                  value={selectedVendorFilter}
+                  onChange={(id) => { setSelectedVendorFilter(id); setCurrentPage(1); }}
+                  emptyLabel="ทุกบริษัท (All Vendors)"
+                  externalLabel="ไม่ระบุสังกัด (EXTERNAL)"
+                />
               )}
 
               {/* ตัวกรองใบเซอร์ */}
               {activeTab === 'USERS' && (
-                <div className="flex items-center gap-1.5 w-full md:w-auto flex-wrap">
+                <div role="group" aria-label="กรองสถานะใบเซอร์" className="flex items-center gap-1.5 w-full md:w-auto flex-wrap">
                   <button
                     onClick={() => setCertFilter('')}
+                    aria-label="ทั้งหมด"
+                    aria-pressed={certFilter === ''}
                     className={`min-h-11 flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-wide border transition-all active:scale-95 ${certFilter === '' ? 'bg-slate-900 text-white border-slate-900 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
                   >
                     <Users size={13}/><span className="hidden sm:inline">ทั้งหมด</span>
@@ -1102,6 +1098,8 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                   </button>
                   <button
                     onClick={() => setCertFilter('NO_CERT')}
+                    aria-label="ไม่มี/หมดอายุ"
+                    aria-pressed={certFilter === 'NO_CERT'}
                     className={`min-h-11 flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-wide border transition-all active:scale-95 ${certFilter === 'NO_CERT' ? 'bg-rose-500 text-white border-rose-500 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
                   >
                     <ShieldAlert size={13}/><span className="hidden sm:inline">ไม่มี/หมดอายุ</span>
@@ -1109,6 +1107,8 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                   </button>
                   <button
                     onClick={() => setCertFilter('EXPIRING')}
+                    aria-label="ใกล้หมด"
+                    aria-pressed={certFilter === 'EXPIRING'}
                     className={`min-h-11 flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-wide border transition-all active:scale-95 ${certFilter === 'EXPIRING' ? 'bg-amber-500 text-white border-amber-500 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
                   >
                     <Clock size={13}/><span className="hidden sm:inline">ใกล้หมด</span>
@@ -1116,6 +1116,8 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                   </button>
                   <button
                     onClick={() => setCertFilter('HAS_CERT')}
+                    aria-label="มีใบเซอร์"
+                    aria-pressed={certFilter === 'HAS_CERT'}
                     className={`min-h-11 flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-wide border transition-all active:scale-95 ${certFilter === 'HAS_CERT' ? 'bg-emerald-500 text-white border-emerald-500 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}
                   >
                     <ShieldCheck size={13}/><span className="hidden sm:inline">มีใบเซอร์</span>
@@ -1452,7 +1454,7 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                                </div>
                                {activeTab === 'USERS' && (
                                    <div className="flex items-center justify-between mt-1">
-                                      <p className="text-[10px] text-slate-400 font-mono truncate">ID: {maskNationalID(item.national_id)}</p>
+                                      <p className="text-[10px] text-slate-600 font-mono truncate">ID: {maskNationalID(item.national_id)}</p>
                                       <UserRegistrationStatus user={item} />
                                    </div>
                                )}
@@ -1746,18 +1748,20 @@ const VendorManager: React.FC<{ initialSearch?: string | null }> = ({ initialSea
                     </div>
                   )}
                   <div className="space-y-1 mt-2">
-                      <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1 flex items-center gap-2"><Building2 size={12}/> Company / Vendor</label>
-                      <select 
-                          aria-label="บริษัทของผู้ใช้"
-                          className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold shadow-inner outline-none focus:border-blue-500 cursor-pointer text-base truncate" 
-                          value={editForm.vendor_id} 
-                          onChange={(e) => setEditForm({...editForm, vendor_id: e.target.value})}
-                      >
-                          <option value="">-- ไม่ระบุสังกัด (EXTERNAL) --</option>
-                          {allVendors.map(v => (
-                              <option key={v.id} value={v.id}>{v.name}</option>
-                          ))}
-                      </select>
+                      <label htmlFor="admin-profile-vendor" className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1 flex items-center gap-2"><Building2 size={12}/> บริษัทของผู้ใช้</label>
+                      <VendorSelect
+                          id="admin-profile-vendor"
+                          label="บริษัทของผู้ใช้"
+                          vendors={allVendors}
+                          currentVendor={user360?.profile.vendor ?? (
+                            editingUser?.vendor_id && editingUser.vendors?.name
+                              ? { id: editingUser.vendor_id, name: editingUser.vendors.name }
+                              : null
+                          )}
+                          value={editForm.vendor_id}
+                          onChange={(id) => setEditForm((form) => ({ ...form, vendor_id: id }))}
+                          emptyLabel="-- ไม่ระบุสังกัด (EXTERNAL) --"
+                      />
                   </div>
                   <div className="bg-amber-50 p-4 md:p-5 rounded-3xl border border-amber-100 shadow-sm mt-4 text-left">
                       <label className="text-[10px] font-black text-amber-800 uppercase flex items-center gap-2 mb-3"><CalendarClock size={16}/> Induction Expiry (Override)</label>

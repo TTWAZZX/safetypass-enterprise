@@ -12,6 +12,7 @@ const adminNationalId = '1000000000001';
 const userId = '10000000-0000-4000-8000-000000000001';
 const adminId = '10000000-0000-4000-8000-000000000002';
 const vendorId = '20000000-0000-4000-8000-000000000001';
+const alternateVendor = { id: '20000000-0000-4000-8000-000000000003', name: 'บริษัท Northern Services', status: 'APPROVED' };
 const future = '2027-07-29T23:59:59.000Z';
 
 const base64Url = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
@@ -265,7 +266,7 @@ async function installMocks(page, options = {}) {
           vendor: { id: vendorId, name: 'บริษัททดสอบ', status: 'APPROVED' },
         },
         get_my_decrypted_id: currentRole === 'ADMIN' ? adminNationalId : userNationalId,
-        get_public_registration_vendors: [{ id: vendorId, name: 'บริษัททดสอบ', status: 'APPROVED' }],
+        get_public_registration_vendors: [{ id: vendorId, name: 'บริษัททดสอบ', status: 'APPROVED' }, alternateVendor],
         admin_get_vendor_duplicate_groups: [],
         get_public_support_links: [{ manual_url: 'https://example.com/manual', support_url: 'https://line.me/' }],
         get_public_feature_flags: [{ supplier_outsource_enabled: true }],
@@ -751,6 +752,15 @@ try {
   await userPage.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
   await login(userPage, userNationalId);
   await userPage.getByRole('heading', { name: 'ผู้ใช้ทดสอบระบบ', exact: true }).waitFor();
+  await userPage.getByRole('button', { name: 'แก้ไขข้อมูลส่วนตัว' }).click();
+  const profileVendor = userPage.getByLabel('บริษัทของฉัน');
+  await userPage.getByRole('searchbox', { name: 'ค้นหาชื่อบริษัท' }).fill('  nOrThErN  ');
+  if (await profileVendor.inputValue() !== vendorId) throw new Error('Company search changed the existing profile affiliation');
+  await profileVendor.selectOption(alternateVendor.id);
+  const profileSave = userPage.waitForRequest((request) => request.method() === 'PATCH' && new URL(request.url()).pathname === '/rest/v1/users');
+  await userPage.getByRole('button', { name: 'Save', exact: true }).click();
+  if ((await profileSave).postDataJSON().vendor_id !== alternateVendor.id) throw new Error('Profile did not save the selected company ID');
+  await userPage.getByRole('button', { name: 'แก้ไขข้อมูลส่วนตัว' }).waitFor();
   await userPage.getByText('Supplier & Outsource', { exact: true }).first().waitFor();
   const readinessRegion = userPage.getByRole('region', { name: 'พร้อมเข้าพื้นที่', exact: true });
   await readinessRegion.waitFor();
@@ -895,6 +905,18 @@ try {
   await adminPage.getByRole('button', { name: 'เก็บบริษัท บริษัททดสอบ' }).first().click();
   await adminPage.getByText('เก็บบริษัทแล้ว โดยยังรักษาข้อมูลเชื่อมโยงเดิม', { exact: true }).waitFor();
   await adminPage.getByRole('button', { name: /^Personnel$/i }).click();
+  const directoryVendor = adminPage.getByLabel('กรองบริษัทของผู้ใช้');
+  const companySearch = adminPage.getByRole('searchbox', { name: 'ค้นหาชื่อบริษัท' });
+  await companySearch.fill('no matching vendor');
+  await adminPage.getByText('ไม่พบบริษัทที่ตรงกับคำค้น', { exact: true }).waitFor();
+  if (await directoryVendor.inputValue() !== '') throw new Error('Typing a company query applied a directory filter');
+  await companySearch.fill('northern');
+  if (await directoryVendor.locator(`option[value="${vendorId}"]`).count()) throw new Error('Directory search kept a nonmatching company option');
+  const directoryFilter = adminPage.waitForRequest((request) => request.url().endsWith('/rpc/admin_get_directory_page') &&
+    request.postDataJSON()?.p_vendor_filter === alternateVendor.id);
+  await directoryVendor.selectOption(alternateVendor.id);
+  await directoryFilter;
+  await directoryVendor.selectOption('');
 
   const personnelRow = adminPage.getByRole('row').filter({ hasText: 'ผู้ใช้ทดสอบระบบ' });
   await personnelRow.getByText('ผู้ใช้', { exact: true }).waitFor();
@@ -908,6 +930,8 @@ try {
   let user360Dialog = adminPage.getByRole('dialog', { name: 'User 360 Profile' });
   await user360Dialog.waitFor();
   await user360Dialog.getByText(`${userNationalId.slice(0, 3)}••••••${userNationalId.slice(-4)}`, { exact: true }).waitFor();
+  await user360Dialog.getByRole('searchbox', { name: 'ค้นหาชื่อบริษัท' }).fill('NORTHERN');
+  await user360Dialog.getByLabel('บริษัทของผู้ใช้', { exact: true }).selectOption(alternateVendor.id);
   if (await user360Dialog.getByText(userNationalId, { exact: true }).count()) throw new Error('User 360 dialog exposed a full national ID');
   const contractorProgram = user360Dialog.getByLabel('Contractor program');
   const supplierProgram = user360Dialog.getByLabel('Supplier and Outsource program');
@@ -939,8 +963,9 @@ try {
   const successfulUser360Payload = adminAuthDiagnostics.user360UpdatePayloads[0];
   if (!successfulUser360Payload.program_codes_param.includes('CONTRACTOR')
       || !successfulUser360Payload.program_codes_param.includes('SUPPLIER_OUTSOURCE')
+      || successfulUser360Payload.vendor_id_param !== alternateVendor.id
       || successfulUser360Payload.reason_param !== 'Assign Contractor and retain Supplier access') {
-    throw new Error('User 360 atomic RPC payload did not preserve both programs and the audit reason');
+    throw new Error('User 360 atomic RPC payload did not preserve both programs, the selected company and the audit reason');
   }
 
   await adminPage.getByRole('button', { name: 'แก้ไข ผู้ใช้ทดสอบระบบ' }).first().click();
@@ -1085,9 +1110,42 @@ try {
   await adminPage.getByText('Threshold Settings', { exact: false }).waitFor();
   await assertA11y(adminPage, 'desktop settings');
 
+  const externalApplication = {
+    id: 'external-company-search-test', request_no: 'EXT-2026-000501', status: 'SUBMITTED',
+    company_name_submitted: 'Northern', company_resolution: 'UNRESOLVED',
+    first_name_th: 'ผู้สมัคร', last_name_th: 'ทดสอบ', login_email: 'test@example.com',
+    submitted_at: '2026-07-29T00:00:00.000Z', types: [], coordinators: [],
+  };
+  await adminPage.route('**/rpc/admin_get_external_access_applications', (route) => json(route, [externalApplication]));
+  await adminPage.route('**/rpc/admin_get_external_access_application', (route) => json(route, {
+    application: externalApplication, vendor: null, types: [], coordinators: [], history: [],
+  }));
+  await adminPage.route(/\/rpc\/admin_get_external_registration_vendors\?/, (route) => json(route, [
+    { id: vendorId, name: 'บริษัททดสอบ', status: 'APPROVED' },
+    { ...alternateVendor, status: 'PENDING' },
+  ]));
+  await adminPage.route('**/rpc/admin_resolve_external_access_application', (route) => json(route, {
+    application_id: externalApplication.id, request_no: externalApplication.request_no, status: 'APPROVED', saved: true,
+  }));
+  await adminPage.route('**/api/send-external-registration-result', (route) => json(route, { success: true, sent: 1 }));
+  await adminPage.getByRole('button', { name: 'External Requests' }).click();
+  await adminPage.getByRole('button', { name: /EXT-2026-000501/ }).click();
+  await adminPage.getByRole('button', { name: /ใช้บริษัทเดิม/ }).click();
+  await adminPage.getByRole('searchbox', { name: 'ค้นหาชื่อบริษัท' }).fill('northern');
+  await adminPage.getByLabel('บริษัทเดิม', { exact: true }).selectOption({ label: `${alternateVendor.name} (PENDING)` });
+  await adminPage.getByRole('button', { name: 'อนุมัติและส่ง Email', exact: true }).click();
+  await adminPage.getByText(`ใช้บริษัทเดิม: ${alternateVendor.name}`, { exact: true }).waitFor();
+  const externalApproval = adminPage.waitForRequest((request) => request.url().endsWith('/rpc/admin_resolve_external_access_application'));
+  await adminPage.getByRole('button', { name: 'ยืนยันอนุมัติและส่ง Email', exact: true }).click();
+  if ((await externalApproval).postDataJSON().vendor_id_param !== alternateVendor.id) throw new Error('External request approval did not link the selected company');
+  await adminPage.getByText(/บันทึกสถานะและส่ง Email ให้ผู้สมัครแล้ว/).waitFor();
+  await adminPage.getByRole('button', { name: 'ปิดรายละเอียดคำขอ' }).click();
+
   await adminPage.setViewportSize({ width: 390, height: 844 });
   await adminPage.getByRole('button', { name: /^Users$/i }).click();
   await adminPage.getByText('User & Vendor Compliance', { exact: false }).waitFor();
+  await adminPage.getByRole('button', { name: /^Personnel$/i }).click();
+  await adminPage.getByRole('searchbox', { name: 'ค้นหาชื่อบริษัท' }).fill('northern');
   const overflow = await adminPage.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   if (overflow > 2) throw new Error(`Admin mobile view has ${overflow}px horizontal overflow`);
   await assertA11y(adminPage, 'mobile admin users');
