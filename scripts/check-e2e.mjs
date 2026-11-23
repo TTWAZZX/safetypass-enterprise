@@ -91,6 +91,7 @@ async function installMocks(page, options = {}) {
     user360UpdatePayloads: [],
     legacyUserProfileUpdateRequests: 0,
     identityStepUpRequests: 0,
+    reportExportRequests: [],
     identityRevealRequests: 0,
     identityExportRequests: 0,
     identityCorrectionRequests: 0,
@@ -304,9 +305,13 @@ async function installMocks(page, options = {}) {
             id: '40000000-0000-4000-8000-000000000001', user_id: userId,
             exam_type: 'INDUCTION', score: 10, total_questions: 10, status: 'PASSED',
             created_at: '2026-07-29T00:00:00.000Z',
-            users: { ...profile('USER'), vendors: { name: 'บริษัททดสอบ' } },
+            users: { ...profile('USER'), national_id: '133••••••7890', vendors: { name: 'บริษัททดสอบ' } },
+          }, {
+            id: '40000000-0000-4000-8000-000000000002', user_id: null,
+            exam_type: 'INDUCTION', score: 8, total_questions: 10, status: 'FAILED',
+            created_at: '2026-07-28T00:00:00.000Z', users: null,
           }],
-          total: 1,
+          total: 2,
         },
         admin_get_exam_history: [{
           id: '40000000-0000-4000-8000-000000000001', user_id: userId,
@@ -315,7 +320,7 @@ async function installMocks(page, options = {}) {
           users: { ...profile('USER'), vendors: { name: 'บริษัททดสอบ' } },
         }],
         admin_supplier_outsource_report: [{
-          user_id: userId, company: 'บริษัททดสอบ', name: 'ผู้ใช้ทดสอบระบบ', national_id: userNationalId,
+          user_id: userId, company: 'บริษัททดสอบ', name: 'ผู้ใช้ทดสอบระบบ', national_id: '133••••••7890',
           participant_type: 'supplier', work_type: 'Driver', access_start_date: '2026-07-29', access_end_date: '2027-07-29',
           passed_at: '2026-07-29T00:00:00.000Z', expires_at: future, last_score: 20, total_questions: 20,
           last_status: 'PASSED', last_test_at: '2026-07-29T00:00:00.000Z', verification_token: '123e4567-e89b-42d3-a456-426614174000',
@@ -580,6 +585,13 @@ async function installMocks(page, options = {}) {
         headers: { 'cache-control': 'no-store', 'content-disposition': 'attachment; filename="protected-identities-e2e.csv"' },
         body: `"User ID","National ID","Name"\r\n"${userId}","${user360NationalId}","Test User"`,
       });
+    }
+    if (payload.action === 'admin-identity-report-export') {
+      authDiagnostics.reportExportRequests.push(payload.report);
+      if (payload.stepUpToken !== 'e2e-step-up-token' || !payload.reason || payload.userIds?.join(',') !== userId) {
+        return json(route, { message: 'Invalid protected report export' }, 403);
+      }
+      return json(route, { nationalIds: { [userId]: userNationalId } });
     }
     if (payload.action === 'admin-correct-national-id') {
       authDiagnostics.identityCorrectionRequests += 1;
@@ -869,11 +881,31 @@ try {
   await adminPage.getByText('Dashboard Analytics', { exact: false }).waitFor();
   await assertA11y(adminPage, 'desktop admin dashboard');
 
-  const downloadPromise = adminPage.waitForEvent('download');
+  const assertReportExport = async (title, worksheet, cell) => {
+    const dialog = adminPage.getByRole('dialog', { name: title });
+    await dialog.getByLabel('PIN แอดมิน').fill('246801');
+    await dialog.getByLabel('เหตุผลที่ส่งออกรายงาน').fill('Verify report workbook');
+    const downloadEvent = adminPage.waitForEvent('download');
+    await dialog.getByRole('button', { name: 'ดาวน์โหลด Excel' }).click();
+    const download = await downloadEvent;
+    if (!download.suggestedFilename().endsWith('.xlsx')) throw new Error('Admin export did not produce an .xlsx file');
+    const report = new ExcelJSModule.Workbook();
+    await report.xlsx.readFile(await download.path());
+    if (report.getWorksheet(worksheet)?.getCell(cell).value !== Number(userNationalId)) {
+      throw new Error('Excel did not preserve the full national ID');
+    }
+    if (worksheet === 'Safety_Report' && report.getWorksheet(worksheet)?.getCell('G3').value !== null) {
+      throw new Error('Contractor report did not leave the missing national ID blank');
+    }
+    await dialog.waitFor({ state: 'hidden' });
+  };
   await adminPage.getByRole('button', { name: /Export Data/i }).click();
   await adminPage.getByRole('menuitem', { name: /รายงานผู้รับเหมาเดิม/ }).click();
-  const download = await downloadPromise;
-  if (!download.suggestedFilename().endsWith('.xlsx')) throw new Error('Admin export did not produce an .xlsx file');
+  await assertReportExport('รายงานผู้รับเหมาเดิม', 'Safety_Report', 'G2');
+  await adminPage.getByText('ส่งออกรายงานแล้ว โดยเว้นช่องเลขบัตรไว้ 1 แถว เพราะไม่มีเลขบัตรเต็มในระบบ', { exact: true }).waitFor();
+  await adminPage.getByRole('button', { name: /Export Data/i }).click();
+  await adminPage.getByRole('menuitem', { name: /รายงาน Supplier & Outsource/ }).click();
+  await assertReportExport('รายงาน Supplier & Outsource', 'Sheet1', 'F3');
 
   await adminPage.getByRole('button', { name: /Vendors & Users/i }).click();
   await adminPage.getByText('User & Vendor Compliance', { exact: false }).waitFor();
@@ -1006,7 +1038,7 @@ try {
   await user360Dialog.getByRole('button', { name: /Correct Identity/ }).click();
   await user360Dialog.getByText(`${correctedNationalId.slice(0, 3)}••••••${correctedNationalId.slice(-4)}`, { exact: true }).waitFor();
   if (await user360Dialog.getByText(correctedNationalId, { exact: true }).count()) throw new Error('Corrected full national ID remained in User 360 DOM');
-  if (adminAuthDiagnostics.identityStepUpRequests !== 1
+  if (adminAuthDiagnostics.identityStepUpRequests !== 3
       || adminAuthDiagnostics.identityRevealRequests !== 1
       || adminAuthDiagnostics.identityExportRequests !== 1
       || adminAuthDiagnostics.identityCorrectionRequests !== 1) {
@@ -1106,6 +1138,11 @@ try {
   await adminPage.getByRole('button', { name: 'Supplier & Outsource', exact: true }).click();
   await adminPage.getByText('Program Control & Reporting', { exact: true }).waitFor();
   await assertA11y(adminPage, 'desktop supplier manager');
+  await adminPage.getByRole('button', { name: 'Export', exact: true }).click();
+  await assertReportExport('รายงาน Supplier & Outsource', 'Sheet1', 'F3');
+  if (adminAuthDiagnostics.reportExportRequests.join(',') !== 'CONTRACTOR,SUPPLIER_OUTSOURCE,SUPPLIER_OUTSOURCE') {
+    throw new Error('A report bypassed the protected identity export');
+  }
   await adminPage.getByRole('button', { name: /^Settings$/i }).click();
   await adminPage.getByText('Threshold Settings', { exact: false }).waitFor();
   await assertA11y(adminPage, 'desktop settings');

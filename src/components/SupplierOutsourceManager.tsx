@@ -8,6 +8,7 @@ import { useToastContext } from './ToastProvider';
 import { addOneYearIsoDate, getTodayIsoDate } from '../utils/accessDates';
 import AsyncState from './AsyncState';
 import { useDialogFocus } from '../hooks/useDialogFocus';
+import ReportExportDialog from './ReportExportDialog';
 
 interface AdminUserOption {
   id: string;
@@ -29,6 +30,7 @@ const SupplierOutsourceManager: React.FC = () => {
   const [workFilter, setWorkFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [showForm, setShowForm] = useState(false);
+  const [showExport, setShowExport] = useState(false);
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [userSearch, setUserSearch] = useState('');
@@ -189,7 +191,17 @@ const SupplierOutsourceManager: React.FC = () => {
         <div><h2 className="text-2xl font-black uppercase text-slate-900">Supplier & Outsource</h2><p className="text-[10px] font-bold uppercase tracking-widest text-slate-600">Program Control & Reporting</p></div>
         <div className="flex flex-wrap gap-2">
           <button onClick={() => openForm()} className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-3 text-[9px] font-black uppercase tracking-widest text-white hover:bg-emerald-800 sm:flex-none"><Plus size={16}/> เพิ่มสิทธิ์</button>
-          <button onClick={() => downloadSupplierOutsourceWorkbook(filteredRows)} className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-[9px] font-black uppercase tracking-widest text-white sm:flex-none"><Download size={16}/> Export</button>
+          <button type="button" onClick={() => setShowExport(true)} className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-[9px] font-black uppercase tracking-widest text-white sm:flex-none"><Download size={16}/> Export</button>
+          {showExport && (
+            <ReportExportDialog
+              title="รายงาน Supplier & Outsource"
+              onClose={() => setShowExport(false)}
+              onExport={async (token, reason) => {
+                const exportRows = await api.attachSupplierReportExportIds(filteredRows, token, reason);
+                await downloadSupplierOutsourceWorkbook(exportRows);
+              }}
+            />
+          )}
           <button onClick={loadData} disabled={loading} aria-label="รีเฟรชข้อมูล Supplier & Outsource" className="min-h-11 min-w-11 rounded-xl border border-slate-200 bg-white p-3 text-slate-500 disabled:opacity-50"><RefreshCw size={16} className={loading ? 'animate-spin' : ''}/></button>
         </div>
       </div>

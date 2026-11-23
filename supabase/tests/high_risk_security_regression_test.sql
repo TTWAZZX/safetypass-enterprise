@@ -18,6 +18,8 @@ values ('c2300000-0000-4000-8000-000000000001', 'CONTRACTOR'),
        ('c2300000-0000-4000-8000-000000000002', 'CONTRACTOR');
 insert into public.work_permits (user_id, permit_no, status, expire_date)
 values ('c2300000-0000-4000-8000-000000000002', '1234500002', 'ACTIVE', now() + interval '1 day');
+insert into public.exam_history (user_id, exam_type, score, total_questions, status)
+values ('c2300000-0000-4000-8000-000000000002', 'INDUCTION', 20, 20, 'PASSED');
 
 select set_config('test.induction_token', induction_verification_token::text, true)
 from public.users where id = 'c2300000-0000-4000-8000-000000000002';
@@ -31,7 +33,9 @@ begin
   if has_table_privilege('authenticated', 'public.users', 'INSERT')
     or has_column_privilege('authenticated', 'public.users', 'role', 'UPDATE')
     or has_function_privilege('authenticated', 'public.submit_safety_exam_internal(text,jsonb,text)', 'EXECUTE')
-    or has_function_privilege('authenticated', 'public.complete_registration_v4_internal(text,text,uuid,integer,text,text,text[],text,text,date,date)', 'EXECUTE') then
+    or has_function_privilege('authenticated', 'public.complete_registration_v4_internal(text,text,uuid,integer,text,text,text[],text,text,date,date)', 'EXECUTE')
+    or has_function_privilege('authenticated', 'public.service_get_report_export_ids(uuid,text,uuid[],text)', 'EXECUTE')
+    or has_function_privilege('anon', 'public.service_get_report_export_ids(uuid,text,uuid[],text)', 'EXECUTE') then
     raise exception 'Client has a bypass privilege';
   end if;
   update public.users set name = 'Updated supplier name' where id = auth.uid();
@@ -69,10 +73,45 @@ begin
     select 1 from public.admin_list_users()
     where id = 'c2300000-0000-4000-8000-000000000002' and national_id = public.mask_national_id('1888888888902')
   ) then raise exception 'Masked administrator directory is unavailable'; end if;
+  if not exists (select 1 from public.admin_get_exam_history()
+      where user_id = 'c2300000-0000-4000-8000-000000000002'
+        and users ->> 'national_id' = public.mask_national_id('1888888888902'))
+    or not exists (select 1 from public.admin_supplier_outsource_report()
+      where user_id = 'c2300000-0000-4000-8000-000000000003'
+        and national_id = public.mask_national_id('1888888888903')) then
+    raise exception 'An ordinary report did not return a masked identity';
+  end if;
 end
 $$;
 select set_config('test.invitation_code', public.admin_issue_registration_invitation('1888888888905'), true);
 
+set local role service_role;
+do $$
+declare
+  contractor uuid := 'c2300000-0000-4000-8000-000000000002';
+  supplier uuid := 'c2300000-0000-4000-8000-000000000003';
+  actor uuid := 'c2300000-0000-4000-8000-000000000001';
+begin
+  if public.service_get_report_export_ids(actor, 'CONTRACTOR', array[contractor, supplier], 'Payroll report')
+       <> jsonb_build_object(contractor::text, '1888888888902')
+     or public.service_get_report_export_ids(actor, 'SUPPLIER_OUTSOURCE', array[contractor, supplier], 'Access report')
+       <> jsonb_build_object(supplier::text, '1888888888903') then
+    raise exception 'Protected exports returned incorrect or unrelated national IDs';
+  end if;
+end
+$$;
+reset role;
+do $$
+begin
+  if (select count(*) from public.audit_logs
+      where actor_user_id = 'c2300000-0000-4000-8000-000000000001' and target like 'report_export:%'
+        and details::jsonb ->> 'target_count' = '1' and details !~ '[0-9]{13}') <> 2 then
+    raise exception 'Report export audit records were missing or contained a national ID';
+  end if;
+end
+$$;
+
+set local role authenticated;
 select set_config('request.jwt.claim.sub', 'c2300000-0000-4000-8000-000000000004', true);
 do $$
 begin

@@ -46,6 +46,7 @@ const expectedForward = [
   '20261123093000_mask_national_ids_in_admin_reports.sql',
   '20261123100000_verify_line_and_share_rate_limits.sql',
   '20261123101000_lease_external_registration_emails.sql',
+  '20261123110000_restore_protected_report_exports.sql',
 ];
 assert(JSON.stringify(forward) === JSON.stringify(expectedForward), `Unexpected migrations after baseline boundary: ${forward.join(', ')}`);
 

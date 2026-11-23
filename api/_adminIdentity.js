@@ -178,6 +178,26 @@ const handleReveal = async (req, res, auth, config, pepper) => {
 };
 
 const csvCell = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+const handleReportExport = async (req, res, auth, config, pepper) => {
+  const { report, userIds } = req.body;
+  const reason = validateReason(req.body.reason);
+  if (!['CONTRACTOR', 'SUPPLIER_OUTSOURCE'].includes(report) || !reason
+      || !Array.isArray(userIds) || userIds.length < 1 || userIds.length > 500
+      || userIds.some((id) => typeof id !== 'string' || !UUID_PATTERN.test(id))) {
+    return res.status(400).json({ message: 'ข้อมูลสำหรับส่งออกรายงานไม่ถูกต้อง' });
+  }
+  if (!requireStepUp(req, auth, pepper)) {
+    return res.status(401).json({ message: 'กรุณายืนยัน PIN ของแอดมินอีกครั้ง' });
+  }
+  const nationalIds = await serviceRpc(config, 'service_get_report_export_ids', {
+    actor_id_param: auth.user.id,
+    report_param: report,
+    user_ids_param: userIds,
+    reason_param: reason,
+  });
+  return res.status(200).json({ nationalIds });
+};
+
 const handleExport = async (req, res, auth, config, pepper) => {
   const userIds = Array.isArray(req.body?.userIds) ? req.body.userIds.filter((id) => UUID_PATTERN.test(String(id))) : [];
   const reason = validateReason(req.body?.reason);
@@ -310,6 +330,7 @@ export const handleAdminIdentityAction = async (req, res) => {
   const action = req.body?.action;
   try {
     if (action === 'admin-identity-step-up') return handleStepUp(req, res, auth, pepper);
+    if (action === 'admin-identity-report-export') return await handleReportExport(req, res, auth, config, pepper);
     if (action === 'admin-reveal-national-id') return handleReveal(req, res, auth, config, pepper);
     if (action === 'admin-export-national-ids') return handleExport(req, res, auth, config, pepper);
     if (action === 'admin-correct-national-id') return handleCorrection(req, res, auth, config, pepper);

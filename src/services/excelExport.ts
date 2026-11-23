@@ -52,10 +52,18 @@ export type SupplierOutsourceExcelRow = {
   expiration_date: string | null;
 };
 
-const supplierExportNationalId = (value: string | null): number | null => {
-  const nationalId = String(value || '').trim();
-  return /^[1-9]\d{12}$/.test(nationalId) ? Number(nationalId) : null;
-};
+export function reportNationalIdNumber(value: string | null | undefined): number | null {
+  const id = value?.trim();
+  return id && /^\d{13}$/.test(id) && Number(id) !== 0 ? Number(id) : null;
+}
+
+export function reportNationalIdNumbers(values: readonly (string | null | undefined)[]): number[] {
+  const validIds = values.map(reportNationalIdNumber).filter((value): value is number => value !== null);
+  if (validIds.length !== values.length) {
+    throw new Error(`พบ ${values.length - validIds.length} รายการที่ไม่มีเลขบัตรประชาชนจริง 13 หลัก กรุณาตรวจสอบข้อมูลก่อน Export`);
+  }
+  return validIds;
+}
 
 const supplierExportDate = (value: string | null): Date | null => {
   if (!value) return null;
@@ -65,10 +73,7 @@ const supplierExportDate = (value: string | null): Date | null => {
 };
 
 export async function createSupplierOutsourceWorkbook(rows: SupplierOutsourceExcelRow[]) {
-  const missingNationalIds = rows.filter((row) => !supplierExportNationalId(row.national_id)).length;
-  if (missingNationalIds > 0) {
-    throw new Error(`พบ ${missingNationalIds} รายการที่ไม่มีเลขบัตรประชาชนจริง 13 หลัก กรุณาตรวจสอบข้อมูลก่อน Export`);
-  }
+  const nationalIds = reportNationalIdNumbers(rows.map((row) => row.national_id));
 
   const { default: ExcelJS } = await import('exceljs');
   const workbook = new ExcelJS.Workbook();
@@ -86,12 +91,12 @@ export async function createSupplierOutsourceWorkbook(rows: SupplierOutsourceExc
       sanitizeExcelText(row.name),
       sanitizeExcelText(row.participant_type),
       sanitizeExcelText(row.work_type),
-      supplierExportNationalId(row.national_id),
+      nationalIds[index],
       supplierExportDate(row.test_date),
       supplierExportDate(row.expiration_date),
     ]);
     excelRow.getCell(1).numFmt = '0';
-    excelRow.getCell(6).numFmt = '0';
+    excelRow.getCell(6).numFmt = nationalIds[index] < 1_000_000_000_000 ? '0000000000000' : '0';
     excelRow.getCell(7).numFmt = 'dd/mm/yyyy';
     excelRow.getCell(8).numFmt = 'dd/mm/yyyy';
   });

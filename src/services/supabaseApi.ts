@@ -562,6 +562,30 @@ export const api = {
     return { stepUpToken: result.stepUpToken as string, expiresAt: result.expiresAt as string };
   },
 
+  getReportExportIds: async (
+    report: 'CONTRACTOR' | 'SUPPLIER_OUTSOURCE', userIds: readonly (string | null)[],
+    stepUpToken: string, reason: string,
+  ): Promise<Record<string, string>> => {
+    const uniqueIds = [...new Set(userIds.filter((id): id is string => Boolean(id)))];
+    if (uniqueIds.length === 0) return {};
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error('กรุณาเข้าสู่ระบบอีกครั้ง');
+    const ids: Record<string, string> = {};
+    for (let offset = 0; offset < uniqueIds.length; offset += 500) {
+      const response = await fetch('/api/set-auth-pin', {
+        method: 'POST', cache: 'no-store',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({
+          action: 'admin-identity-report-export', report, userIds: uniqueIds.slice(offset, offset + 500), stepUpToken, reason,
+        }),
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.nationalIds) throw new Error(result?.message || 'ไม่สามารถดึงเลขบัตรสำหรับรายงานได้');
+      Object.assign(ids, result.nationalIds);
+    }
+    return ids;
+  },
+
   adminRevealNationalId: async (input: { userId: string; reason: string; stepUpToken: string }) => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) throw new Error('Authentication required');
@@ -957,6 +981,13 @@ export const api = {
     return (data || []) as SupplierOutsourceReportRow[];
   },
 
+  attachSupplierReportExportIds: async (
+    rows: readonly SupplierOutsourceReportRow[], stepUpToken: string, reason: string,
+  ): Promise<SupplierOutsourceReportRow[]> => {
+    const ids = await api.getReportExportIds('SUPPLIER_OUTSOURCE', rows.map((row) => row.user_id), stepUpToken, reason);
+    return rows.map((row) => ({ ...row, national_id: ids[row.user_id] ?? null }));
+  },
+
   adminSetSupplierOutsourceAccess: async (payload: {
     userId: string;
     enabled: boolean;
@@ -1047,13 +1078,6 @@ export const api = {
         { name: 'Supplier & Outsource', value: supplierOutsource }
       ]
     };
-  },
-
-  getAllExamHistory: async () => {
-    const { data, error } = await supabase.rpc('admin_get_exam_history');
-      
-    if (error) throw error;
-    return data;
   },
 
   getExamHistoryPage: async (params: {

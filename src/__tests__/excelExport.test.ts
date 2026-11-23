@@ -1,7 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import { createSupplierOutsourceWorkbook } from '../services/excelExport';
+import { createSupplierOutsourceWorkbook, reportNationalIdNumbers } from '../services/excelExport';
 
 describe('Supplier & Outsource Excel export', () => {
+  it('rejects masked and fabricated zero-filled IDs before creating either type of workbook', () => {
+    expect(() => reportNationalIdNumbers(['123••••••0123', '0000000000000'])).toThrow('พบ 2 รายการ');
+  });
+
+  it('preserves leading zeros from a complete ID stored by the system', async () => {
+    const workbook = await createSupplierOutsourceWorkbook([{
+      company: 'Supplier Company',
+      name: 'Supplier User',
+      participant_type: 'supplier',
+      work_type: 'Driver',
+      national_id: '0123456789012',
+      test_date: null,
+      expiration_date: null,
+    }]);
+    const cell = workbook.getWorksheet('Sheet1')!.getCell('F3');
+    expect(cell.value).toBe(123456789012);
+    expect(cell.numFmt).toBe('0000000000000');
+  }, 15_000);
+
   it('exports date cells in DD/MM/YYYY format', async () => {
     const workbook = await createSupplierOutsourceWorkbook([{
       company: 'Supplier Company',
