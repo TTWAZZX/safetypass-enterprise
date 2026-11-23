@@ -247,6 +247,31 @@ describe('auth-login API', () => {
     });
   });
 
+  it('repairs an authenticated UUID mismatch server-side when invitations are required', async () => {
+    configure();
+    const profileUserId = '10000000-0000-4000-8000-000000000033';
+    const authUserId = '10000000-0000-4000-8000-000000000034';
+    const upstream = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        user_exists: true, user_id: profileUserId, is_active: true, pin_version: 1,
+        registration_invitation_required: true,
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        access_token: 'mismatch-access', refresh_token: 'mismatch-refresh', user: { id: authUserId },
+      }))
+      .mockResolvedValueOnce(jsonResponse(null))
+      .mockResolvedValueOnce(jsonResponse(true));
+    vi.stubGlobal('fetch', upstream);
+
+    const result = await invoke('0123', '192.0.2.34');
+
+    expect(result.status).toBe(200);
+    expect(result.body.requiresPinUpgrade).toBe(true);
+    expect(result.body.requiresProfileRepair).toBeUndefined();
+    expect(upstream.mock.calls[3][0]).toContain('service_repair_verified_registration');
+    expect(JSON.parse(upstream.mock.calls[3][1].body)).toEqual({ auth_user_id_param: authUserId });
+  });
+
   it('self-recovers a pending reset after the temporary PIN authenticates', async () => {
     configure();
     const userId = '10000000-0000-4000-8000-000000000019';

@@ -8,6 +8,13 @@ const jsonResponse = (body: unknown, status = 200) => new Response(JSON.stringif
   headers: { 'Content-Type': 'application/json' },
 });
 
+const stubFetch = (upstream: (url: string, init: RequestInit) => unknown, invitationRequired = false) => {
+  vi.stubGlobal('fetch', (url: string, init: RequestInit) => {
+    if (url.endsWith('/rpc/registration_invitation_required')) return Promise.resolve(jsonResponse(invitationRequired));
+    return upstream(url, init);
+  });
+};
+
 const invoke = async (ip: string, requestBody: Record<string, unknown> = { nationalId }) => {
   let responseStatus = 0;
   let responseBody: any;
@@ -40,6 +47,44 @@ describe('prepare-staged-auth API', () => {
     delete process.env.SUPABASE_SERVICE_ROLE_KEY;
   });
 
+  it('rejects an unverified registration before creating or recovering an Auth identity', async () => {
+    vi.stubEnv('SUPABASE_URL', 'https://project.supabase.co');
+    vi.stubEnv('SUPABASE_PUBLISHABLE_KEY', 'publishable-test-key');
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'service-role-test-key');
+    const upstream = vi.fn().mockResolvedValueOnce(jsonResponse([]));
+    stubFetch(upstream, true);
+
+    expect(await invoke('192.0.2.40', { nationalId, initialPin: nationalId.slice(-6) })).toEqual({
+      status: 403, body: { ok: false, code: 'INVITATION_REQUIRED' },
+    });
+    expect(upstream).toHaveBeenCalledTimes(1);
+    vi.unstubAllEnvs();
+  });
+
+  it('binds an approved invitation to the Auth session and provisions it with a random password', async () => {
+    vi.stubEnv('SUPABASE_URL', 'https://project.supabase.co');
+    vi.stubEnv('SUPABASE_PUBLISHABLE_KEY', 'publishable-test-key');
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'service-role-test-key');
+    const invitationId = '77777777-7777-4777-8777-777777777741';
+    const upstream = vi.fn()
+      .mockResolvedValueOnce(jsonResponse([]))
+      .mockResolvedValueOnce(jsonResponse(invitationId))
+      .mockResolvedValueOnce(jsonResponse([]))
+      .mockResolvedValueOnce(jsonResponse({ id: invitationId }))
+      .mockResolvedValueOnce(jsonResponse({ access_token: 'access', refresh_token: 'refresh' }));
+    stubFetch(upstream, true);
+
+    const response = await invoke('192.0.2.41', {
+      nationalId, initialPin: nationalId.slice(-6), invitationCode: 'abcdef0123456789abcdef0123456789',
+    });
+    expect(response.status).toBe(200);
+    expect(upstream.mock.calls[1][0]).toContain('service_get_registration_invitation');
+    const authBody = JSON.parse(upstream.mock.calls[3][1].body);
+    expect(authBody.app_metadata).toEqual({ registration_invitation_id: invitationId });
+    expect(authBody.password).toMatch(/^SafetyPass-bootstrap-v2-/);
+    vi.unstubAllEnvs();
+  });
+
   it('serves registration status through the existing server-only function', async () => {
     process.env.SUPABASE_URL = 'https://project.supabase.co';
     process.env.SUPABASE_PUBLISHABLE_KEY = 'publishable-test-key';
@@ -47,7 +92,7 @@ describe('prepare-staged-auth API', () => {
     const upstream = vi.fn().mockResolvedValueOnce(jsonResponse([{
       user_exists: true, requires_registration: true, is_active: true,
     }]));
-    vi.stubGlobal('fetch', upstream);
+    stubFetch(upstream);
 
     const result = await invoke('192.0.2.20', {
       nationalId: '1888888888881', action: 'status',
@@ -67,7 +112,7 @@ describe('prepare-staged-auth API', () => {
     process.env.SUPABASE_PUBLISHABLE_KEY = 'publishable-test-key';
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-test-key';
     const upstream = vi.fn().mockResolvedValueOnce(jsonResponse([]));
-    vi.stubGlobal('fetch', upstream);
+    stubFetch(upstream);
     const body = { nationalId: '1888888888882', action: 'status' };
 
     const first = await invoke('192.0.2.21', body);
@@ -82,7 +127,7 @@ describe('prepare-staged-auth API', () => {
     process.env.SUPABASE_URL = 'https://project.supabase.co';
     process.env.SUPABASE_PUBLISHABLE_KEY = 'publishable-test-key';
     const upstream = vi.fn();
-    vi.stubGlobal('fetch', upstream);
+    stubFetch(upstream);
 
     const result = await invoke('192.0.2.22', {
       nationalId: '1888888888883', action: 'status',
@@ -106,7 +151,7 @@ describe('prepare-staged-auth API', () => {
       .mockResolvedValueOnce(jsonResponse({
         access_token: 'new-access', refresh_token: 'new-refresh',
       }));
-    vi.stubGlobal('fetch', upstream);
+    stubFetch(upstream);
 
     const result = await invoke('192.0.2.10');
 
@@ -143,7 +188,7 @@ describe('prepare-staged-auth API', () => {
       .mockResolvedValueOnce(jsonResponse({
         access_token: 'new-self-access', refresh_token: 'new-self-refresh',
       }));
-    vi.stubGlobal('fetch', upstream);
+    stubFetch(upstream);
 
     const result = await invoke('192.0.2.13');
 
@@ -171,7 +216,7 @@ describe('prepare-staged-auth API', () => {
       .mockResolvedValueOnce(jsonResponse({
         access_token: 'existing-access', refresh_token: 'existing-refresh',
       }));
-    vi.stubGlobal('fetch', upstream);
+    stubFetch(upstream);
 
     const result = await invoke('192.0.2.11');
 
@@ -199,7 +244,7 @@ describe('prepare-staged-auth API', () => {
       .mockResolvedValueOnce(jsonResponse({
         access_token: 'recovered-access', refresh_token: 'recovered-refresh',
       }));
-    vi.stubGlobal('fetch', upstream);
+    stubFetch(upstream);
 
     const result = await invoke('192.0.2.14');
 
@@ -237,7 +282,7 @@ describe('prepare-staged-auth API', () => {
       .mockResolvedValueOnce(jsonResponse({
         access_token: 'repair-access', refresh_token: 'repair-refresh',
       }));
-    vi.stubGlobal('fetch', upstream);
+    stubFetch(upstream);
 
     const result = await invoke('192.0.2.12');
 

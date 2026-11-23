@@ -1,4 +1,7 @@
+import { createHash } from 'node:crypto';
+
 const requestLimits = new Map();
+let nextCleanupAt = 0;
 
 export function getSupabaseConfig() {
   const url = process.env.SUPABASE_URL
@@ -92,11 +95,39 @@ export async function requireAdminUser(req, res) {
   }
 }
 
-export function isRateLimited(key, intervalMs) {
+export async function isRateLimited(key, intervalMs) {
+  const keyHash = createHash('sha256').update(key).digest('hex');
+  if (process.env.SHARED_RATE_LIMIT_ENABLED === 'true') {
+    try {
+      const { url, serviceKey } = getSupabaseServiceConfig();
+      const response = await fetch(`${url}/rest/v1/rpc/service_acquire_api_rate_limit`, {
+        method: 'POST',
+        headers: {
+          apikey: serviceKey,
+          Authorization: `Bearer ${serviceKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ key_hash_param: keyHash, interval_ms_param: intervalMs }),
+        signal: AbortSignal.timeout(3000),
+      });
+      if (response.ok) return await response.json() !== true;
+    } catch {
+      // Keep the gate closed when the shared store is unavailable.
+    }
+    console.error('Shared API rate limiter is unavailable');
+    return true;
+  }
+
   const now = Date.now();
-  const previous = requestLimits.get(key);
-  if (previous && now - previous < intervalMs) return true;
-  requestLimits.set(key, now);
+  if (now >= nextCleanupAt) {
+    for (const [entry, expiresAt] of requestLimits) {
+      if (expiresAt <= now) requestLimits.delete(entry);
+    }
+    nextCleanupAt = now + 1000;
+  }
+  if ((requestLimits.get(keyHash) || 0) > now) return true;
+  if (!requestLimits.has(keyHash) && requestLimits.size >= 10000) return true;
+  requestLimits.set(keyHash, now + intervalMs);
   return false;
 }
 

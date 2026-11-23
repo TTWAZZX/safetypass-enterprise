@@ -14,8 +14,8 @@ export function createLoginButton() {
   };
 }
 
-export function createInductionPassMessage({ name, vendor, score, totalQuestions, expiryDate, nationalId }) {
-  const digitalPassUrl = `${APP_URL}/verify?id=${encodeURIComponent(nationalId)}`;
+export function createInductionPassMessage({ name, vendor, score, totalQuestions, expiryDate, verificationToken }) {
+  const digitalPassUrl = `${APP_URL}/verify?induction=${encodeURIComponent(verificationToken)}`;
   const formattedExpiry = new Date(expiryDate).toLocaleDateString('th-TH', {
     timeZone: 'Asia/Bangkok',
     day: 'numeric',
@@ -213,8 +213,8 @@ export function createSupplierOutsourceAccessNoticeMessage({
   };
 }
 
-export function createWorkPermitPassMessage({ permitNo, name, vendor, score, totalQuestions }) {
-  const digitalPassUrl = `${APP_URL}/verify?permit=${encodeURIComponent(permitNo)}`;
+export function createWorkPermitPassMessage({ permitNo, name, vendor, score, totalQuestions, verificationToken }) {
+  const digitalPassUrl = `${APP_URL}/verify?workPermit=${encodeURIComponent(verificationToken)}`;
   return {
     type: 'flex',
     altText: `สอบผ่าน Work Permit: ${name}`,

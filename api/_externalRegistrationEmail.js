@@ -119,16 +119,22 @@ function createTransport() {
   return nodemailer.createTransport({
     service: 'gmail',
     auth: { user: EXTERNAL_REGISTRATION_SENDER, pass: password },
+    connectionTimeout: 7000,
+    greetingTimeout: 7000,
+    socketTimeout: 10000,
+    disableFileAccess: true,
+    disableUrlAccess: true,
   });
 }
 
-export async function sendExternalRegistrationEmail({ to, subject, text, html }) {
+export async function sendExternalRegistrationEmail({ to, subject, text, html, messageId }) {
   return createTransport().sendMail({
     from: `${EXTERNAL_REGISTRATION_BRAND} <${EXTERNAL_REGISTRATION_SENDER}>`,
     to,
     subject,
     text,
     html,
+    messageId,
     headers: { 'Content-Language': 'th-TH' },
   });
 }

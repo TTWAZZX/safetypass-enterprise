@@ -102,6 +102,7 @@ export interface VendorSaveResult {
 
 // ✅ User ปรับปรุงใหม่รองรับ avatar_url จาก LINE
 export interface User {
+  induction_verification_token?: string;
   id: string;
   national_id: string;
   name: string;
@@ -138,6 +139,7 @@ export interface WorkPermitSession {
   id: string;
   user_id: string;
   permit_no: string;
+  verification_token?: string;
   expire_date: string;
   status?: 'ACTIVE' | 'EXPIRED';
   created_at?: string;

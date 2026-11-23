@@ -36,10 +36,20 @@ const expectedForward = [
   '20260818103000_admin_training_access_guards.sql',
   '20260818120000_admin_user360_foundation.sql',
   '20260818143000_admin_identity_privileged_workflow.sql',
+  '20260818170000_admin_pin_reset_auth_relink.sql',
+  '20260818171500_admin_pin_reset_service_begin.sql',
+  '20260818180000_harden_legacy_first_login_relink.sql',
+  '20260818190000_sanitize_legacy_audit_actor_labels.sql',
+  '20261123090000_harden_user_and_exam_permissions.sql',
+  '20261123091000_require_registration_invitation.sql',
+  '20261123092000_public_pass_tokens.sql',
+  '20261123093000_mask_national_ids_in_admin_reports.sql',
+  '20261123100000_verify_line_and_share_rate_limits.sql',
+  '20261123101000_lease_external_registration_emails.sql',
 ];
 assert(JSON.stringify(forward) === JSON.stringify(expectedForward), `Unexpected migrations after baseline boundary: ${forward.join(', ')}`);
 
-const baseline = await readFile(BASELINE_PATH, 'utf8');
+const baseline = (await readFile(BASELINE_PATH, 'utf8')).replaceAll('\r\n', '\n');
 const manifest = JSON.parse(await readFile(MANIFEST_PATH, 'utf8'));
 const baselineSha256 = createHash('sha256').update(baseline).digest('hex');
 assert(manifest.boundaryVersion === BOUNDARY, 'Baseline manifest boundary does not match the runner');
@@ -60,6 +70,9 @@ const setupSql = `
       nullif(current_setting('request.jwt.claim.sub', true), ''),
       nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub'
     )::uuid
+  $$;
+  create or replace function auth.jwt() returns jsonb language sql stable as $$
+    select coalesce(nullif(current_setting('request.jwt.claims', true), '')::jsonb, '{}'::jsonb)
   $$;
   create table auth.users (
     instance_id uuid,
@@ -91,6 +104,8 @@ const tests = [
   'supabase/tests/admin_training_access_guards_test.sql',
   'supabase/tests/admin_user360_foundation_test.sql',
   'supabase/tests/admin_identity_privileged_workflow_test.sql',
+  'supabase/tests/high_risk_security_regression_test.sql',
+  'supabase/tests/line_rate_limit_email_queue_test.sql',
 ];
 
 const admin = new pg.Client({ connectionString: adminUrl.toString(), application_name: 'safetypass-staging-bootstrap-admin' });

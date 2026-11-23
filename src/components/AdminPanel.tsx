@@ -18,6 +18,50 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 
+const RegistrationInvitationForm = () => {
+  const [nationalId, setNationalId] = useState('');
+  const [invitation, setInvitation] = useState('');
+  const [error, setError] = useState('');
+  const [issuing, setIssuing] = useState(false);
+
+  const issueInvitation = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIssuing(true);
+    setInvitation('');
+    setError('');
+    try {
+      setInvitation(await api.issueRegistrationInvitation(nationalId));
+      setNationalId('');
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'ออกรหัสเชิญไม่สำเร็จ');
+    } finally {
+      setIssuing(false);
+    }
+  };
+
+  return (
+    <details className="mb-4 rounded-xl border border-slate-200 bg-white p-4 text-sm">
+      <summary className="cursor-pointer font-bold text-slate-900">ออกรหัสเชิญเปิดบัญชี</summary>
+      <form onSubmit={issueInvitation} className="mt-3 flex flex-wrap items-end gap-3">
+        <label className="flex flex-col gap-1 font-medium text-slate-700">
+          เลขบัตรประชาชนของผู้สมัคร
+          <input required pattern="[0-9]{13}" inputMode="numeric" maxLength={13} autoComplete="off"
+            value={nationalId} onChange={(event) => setNationalId(event.target.value.replace(/\D/g, ''))}
+            className="rounded-lg border border-slate-300 px-3 py-2" />
+        </label>
+        <button disabled={issuing} className="rounded-lg bg-slate-900 px-4 py-2 text-white disabled:opacity-60">
+          {issuing ? 'กำลังออกรหัส' : 'ออกรหัสเชิญ'}
+        </button>
+      </form>
+      {error && <p role="alert" className="mt-2 text-red-700">{error}</p>}
+      {invitation && <label className="mt-3 flex flex-col gap-1 text-slate-700">
+        รหัสเชิญใช้ได้ 24 ชั่วโมง ส่งให้ผู้สมัครผ่านช่องทางที่ยืนยันแล้ว
+        <input readOnly value={invitation} className="max-w-sm rounded-lg border border-slate-300 px-3 py-2 font-mono" />
+      </label>}
+    </details>
+  );
+};
+
 const AdminPanel: React.FC = () => {
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -117,7 +161,10 @@ const AdminPanel: React.FC = () => {
           <div className="animate-in fade-in duration-500 w-full h-full">
               {activePage === 'DASHBOARD' && <AdminDashboard onNavigateToUsers={() => setActivePage('VENDORS')} onNavigateToSupplier={() => setActivePage('SUPPLIER_OUTSOURCE')} />}
               {activePage === 'QUESTIONS' && <QuestionManager />}
-              {activePage === 'VENDORS' && <VendorManager initialSearch={searchQuery} />}
+              {activePage === 'VENDORS' && <>
+                <RegistrationInvitationForm />
+                <VendorManager initialSearch={searchQuery} />
+              </>}
               {activePage === 'SUPPLIER_OUTSOURCE' && <SupplierOutsourceManager />}
               {activePage === 'EXTERNAL_REGISTRATION' && <ExternalRegistrationAdmin />}
               {activePage === 'SETTINGS' && <SettingsManager />}

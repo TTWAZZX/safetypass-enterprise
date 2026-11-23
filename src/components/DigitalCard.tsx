@@ -63,11 +63,14 @@ const DigitalCard: React.FC<DigitalCardProps> = ({
     : isSupplier ? formatThaiDate(supplierStatus?.last_test_at) : formatThaiDate(new Date());
 
   // 🔥 แก้ไขตัวบั๊ก! ใช้ encodeURIComponent ครอบ permit_no เผื่อมันเป็นภาษาไทยแบบคำว่า "ทดสอบ"
-  const qrValue = isPermit 
-    ? `${window.location.origin}/verify?id=${encodeURIComponent(user.national_id)}&permit=${encodeURIComponent(permit?.permit_no || '')}`
+  const verification = isPermit
+    ? ['workPermit', permit?.verification_token]
     : isSupplier
-      ? `${window.location.origin}/verify?supplier=${encodeURIComponent(supplierStatus?.verification_token || '')}`
-      : `${window.location.origin}/verify?id=${encodeURIComponent(user.national_id)}`;
+      ? ['supplier', supplierStatus?.verification_token]
+      : ['induction', user.induction_verification_token];
+  const qrValue = verification[1]
+    ? `${window.location.origin}/verify?${verification[0]}=${encodeURIComponent(verification[1])}`
+    : '';
 
   // ✅ อัปเกรดระบบ Download ล็อกขนาดและแก้อาการภาพเบี้ยว/ตัวหนังสือขาด
   const handleDownload = async () => {
@@ -194,11 +197,11 @@ const DigitalCard: React.FC<DigitalCardProps> = ({
 
           <div className="absolute bottom-0 w-full p-5 bg-slate-950/60 backdrop-blur-2xl border-t border-white/5 flex items-center justify-between">
              <div className="bg-white p-1 rounded-xl shadow-lg border-[3px] border-white/10">
-                <QRCode 
+                {qrValue && <QRCode
                   value={qrValue} 
                   size={72}
                   level="M"
-                />
+                />}
              </div>
              <div className="text-right">
                 <p className="text-[7px] text-slate-500 uppercase font-black tracking-widest mb-1 text-right">Auth Status</p>

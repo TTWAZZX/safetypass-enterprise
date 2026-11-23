@@ -18,13 +18,23 @@ export interface AuthLoginResult {
   requiresPinUpgrade: boolean;
 }
 
+interface RegistrationProof {
+  invitationCode: string;
+  initialPin: string;
+}
+
 const USER_PROFILE_SELECT = [
-  'id', 'national_id', 'name', 'vendor_id', 'role', 'induction_expiry',
+  'id', 'national_id', 'name', 'vendor_id', 'role', 'induction_expiry', 'induction_verification_token',
   'created_at', 'age', 'nationality', 'pdpa_agreed', 'pdpa_agreed_at',
   'is_active', 'date_of_birth', 'avatar_url', 'last_login', 'vendors(*)',
 ].join(',');
 
+let lastRegistrationStatus: { nationalId: string; status: RegistrationStatus; expiresAt: number } | undefined;
+
 const getRegistrationStatus = async (nationalId: string): Promise<RegistrationStatus> => {
+  if (lastRegistrationStatus?.nationalId === nationalId && lastRegistrationStatus.expiresAt > Date.now()) {
+    return lastRegistrationStatus.status;
+  }
   const response = await fetch('/api/prepare-staged-auth', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -32,23 +42,27 @@ const getRegistrationStatus = async (nationalId: string): Promise<RegistrationSt
   });
   const result = await response.json().catch(() => null);
   if (!response.ok) throw new Error('ไม่สามารถตรวจสอบสถานะบัญชีได้');
-  return resolveRegistrationStatus(result?.status);
+  const status = resolveRegistrationStatus(result?.status);
+  lastRegistrationStatus = { nationalId, status, expiresAt: Date.now() + 2000 };
+  return status;
 };
 
 const ensureRegistrationIdentity = async (
   nationalId: string,
   securePin: string,
+  proof?: RegistrationProof,
 ) => {
   const pinError = getSecurePinError(nationalId, securePin);
   if (pinError) throw new Error(pinError);
-  return ensureStagedRegistrationIdentity(nationalId);
+  return ensureStagedRegistrationIdentity(nationalId, proof);
 };
 
-const ensureStagedRegistrationIdentity = async (nationalId: string) => {
+const ensureStagedRegistrationIdentity = async (nationalId: string, proof?: RegistrationProof, reverify = false) => {
   const email = `${nationalId}@safetypass.com`;
   const { data: sessionData } = await supabase.auth.getSession();
   const currentSession = sessionData.session;
-  if (currentSession?.user.email?.toLowerCase() === email.toLowerCase()) {
+  if (!reverify && currentSession?.user.email?.toLowerCase() === email.toLowerCase()
+    && (!proof || currentSession.user.app_metadata?.registration_invitation_id)) {
     return currentSession.user;
   }
   if (currentSession) await supabase.auth.signOut();
@@ -56,9 +70,15 @@ const ensureStagedRegistrationIdentity = async (nationalId: string) => {
   const response = await fetch('/api/prepare-staged-auth', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nationalId }),
+    body: JSON.stringify({ nationalId, ...proof }),
   });
   const prepared = await response.json().catch(() => null);
+  if (prepared?.code === 'INVITATION_REQUIRED') {
+    throw new Error('กรุณาตรวจสอบรหัสเชิญและ PIN เริ่มต้น 6 หลักท้ายบัตร');
+  }
+  if (prepared?.code === 'CONTACT_ADMIN') {
+    throw new Error('กรุณาติดต่อเจ้าหน้าที่ Safety เพื่อตรวจสอบบัญชีเดิม');
+  }
   if (!response.ok || prepared?.ok !== true
     || typeof prepared.accessToken !== 'string'
     || typeof prepared.refreshToken !== 'string') {
@@ -112,7 +132,8 @@ export const api = {
     if (registrationStatus.state === 'SUSPENDED') {
       throw new Error('บัญชีของคุณถูกระงับสิทธิ์ชั่วคราว โปรดติดต่อเจ้าหน้าที่ Safety');
     }
-    if (registrationStatus.state === 'STAGED') {
+    if (registrationStatus.state === 'STAGED'
+      || (registrationStatus.state === 'NOT_FOUND' && await api.isRegistrationInvitationRequired())) {
       throw new Error('REQUIRE_REGISTER');
     }
 
@@ -275,8 +296,20 @@ export const api = {
 
   checkRegistrationStatus: getRegistrationStatus,
 
-  prepareStagedRegistration: async (nationalId: string): Promise<StagedRegistrationProfile> => {
-    await ensureStagedRegistrationIdentity(nationalId);
+  isRegistrationInvitationRequired: async (): Promise<boolean> => {
+    const { data, error } = await supabase.rpc('registration_invitation_required');
+    if (error) throw error;
+    return data === true;
+  },
+
+  issueRegistrationInvitation: async (nationalId: string): Promise<string> => {
+    const { data, error } = await supabase.rpc('admin_issue_registration_invitation', { national_id_param: nationalId });
+    if (error) throw error;
+    return data;
+  },
+
+  prepareStagedRegistration: async (nationalId: string, proof?: RegistrationProof): Promise<StagedRegistrationProfile> => {
+    await ensureStagedRegistrationIdentity(nationalId, proof, Boolean(proof));
     const { data, error } = await supabase.rpc('get_my_staged_registration_profile');
     if (error) {
       if (error.message.includes('suspended')) {
@@ -305,9 +338,10 @@ export const api = {
       workType?: SupplierOutsourceWorkType;
       accessStartDate?: string;
       accessEndDate?: string;
-    }
+    },
+    proof?: RegistrationProof,
   ): Promise<User> => {
-    const authUser = await ensureRegistrationIdentity(nationalId, securePin);
+    const authUser = await ensureRegistrationIdentity(nationalId, securePin, proof);
 
     if (!authUser) throw new Error('ไม่สามารถเชื่อมต่อระบบยืนยันตัวตนได้');
 
@@ -328,8 +362,13 @@ export const api = {
       access_end_date_param: trainingSelection?.accessEndDate || null,
     });
     const { data: registeredUser, error: registrationError } = registrationResponse;
+    lastRegistrationStatus = undefined;
 
     if (registrationError) {
+      if (registrationError.message.includes('Valid registration invitation is required')) {
+        await supabase.auth.signOut();
+        throw new Error('รหัสเชิญใช้ไม่ได้แล้ว กรุณาตรวจสอบรหัสหรือติดต่อเจ้าหน้าที่ Safety');
+      }
       if (registrationError.message.includes('already registered')) {
         // A previous attempt may have committed the profile immediately before
         // its PIN request was interrupted. Finish that same authenticated
@@ -727,7 +766,7 @@ export const api = {
     });
     const result = await response.json().catch(() => null);
     if (!response.ok) throw new Error(result?.message || 'ไม่สามารถส่ง Email ผลคำขอได้');
-    return result as { success: boolean; sent: number; failures?: Array<{ recipient: string; message: string }> };
+    return result as { success: boolean; sent: number };
   },
 
   deleteExternalRegistrationApplication: async (applicationId: string, reason?: string) => {
@@ -890,9 +929,20 @@ export const api = {
       .filter((program): program is TrainingProgram => program === 'CONTRACTOR' || program === 'SUPPLIER_OUTSOURCE'))];
   },
 
-  linkMyLineIdentity: async (lineUserId: string) => {
-    const { error } = await supabase.rpc('link_my_line_identity', { line_user_id_param: lineUserId });
-    if (error) throw error;
+  linkMyLineIdentity: async (lineAccessToken: string): Promise<string | null> => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error('กรุณาเข้าสู่ระบบใหม่');
+    const response = await fetch('/api/set-auth-pin', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ action: 'link-line-identity', lineAccessToken }),
+    });
+    const result = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(result?.message || 'ไม่สามารถยืนยันบัญชี LINE');
+    return typeof result?.avatarUrl === 'string' ? result.avatarUrl : null;
   },
 
   getSupplierOutsourceReport: async (): Promise<SupplierOutsourceReportRow[]> => {

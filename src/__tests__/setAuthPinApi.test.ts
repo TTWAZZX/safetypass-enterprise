@@ -9,6 +9,13 @@ const jsonResponse = (body: unknown, status = 200) => new Response(JSON.stringif
   headers: { 'Content-Type': 'application/json' },
 });
 
+const stubFetch = (upstream: (url: string, init: RequestInit) => unknown, eligible = true) => {
+  vi.stubGlobal('fetch', (url: string, init: RequestInit) => {
+    if (url.endsWith('/rpc/service_can_set_auth_pin')) return Promise.resolve(jsonResponse(eligible));
+    return upstream(url, init);
+  });
+};
+
 const invoke = async (body: unknown, ip: string, authorization = 'Bearer user-access-token') => {
   let status = 0;
   let responseBody: any;
@@ -50,7 +57,7 @@ describe('set-auth-pin API', () => {
       .mockResolvedValueOnce(jsonResponse({ id: userId }))
       .mockResolvedValueOnce(jsonResponse(null))
       .mockResolvedValueOnce(jsonResponse({ access_token: 'v2-access', refresh_token: 'v2-refresh' }));
-    vi.stubGlobal('fetch', upstream);
+    stubFetch(upstream);
 
     const result = await invoke({ nationalId, pin: '246801' }, '192.0.2.20');
     const adminBody = JSON.parse(String(upstream.mock.calls[1][1]?.body));
@@ -80,7 +87,7 @@ describe('set-auth-pin API', () => {
       email: `9999999999999@safetypass.com`,
       user_metadata: {},
     }));
-    vi.stubGlobal('fetch', upstream);
+    stubFetch(upstream);
 
     const result = await invoke({ nationalId, pin: '246801' }, '192.0.2.21');
 
@@ -91,7 +98,7 @@ describe('set-auth-pin API', () => {
   it('requires an authenticated session', async () => {
     configure();
     const upstream = vi.fn();
-    vi.stubGlobal('fetch', upstream);
+    stubFetch(upstream);
 
     const result = await invoke({ nationalId, pin: '246801' }, '192.0.2.22', '');
 
@@ -108,7 +115,7 @@ describe('set-auth-pin API', () => {
       .mockResolvedValueOnce(jsonResponse({ id: userId }))
       .mockResolvedValueOnce(jsonResponse(null))
       .mockResolvedValueOnce(jsonResponse({ access_token: 'access', refresh_token: 'refresh' }));
-    vi.stubGlobal('fetch', upstream);
+    stubFetch(upstream);
 
     expect((await invoke({ nationalId, pin: '111111' }, '192.0.2.23')).status).toBe(200);
   });
@@ -116,8 +123,7 @@ describe('set-auth-pin API', () => {
   it.each([
     ['000000', '192.0.2.24'],
     ['123456', '192.0.2.25'],
-    ['890123', '192.0.2.26'],
-  ])('accepts any six-digit permanent PIN %s', async (pin, ip) => {
+  ])('accepts six-digit permanent PIN %s', async (pin, ip) => {
     configure();
     const upstream = vi.fn()
       .mockResolvedValueOnce(jsonResponse({
@@ -126,9 +132,31 @@ describe('set-auth-pin API', () => {
       .mockResolvedValueOnce(jsonResponse({ id: userId }))
       .mockResolvedValueOnce(jsonResponse(null))
       .mockResolvedValueOnce(jsonResponse({ access_token: 'access', refresh_token: 'refresh' }));
-    vi.stubGlobal('fetch', upstream);
+    stubFetch(upstream);
 
     expect((await invoke({ nationalId, pin }, ip)).status).toBe(200);
     expect(upstream).toHaveBeenCalledTimes(4);
+  });
+
+  it('rejects using the temporary PIN as a permanent PIN', async () => {
+    configure();
+    const upstream = vi.fn().mockResolvedValueOnce(jsonResponse({
+      id: userId, email: `${nationalId}@safetypass.com`, user_metadata: {},
+    }));
+    stubFetch(upstream);
+
+    expect((await invoke({ nationalId, pin: '890123' }, '192.0.2.26')).status).toBe(400);
+    expect(upstream).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not update Auth if the reset expired or the account is unavailable', async () => {
+    configure();
+    const upstream = vi.fn().mockResolvedValueOnce(jsonResponse({
+      id: userId, email: `${nationalId}@safetypass.com`, user_metadata: {},
+    }));
+    stubFetch(upstream, false);
+
+    expect((await invoke({ nationalId, pin: '246801' }, '192.0.2.27')).status).toBe(403);
+    expect(upstream).toHaveBeenCalledTimes(1);
   });
 });

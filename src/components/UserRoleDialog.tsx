@@ -3,14 +3,24 @@ import { CheckCircle2, CircleX, Loader2, ShieldCheck, UserRound, X } from 'lucid
 import { useDialogFocus } from '../hooks/useDialogFocus';
 import { getAdminPromotionReadiness } from '../services/adminPromotionReadiness';
 
-interface RoleUser {
+export interface RoleUser {
   id: string;
   name: string;
-  role: 'ADMIN' | 'USER' | string;
+  role: string | null;
   is_active?: boolean;
   last_login?: string | null;
   pdpa_agreed?: boolean | null;
 }
+
+export const UserRoleBadge = ({ role }: { role: RoleUser['role'] }) => {
+  const isAdmin = role === 'ADMIN';
+  return (
+    <span className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-bold ${isAdmin ? 'border-violet-200 bg-violet-50 text-violet-800' : 'border-slate-200 bg-slate-100 text-slate-700'}`}>
+      {isAdmin && <ShieldCheck size={12} aria-hidden="true" />}
+      {isAdmin ? 'แอดมิน' : role === 'USER' ? 'ผู้ใช้' : 'ไม่ระบุบทบาท'}
+    </span>
+  );
+};
 
 interface Props {
   user: RoleUser;
@@ -22,10 +32,10 @@ interface Props {
 
 const UserRoleDialog: React.FC<Props> = ({ user, isCurrentAdmin, busy, onClose, onConfirm }) => {
   const dialogRef = useRef<HTMLDivElement>(null);
-  const currentRole: 'ADMIN' | 'USER' = user.role === 'ADMIN' ? 'ADMIN' : 'USER';
-  const [selectedRole, setSelectedRole] = useState<'ADMIN' | 'USER'>(currentRole);
+  const currentRole = user.role === 'ADMIN' || user.role === 'USER' ? user.role : null;
+  const [selectedRole, setSelectedRole] = useState<'ADMIN' | 'USER' | null>(currentRole);
   const promotionReadiness = getAdminPromotionReadiness(user);
-  const isPromotion = selectedRole === 'ADMIN' && currentRole === 'USER';
+  const isPromotion = selectedRole === 'ADMIN' && currentRole !== 'ADMIN';
   const cannotPromote = isPromotion && !promotionReadiness.eligible;
   const changed = selectedRole !== currentRole;
   useDialogFocus(true, dialogRef, onClose);
@@ -33,12 +43,12 @@ const UserRoleDialog: React.FC<Props> = ({ user, isCurrentAdmin, busy, onClose, 
   return (
     <div className="fixed inset-0 z-[310] flex items-center justify-center p-3 sm:p-5">
       <button type="button" aria-label="ปิดหน้าต่างจัดการสิทธิ์" className="absolute inset-0 h-full w-full bg-slate-950/65 backdrop-blur-sm" onClick={onClose} />
-      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="user-role-dialog-title" tabIndex={-1} className="relative z-10 w-full max-w-lg overflow-hidden rounded-[1.75rem] border border-white/50 bg-white shadow-2xl focus:outline-none">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="user-role-dialog-title" tabIndex={-1} className="relative z-10 max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-[1.75rem] border border-white/50 bg-white shadow-2xl focus:outline-none">
         <header className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4 sm:px-7">
           <div>
-            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-violet-700">Access control</p>
             <h2 id="user-role-dialog-title" className="mt-1 text-lg font-black text-slate-900">กำหนดสิทธิ์ผู้ใช้งาน</h2>
-            <p className="mt-1 text-[10px] font-bold text-slate-500">{user.name}</p>
+            <p className="mt-1 text-sm font-bold text-slate-700">{user.name}</p>
+            <div className="mt-2 flex items-center gap-2 text-xs text-slate-600">บทบาทปัจจุบัน <UserRoleBadge role={currentRole} /></div>
           </div>
           <button type="button" onClick={onClose} disabled={busy} aria-label="ปิด" className="min-h-11 min-w-11 rounded-full bg-slate-100 p-3 text-slate-600 disabled:opacity-50"><X size={18} /></button>
         </header>
@@ -82,7 +92,7 @@ const UserRoleDialog: React.FC<Props> = ({ user, isCurrentAdmin, busy, onClose, 
 
         <footer className="grid grid-cols-1 gap-2 border-t border-slate-100 p-4 sm:grid-cols-2 sm:px-7">
           <button type="button" onClick={onClose} disabled={busy} className="min-h-12 rounded-2xl border border-slate-200 bg-slate-50 text-[10px] font-black text-slate-600 disabled:opacity-50">ยกเลิก</button>
-          <button type="button" onClick={() => onConfirm(selectedRole)} disabled={busy || !changed || cannotPromote || isCurrentAdmin} className="min-h-12 rounded-2xl bg-violet-600 text-[10px] font-black text-white shadow-lg shadow-violet-100 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none">
+          <button type="button" onClick={() => selectedRole && onConfirm(selectedRole)} disabled={busy || !selectedRole || !changed || cannotPromote || isCurrentAdmin} className="min-h-12 rounded-2xl bg-violet-600 text-[10px] font-black text-white shadow-lg shadow-violet-100 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none">
             {busy ? <Loader2 size={16} className="mx-auto animate-spin" /> : 'ยืนยันการเปลี่ยนสิทธิ์'}
           </button>
         </footer>

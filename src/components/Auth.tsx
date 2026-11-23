@@ -58,6 +58,10 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
   // Register State
   const [regId, setRegId] = useState('');
+  const [invitationRequired, setInvitationRequired] = useState(false);
+  const [invitationCode, setInvitationCode] = useState('');
+  const [initialPin, setInitialPin] = useState('');
+  const registrationProof = invitationRequired ? { invitationCode, initialPin } : undefined;
   const [name, setName] = useState('');
   const [age, setAge] = useState('');
   const [nationality, setNationality] = useState('ไทย (Thai)');
@@ -239,7 +243,11 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     setStagedProfile(null);
     setError('');
     try {
-      const status = await api.checkRegistrationStatus(idToCheck);
+      const [status, requiresInvitation] = await Promise.all([
+        api.checkRegistrationStatus(idToCheck),
+        api.isRegistrationInvitationRequired(),
+      ]);
+      setInvitationRequired(requiresInvitation);
       setRegistrationAccountState(status.state);
 
       if (status.state === 'REGISTERED') {
@@ -255,7 +263,10 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       }
 
       if (status.state === 'STAGED') {
-        const profile = await api.prepareStagedRegistration(idToCheck);
+        if (requiresInvitation && (!invitationCode.trim() || initialPin.length !== 6)) return;
+        const profile = await api.prepareStagedRegistration(
+          idToCheck, requiresInvitation ? { invitationCode, initialPin } : undefined,
+        );
         setStagedProfile(profile);
         setName(profile.name || '');
         setAge(profile.age != null ? String(profile.age) : '');
@@ -315,15 +326,13 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         return;
       }
       
-      // แสตมป์เวลาเข้าสู่ระบบล่าสุด (fire-and-forget ไม่ block login flow)
-      supabase.from('users').update({ last_login: new Date().toISOString() }).eq('id', user.id);
-
       onLogin(user);
     } catch (err: any) {
       const errorMsg = err.message || '';
       
       // 🔥 ดักจับถ้ายังไม่ได้ลงทะเบียน ให้สลับหน้าและโยนเลขบัตรไปช่อง Register
       if (errorMsg.includes('REQUIRE_REGISTER')) {
+         setInitialPin(loginPin.length === 6 ? loginPin : '');
          setRegId(normalizedLoginId); // ส่งเลขบัตรที่พิมพ์ค้างไว้ไปหน้าลงทะเบียน
          setMode('REGISTER'); // สลับไปหน้าลงทะเบียนอัตโนมัติ
          setInfoMsg('กรุณาตรวจสอบข้อมูลและยอมรับเงื่อนไข (PDPA) ก่อนเข้าใช้งานครั้งแรก');
@@ -346,7 +355,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     try {
       if (newPin !== newPinConfirmation) throw new Error('PIN ใหม่และการยืนยัน PIN ไม่ตรงกัน');
       await api.upgradeMyPin(pendingPinUpgradeUser.national_id, newPin);
-      supabase.from('users').update({ last_login: new Date().toISOString() }).eq('id', pendingPinUpgradeUser.id);
       onLogin(pendingPinUpgradeUser);
     } catch (pinError: any) {
       setError(pinError?.message || 'ไม่สามารถตั้ง PIN ใหม่ได้ กรุณาลองอีกครั้ง');
@@ -383,6 +391,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           accessStartDate: selectedPrograms.includes('SUPPLIER_OUTSOURCE') ? accessStartDate : undefined,
           accessEndDate: selectedPrograms.includes('SUPPLIER_OUTSOURCE') ? accessEndDate : undefined,
         } : undefined,
+        registrationProof,
       );
 
       // 🔥 ✅ แก้ไข: เติมคำว่า await เพื่อให้ระบบ "รอ" ส่ง LINE ให้เสร็จก่อนเปลี่ยนหน้า
@@ -414,9 +423,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         setInfoMsg('ลงทะเบียนข้อมูลสำเร็จแล้ว แต่ยังตั้ง PIN ไม่สำเร็จ กรุณาตั้ง PIN อีกครั้งเพื่อเข้าใช้งาน');
         return;
       }
-
-      // แสตมป์เวลาเข้าสู่ระบบล่าสุด (fire-and-forget ไม่ block login flow)
-      supabase.from('users').update({ last_login: new Date().toISOString() }).eq('id', user.id);
 
       onLogin(user);
 
@@ -616,6 +622,22 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                         </button>
                     </div>
                     
+                    {invitationRequired && (
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <label className="text-xs font-bold text-slate-700">
+                          รหัสเชิญจากเจ้าหน้าที่ Safety
+                          <input required autoComplete="off" maxLength={32} value={invitationCode}
+                            onChange={(event) => setInvitationCode(event.target.value)}
+                            className="mt-1 w-full rounded-xl border border-slate-200 p-3" />
+                        </label>
+                        <label className="text-xs font-bold text-slate-700">
+                          PIN เริ่มต้น 6 หลักท้ายบัตร
+                          <input required type="password" inputMode="numeric" autoComplete="off" maxLength={6} value={initialPin}
+                            onChange={(event) => setInitialPin(event.target.value.replace(/\D/g, ''))}
+                            className="mt-1 w-full rounded-xl border border-slate-200 p-3" />
+                        </label>
+                      </div>
+                    )}
                     <div className="min-h-[20px]">
                       {dataFoundMsg ? (
                           <div className="flex items-center gap-1.5 mt-2 ml-1 text-emerald-600 animate-in fade-in slide-in-from-top-1">

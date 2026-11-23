@@ -6,6 +6,6 @@
   "historicalMigrationCount": 28,
   "containsTableData": false,
   "containsAuthUsers": false,
-  "sha256": "8adb12193d28f994eab79b108f31e26201102d3ab2e1e067ea0ac2efa3ea0155",
+  "sha256": "f82268fd5ac4d9eb77c530a686d8eb787eb4a900930f403ba4d02aa78b130758",
   "validationCommand": "npm run test:db:staging-bootstrap"
 }

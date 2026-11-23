@@ -1,6 +1,6 @@
 import { cleanText, isRateLimited, requireAuthenticatedUser } from './_auth.js';
 import { createSupplierOutsourcePassMessage } from './_lineMessages.js';
-import { createDeliveryResponse, getLineDestinations, pushLineNotification } from './_lineClient.js';
+import { createDeliveryResponse, getLineDestinations, getLinkedLineRecipient, pushLineNotification } from './_lineClient.js';
 
 const MAX_NOTIFICATION_AGE_MS = 30 * 60 * 1000;
 
@@ -8,7 +8,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ message: 'Method Not Allowed' });
   const auth = await requireAuthenticatedUser(req, res);
   if (!auth) return;
-  if (isRateLimited(`supplier-outsource:${auth.user.id}`, 60 * 1000)) {
+  if (await isRateLimited(`supplier-outsource:${auth.user.id}`, 60 * 1000)) {
     return res.status(429).json({ message: 'Please wait before sending another notification' });
   }
 
@@ -19,7 +19,7 @@ export default async function handler(req, res) {
   try {
     const headers = { apikey: auth.config.anonKey, Authorization: auth.authorization };
     const profileQuery = new URLSearchParams({
-      select: 'name,line_user_id,vendors(name)', id: `eq.${auth.user.id}`, limit: '1',
+      select: 'name,line_user_id,line_identity_verified_at,vendors(name)', id: `eq.${auth.user.id}`, limit: '1',
     });
     const accessQuery = new URLSearchParams({
       select: 'participant_type,work_type', user_id: `eq.${auth.user.id}`,
@@ -71,7 +71,7 @@ export default async function handler(req, res) {
       verificationToken: pass.verification_token,
     });
 
-    const directLineId = cleanText(profile.line_user_id, 40);
+    const directLineId = getLinkedLineRecipient(profile);
     const targetState = getLineDestinations(lineGroupId, directLineId, { requireDirect: true });
     const results = await pushLineNotification({ accessToken: lineAccessToken, message, destinations: targetState.destinations, flow: 'supplier_outsource' });
     const delivery = createDeliveryResponse(results, targetState);

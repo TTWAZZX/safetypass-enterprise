@@ -229,7 +229,7 @@ begin
   end;
 
   if not exists (
-    select 1 from public.users
+    select 1 from public.admin_list_users()
     where id = 'b1800000-0000-4000-8000-000000000002'
       and name = 'Updated User 360 Target'
   ) then raise exception 'Failed atomic update did not roll back profile changes'; end if;

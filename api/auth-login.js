@@ -70,7 +70,7 @@ export default async function handler(req, res) {
   }
 
   const forwardedFor = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
-  if (isRateLimited(`auth-login:${forwardedFor || 'unknown'}:${nationalId}`, 750)) {
+  if (await isRateLimited(`auth-login:${forwardedFor || 'unknown'}:${nationalId}`, 750)) {
     return res.status(429).json({ message: 'Please wait before trying again' });
   }
 
@@ -94,6 +94,7 @@ export default async function handler(req, res) {
     }
 
     const pinVersion = Number(context.pin_version || 1);
+    const invitationRequired = context.registration_invitation_required === true;
     const isSecurePin = pin.length === 6;
     const resetState = String(context.pin_reset_state || 'NONE');
     const resetExpiresAt = context.pin_reset_expires_at ? new Date(context.pin_reset_expires_at) : null;
@@ -145,7 +146,8 @@ export default async function handler(req, res) {
     // update. If that last network call was interrupted, recover only accounts
     // explicitly marked with the random bootstrap scheme, then force PIN v2.
     if (!login && !isSecurePin && pinVersion < 2) {
-      const recovered = await recoverBootstrapIdentity(serviceConfig, context.user_id, passwords[0]);
+      const recovered = !invitationRequired
+        && await recoverBootstrapIdentity(serviceConfig, context.user_id, passwords[0]);
       if (recovered) {
         const result = await signIn(publicConfig, email, passwords[0]);
         if (result.ok && result.data?.access_token && result.data?.refresh_token) login = result.data;
@@ -180,14 +182,23 @@ export default async function handler(req, res) {
 
     const authenticatedUserId = String(login.user?.id || '');
     const profileUserId = String(context.user_id || '');
-    const requiresProfileRepair = /^[0-9a-f-]{36}$/i.test(authenticatedUserId)
+    let requiresProfileRepair = /^[0-9a-f-]{36}$/i.test(authenticatedUserId)
       && /^[0-9a-f-]{36}$/i.test(profileUserId)
       && authenticatedUserId !== profileUserId;
+    let profileRepaired = false;
+    if (requiresProfileRepair && invitationRequired) {
+      profileRepaired = await rpc(serviceConfig, 'service_repair_verified_registration', {
+        auth_user_id_param: authenticatedUserId,
+      }) === true;
+      if (!profileRepaired) return res.status(409).json({ message: 'Profile needs administrator review' });
+      requiresProfileRepair = false;
+    }
 
     return res.status(200).json({
       accessToken: login.access_token,
       refreshToken: login.refresh_token,
-      requiresPinUpgrade: isTemporaryResetPin || (!isSecurePin && isPinV2Enforced()),
+      requiresPinUpgrade: isTemporaryResetPin || context.pin_setup_required === true
+        || (!isSecurePin && (isPinV2Enforced() || invitationRequired || profileRepaired)),
       ...(requiresProfileRepair ? { requiresProfileRepair: true } : {}),
     });
   } catch {

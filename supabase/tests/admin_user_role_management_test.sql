@@ -22,7 +22,7 @@ select public.admin_set_user_role('a1700000-0000-4000-8000-000000000003', 'ADMIN
 do $$
 begin
   if not exists (
-    select 1 from public.users
+    select 1 from public.admin_list_users()
     where id = 'a1700000-0000-4000-8000-000000000003' and role = 'ADMIN'
   ) then raise exception 'Registered user was not promoted'; end if;
 
